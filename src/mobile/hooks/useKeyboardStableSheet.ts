@@ -36,7 +36,66 @@ export function scrollDeltaToReveal(inputBottom: number, visibleBottom: number, 
   return delta > 0 ? Math.ceil(delta) : 0;
 }
 
+/**
+ * 滚动余量不足时（小表单/已滚到底，scrollTop 调不动）把 Sheet 整体抬起的量：
+ * 受 Sheet 当前 top 限制（最多抬到贴视口顶）；gap <= 0 或已在顶 = 不抬。
+ * 261117：只滚 .mb-sheet__body 在这类场景**天生失效**（内容不足一屏时 scrollTop 恒 0），
+ * 输入框永远留在键盘后面 —— 抬 Sheet 是兜底，还原由 restore() 统一处理。
+ */
+export function liftToReveal(gap: number, sheetTop: number): number {
+  if (!(gap > 0) || !(sheetTop > 0)) return 0;
+  return Math.ceil(Math.min(gap, sheetTop));
+}
+
 interface SavedStyle { top: string; height: string; bottom: string; maxHeight: string }
+
+/**
+ * 把 root 内的当前焦点输入框滚进「键盘上方仍可见」的区域（沿滚动链由内向外逐级滚；
+ * 只动 root 内的滚动容器）。滚动余量不足时**不负责**兜底 —— Sheet 场景由抬升兜底，
+ * 随视口收缩的面（如 .mbt-form-scroll）本来就有原生滚动余量。
+ * 261117：内层列表/选项行有自己的滚动容器时，只滚最外层够不着（「输选项名称被键盘盖」）。
+ */
+export function revealActiveInputWithin(root: HTMLElement, visibleBottom: number): void {
+  const active = document.activeElement as HTMLElement | null;
+  if (!active || !root.contains(active)) return;
+  let node: HTMLElement | null = active;
+  while (node && node !== root) {
+    const parent = node.parentElement as HTMLElement | null;
+    if (!parent) break;
+    if (parent.scrollHeight > parent.clientHeight + 1) {
+      const targetBottom = Math.min(parent.getBoundingClientRect().bottom, visibleBottom);
+      const margin = targetBottom >= visibleBottom ? REVEAL_MARGIN_PX : 0;
+      const delta = scrollDeltaToReveal(node.getBoundingClientRect().bottom, targetBottom, margin);
+      if (delta > 0) parent.scrollTop += delta;
+    }
+    node = parent;
+  }
+}
+
+/**
+ * 轻量键盘露出 hook（无「钉几何」）：给**随视口收缩**的输入面用 ——
+ * 多维表表单视图（.mbt-form-scroll）这类面在键盘弹起时容器自动变矮，
+ * 但浏览器原生 focus 滚动发生在键盘弹起**之前**、之后会失效 ⇒ resize 时补滚一次。
+ */
+export function useKeyboardRevealFocus(root: RefObject<HTMLElement | null>, enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled || typeof window === "undefined") return;
+    const el = root.current;
+    if (!el) return;
+    const reveal = (): void => {
+      const visibleBottom = (window.innerHeight || 0) - 8;
+      window.requestAnimationFrame(() => revealActiveInputWithin(el, visibleBottom));
+    };
+    el.addEventListener("focusin", reveal);
+    window.addEventListener("resize", reveal);
+    window.addEventListener("orientationchange", reveal);
+    return () => {
+      el.removeEventListener("focusin", reveal);
+      window.removeEventListener("resize", reveal);
+      window.removeEventListener("orientationchange", reveal);
+    };
+  }, [root, enabled]);
+}
 
 /**
  * 挂在 Sheet 根元素上：enabled = Sheet 打开且有输入可能的场景（本 hook 只在真有输入焦点时才动样式）。
@@ -72,16 +131,21 @@ export function useKeyboardStableSheet(sheet: RefObject<HTMLElement | null>, ena
       el.style.maxHeight = next.maxHeight;
     };
 
-    /** 只把当前焦点输入框滚进「键盘上方仍可见」的区域（不碰外层滚动）。 */
+    /** 把当前焦点输入框弄进「键盘上方仍可见」的区域：
+     *  ① 沿滚动链逐级滚（revealActiveInputWithin，覆盖内层滚动容器）；
+     *  ② 滚完仍被盖（滚动余量不足：小表单/已到底）⇒ 抬 Sheet（不改高度，键盘收起 restore 还原）。 */
     const revealFocus = (): void => {
       const active = document.activeElement as HTMLElement | null;
       if (!active || !el.contains(active)) return;
-      const body = el.querySelector<HTMLElement>(".mb-sheet__body");
-      if (!body) return;
       const visibleBottom = (window.innerHeight || 0) - 8;
-      const rect = active.getBoundingClientRect();
-      const delta = scrollDeltaToReveal(rect.bottom, visibleBottom);
-      if (delta > 0) body.scrollTop += delta;
+      revealActiveInputWithin(el, visibleBottom);
+      const gap = active.getBoundingClientRect().bottom + REVEAL_MARGIN_PX - visibleBottom;
+      const lift = liftToReveal(gap, el.getBoundingClientRect().top);
+      if (lift > 0) {
+        if (!saved) saved = { top: el.style.top, height: el.style.height, bottom: el.style.bottom, maxHeight: el.style.maxHeight };
+        el.style.top = (el.getBoundingClientRect().top - lift) + "px";
+        el.style.bottom = "auto";
+      }
     };
 
     const onFocusIn = (): void => {

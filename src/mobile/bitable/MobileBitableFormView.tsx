@@ -7,7 +7,8 @@
  * - 提交失败（落盘失败）保留草稿并提示，不静默丢弃；
  * - 附件/图片字段可上传（261030 P1，与记录面板共用 MobileBitableAttachmentEditor；映射见 mobileBitableAttachments.ts）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useKeyboardRevealFocus } from "../hooks/useKeyboardStableSheet";
 import { CalendarDays, FileText, Hash, ListChecks, Link2, Paperclip, Star, ToggleLeft } from "lucide-react";
 import {
   BITABLE_RATING_MAX,
@@ -190,8 +191,12 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
     );
   };
 
+  // 261117：键盘弹起后把焦点输入框滚进可见区（原生 focus 滚动发生在键盘弹起前、之后失效）。
+  const formRef = useRef<HTMLDivElement | null>(null);
+  useKeyboardRevealFocus(formRef, true);
+
   return (
-    <div className="mbt-form">
+    <div className="mbt-form" ref={formRef}>
       <div className="mbt-form-scroll" onPointerDown={dismissKeyboardOnPointerDown}>
         {canEditForm && (
           <div className="mbt-form-edittoggle">

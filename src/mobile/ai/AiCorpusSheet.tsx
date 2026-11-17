@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { pushBackHandler } from "../ui/backStack";
+import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { AI_CORPUS_MAX_CHARS, AI_CORPUS_MAX_DOCS } from "./aiSession";
 import { EmptyState } from "../ui/EmptyState";
@@ -32,6 +33,8 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
   const sheetRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   useSwipeToClose(sheetRef, onClose, open);
+  // 261117：手写 Sheet 同样要键盘补偿（搜索输入框不被键盘盖；审计 keyboardSheetAudit 通用规则钉住）。
+  useKeyboardStableSheet(sheetRef, open);
   useEffect(() => {
     if (!open) return;
     return pushBackHandler(() => { onClose(); return true; });
