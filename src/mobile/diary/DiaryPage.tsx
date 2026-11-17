@@ -246,7 +246,7 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
   return (
     <div className="mobile-scroll">
       {/* 页头 = 玻璃条（与「标签」页同一形态）：左标题 + 计数，右三个入口「搜索 / 日历 / ＋」。 */}
-      <header className="mobile-settings-head mobile-page-head mb-glass mb-glass--bar">
+      <header className="mobile-settings-head mobile-page-head mb-glass mb-glass--bar" data-mb-topbar data-edge="nested">
         <div className="mobile-settings-title mb-flex1">
           日记
           <span className="mb-row__meta"> {entries.length} 篇</span>

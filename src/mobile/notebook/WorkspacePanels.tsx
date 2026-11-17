@@ -50,6 +50,7 @@ export function WorkspaceTreePanel(props: WorkspaceTreePanelProps) {
     >
       {selecting ? (
         <SelectionTopBar
+          edge="nested"
           count={props.selectionCount ?? 0}
           allSelected={props.selectionAllSelected ?? false}
           onCancel={props.onCancelSelect ?? (() => undefined)}

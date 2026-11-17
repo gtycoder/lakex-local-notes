@@ -36,6 +36,10 @@ export interface TabPagerOptions {
 export interface TabPagerApi {
   /** 横向滚动容器（.mobile-tab-stage）。 */
   stageRef: RefObject<HTMLDivElement>;
+  /** 立即归位到**当前 tab 所在页**（不动效）：「写作锁分页」等场景在锁横滑前调用。
+   *  页码判据只在 reducePager（resize 分支：对齐 state.tab、auto、programmatic 标记同链路）——
+   *  调用方不许自己算页码（261117：硬编码 scrollTo(0) 在空间顺序改版后把写作卡带沟里的回归）。 */
+  alignNow: () => void;
 }
 
 export function useTabPager({ tab, tabs = HOME_TABS, onTabChange }: TabPagerOptions): TabPagerApi {
@@ -69,6 +73,13 @@ export function useTabPager({ tab, tabs = HOME_TABS, onTabChange }: TabPagerOpti
     if (transition.commitTab) onTabChangeRef.current(transition.commitTab);
   }, []);
   dispatchRef.current = dispatch;
+
+  /** 归位：借 resize 分支的对齐判据（几何上下文变了就对齐 state.tab；effect 走 programmatic 标记链路）。 */
+  const alignNow = useCallback((): void => {
+    const el = stageRef.current;
+    if (!el) return;
+    dispatch({ type: "resize", scrollLeft: el.scrollLeft, width: el.clientWidth });
+  }, [dispatch]);
 
   // tab → 滚动位置：点顶部 tab / 父级改路由 / 离开后回来都在这里对齐（同 tab 时只销账）。
   useEffect(() => {
@@ -113,5 +124,5 @@ export function useTabPager({ tab, tabs = HOME_TABS, onTabChange }: TabPagerOpti
     };
   }, [dispatch]);
 
-  return { stageRef };
+  return { stageRef, alignNow };
 }

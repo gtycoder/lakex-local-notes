@@ -220,7 +220,7 @@ export function HomePage(props: HomePageProps) {
    * ① tab → 滚动位置对齐（点 tab / 路由变化 / 横竖屏宽度变化）；② 滚动过半把页码回写成 tab；
    * ③ 非活动页 inert；④ 写作会话中锁横滑（否则父级 [tab] effect 会清掉草稿）。
    */
-  const { stageRef } = useTabPager({ tab, tabs: visibleTabs, onTabChange });
+  const { stageRef, alignNow } = useTabPager({ tab, tabs: visibleTabs, onTabChange });
   // v2（261107）：顶栏滚动状态用 class 直接切（滚动里 setState 会整页重渲染）。
   const topbarRef = useRef<HTMLElement | null>(null);
   const quickPaneRef = useRef<HTMLElement | null>(null);
@@ -267,10 +267,14 @@ export function HomePage(props: HomePageProps) {
   }, [stageRef, tab, composer]);
 
   // ④ 写作/编辑小记时锁横向分页：切走会清掉写作卡（= 丢草稿）。CSS 侧只留纵向滚动（touch-action: pan-y）。
+  // 锁之前先把分页**归位到当前 tab 所在页**（归位判据只在分页器机器里，HomePage 不算页码）：
+  // 曾硬编码 scrollTo(0) —— 261019 引入时「小记」在第 0 页恰好正确，261114 顺序改「知识库/小记/…」后
+  // 第 0 页变成知识库 ⇒ 写作卡一挂载就被滚到知识库页 → 分页过半回写 tab → 重置 effect 清掉写作卡
+  // （长按＋速记 / 面板「小记」全部失效，261117 设备复现）。
   useEffect(() => {
     if (composer === null || tab !== "quick") return;
-    stageRef.current?.scrollTo({ left: 0, behavior: "auto" });
-  }, [composer, tab]);
+    alignNow();
+  }, [composer, tab, alignNow]);
 
   // 「置顶」= 设备本地入口（工作区目录菜单「置顶」写入；不同步、不进 S3）
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readFavoriteIds());
@@ -756,13 +760,14 @@ export function HomePage(props: HomePageProps) {
       {/* 写作会话 = 全屏（261111）：顶栏让位给写作卡（取消/保存在卡内），保证写作区占满状态栏以下。 */}
       {composer === null && (selection.active && tab === "quick" ? (
         <SelectionTopBar
+          edge="viewport"
           count={selection.count}
           allSelected={selection.allSelected}
           onCancel={() => selection.exit()}
           onToggleAll={() => selection.toggleAll()}
         />
       ) : (
-      <header ref={topbarRef} className="toolbar toolbar--border mobile-topbar mobile-topbar--home">
+      <header ref={topbarRef} className="toolbar toolbar--border mobile-topbar mobile-topbar--home" data-mb-topbar data-edge="viewport" data-size="compact">
         {/* 三组栅格（261109 二改）：左右两侧各占 1fr、tab 组按内容定宽 ⇒
             **tab 恒在整栏居中**；右侧（排序/视图 + 云同步）永远靠右，加 tab 也不会被挤出去。 */}
         <div className="mobile-topbar-group mobile-topbar-group--start">

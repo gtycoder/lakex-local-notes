@@ -8,6 +8,49 @@
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
 
+### 261117 · 长按＋「速记」失效修复（261114 空间顺序重排的回归）
+
+- **现场**（用户试机发现）：长按首页「＋」上滑速记、新建面板「空白小记」都建不出小记 —— 手势浮出「继续上滑记小记/松手记一条小记」正常，松手后写作卡不出现、tab 自己跳回「知识库」。
+- **根因**（设备逐拍打点实锤）：`HomePage`「写作时锁横滑」效应硬编码 `stage.scrollTo({left: 0})` —— 261019 引入时空间顺序「小记」在第 0 页、恰好正确；**261114（v1.1.4）空间顺序改「知识库/小记/…」后第 0 页变成知识库** ⇒ 写作卡一挂载分页器被滚到知识库页 → `settled` 回写 tab → `[tab]` 重置效应清掉写作卡。与 Top Chrome 批无关（考古：scrollTo(0) = `244fd8e7` 10-19；顺序重排 = `f2c44c1b` 11-14）。
+- **修复**：归位改走分页器机器新增的 `useTabPager.alignNow()`（复用 resize 分支：对齐 `state.tab`、auto、programmatic 标记同链路），HomePage 不算页码（守住 homeCreateFlow「HomePage 不再自己做分页判据」护栏）；`homeCreateFlow.test.ts` 补回归断言（禁 `scrollTo({ left: 0`、必须 `alignNow()`）。
+- **验证**：`tsc` 0；`src/mobile` vitest **343 文件 / 1750 例全绿**；手势探针（CDP 真实 touch：长按 450ms → 上滑 60px → 松手）前后对照 = 修复前 `qn:false tab=知识库` → 修复后 **`qn:true scrollLeft=412`**；设备截图写作卡完整（键盘/dock/保存栏）。已装 lake_mobile 待用户复验。
+
+### 261117 · 移动端顶部 Chrome 契约落地（方案 B：B0–B2，移动端会话，工作树）
+
+- **背景**：顶部安全区重复/漏消费一族 bug（261027 / 261103 / 261110 / 261115 / 261117）根因 = 安全区是全局事实、消费散在局部组件。按 [docs/MOBILE-TOP-CHROME-REFACTOR.md](MOBILE-TOP-CHROME-REFACTOR.md) **方案 B** 落地：B0（契约+门禁）/ B1（viewport·overlay）/ B2（nested·sheet）一批完成，几何数值等价重写。
+- **契约**：新文件 `src/mobile/topChrome.css` —— 顶部表面 JSX 声明 `data-mb-topbar` + `data-edge`（viewport/overlay = 贴屏幕顶、消费顶部安全区一次；nested/sheet = 恒 0）+ `data-size`（内容高 compact 44 / regular 52）；几何 = `--mb-chrome-content-h` + `--mb-chrome-inset-top`。全表面已标注（topbar 家族 / 设置页头 / 标签·日记页头 / 抽屉工具栏 / 多选顶栏（新增 `edge` prop）/ 表格 / 多维表 / Sheet 头 / 标签页列表 / 附件预览）。**iOS 口子**：契约不感知平台，inset 喂值通道唯一 = `theme/tokens.css`（`env()` ∪ 原生 `--mobile-native-*-safe`），iOS 换喂值后端不动任何消费方、edge 语义整套复用。
+- **261117 AI 内嵌副栏修复已收编**：原「本地复位高度/上边距/上内距」改为契约派生（`data-edge="nested"` ⇒ inset 0）；`aiLayout.test.ts` 升级为契约口径；新护栏 `src/mobile/topChromeContract.test.ts`（表面声明全覆盖 + `var(--mobile-top-safe-area)` 允许清单棘轮仅 4 处 + 契约映射钉死）。
+- **两处行为修复（仅 inset>0 设备可见，safe=0 几何不变）**：① `.mobile-model-head`（标签页列表**底部 Sheet** 头）此前误吃顶部安全区 ⇒ sheet inset=0；② `.mb-sel-topbar`（多选顶栏）261107 v2 重做时丢失的顶部安全区补回（抽屉/首页多选态，与抽屉工具栏同高不跳变）。死规则 `.side-panel .mobile-page-head` 已删。
+- **门禁**：`tsc` 0；`src/mobile` vitest 343 文件 / 1750 例全绿；`check:mobileui` / `check:bundle`（mobile CSS 140,039/141,312、首屏 345.2KB/350KB、entry 50.4KB/51.2KB）/ `check:arch` 0 违规 / `git diff --check` 全过；mobileLayers 登记 topChrome.css（10 decls），mobile.css 1491→1486、ai.css 383→380 收紧。Android `--sync --install` 已装 **lake_mobile（5554）**待用户验收；**lake_gate 10 态对拍**：旧夹具数据 + 新包首轮 **8/10 态 0 差异**（含改动最大的 home-doc / home-library / settings 全绿 ⇒ 迁移数值等价获正面证明），2 态差异归属 261117 其它批次的设置页文案（settings-about 元素 +23 = 「卸载与换机」引导新增；基线 11-16 12:00 烤制早于该批）⇒ 按 §5.3 重烤基线，verify 两轮 **0 差异**。
+- **§8.4 几何探针已落地（261117）**：`scripts/mobile-audit/top-chrome-geometry.mjs`（四档注入安全区 × 8 页面 × 三不变量断言，实测 **8/8 页 0 违规**；AI 内嵌头恒 44 的动态钉子在内）。用法 `node scripts/css-audit/drive.mjs 9336 scripts/mobile-audit/top-chrome-geometry.mjs`。
+- **B3 剩余（§12）**：过冲 `--mb-chrome-inset-overhang: 8px` 归一化（需 §8.3 矩阵复验 + 用户裁决）；全量设备矩阵（两处行为修复需 inset 模拟 32/48 复核；多选顶栏/标签页列表/表格多维表头部/带标题 Sheet 等探针盲点一并覆盖）。
+
+### 261117 · Lakex 视频卡自适应 + 缩放/对齐（去除白边，布局可持久化）
+
+- **现象**：Lake 视频完成态固定 `450px` 高，16:9 出现上下白边；竖屏铺满正文宽后出现左右白边，且无条件居中不适合竖屏排版。官方 video 配置没有尺寸/object-fit/对齐项。
+- **修复**：不改 vendor。video `toLake` 原样保留 cardValue，故用 `cardData.resetCardValue + sync(false)` 持久化 `__videoWidth`（正文可用宽度百分比，10–100，缺省 100）和 `__videoAlign`（left/center/right，缺省 left）；`videoCardOps` 把宽度投影为 `--lake-video-max-width`，再以正文宽/`72vh` 封顶。桌面 `styles/feature.css`、移动 `mobile/editor/edit-surface-kernel.css` ⑦ 统一按 intrinsic ratio 渲染，虚拟渲染/contentchange 自动重投影。
+- **交互**：桌面 `SelectionToolbar` 增加视频目标：尺寸输入 + 25/50/75/100 档位，左/中/右对齐；媒体卡在正文顶部时浮栏贴编辑区上沿/卡顶，不翻到整张高竖屏视频底部。Android 共享持久化布局渲染（调整入口与图片精确缩放同端，目前在桌面）。
+- **实测**：`1279×720` 横屏默认由 `511×450` 改为整栏等比；25% 档卡片 `130×73`、播放器 `128×72`，右对齐后贴正文右缘；`.lake` 落盘 `__videoWidth:25 / __videoAlign:"right"`，整页重载恢复同一几何（测试后已还原该开发文档）。护栏 `videoCardOps.test.ts` / `videoCardFit.test.ts` / selection-toolbar wiring；CSS 层围栏登记。
+- **门禁**：tsc 0；针对性 vitest 26/26；全量 vitest **1020 files passed / 13 skipped（6468 tests passed / 14 skipped）**；`check:mobileui`、`check:bundle`/arch（mobile entry 50,526/51,200、首屏 345.7KB/350KB；桌面 598.2KB/600KB）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554，重连 CDP 后启动正常（该实例当前无视频样本）。
+- **文档**：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.56。
+
+### 261117 · 正式数据三问题修复（打开伪保存 / 大纲二次跳 / renderer 恢复空窗）
+
+- **打开 Java 文档即出现保存点**：正式库指定文档在隔离副本中稳定复现：打开约 250ms 后标签 dirty，1.25s 后自动保存，但正文 SHA-256 前后不变，主进程 `NoteContentRepository.save()` 走无变化早退。根因 = `setDocument()` 初始化阶段晚到的 `contentchange` 在同步 `setting` 标志关闭后才到，被当成用户编辑。
+- **修复**：`EditorTab` 增加 `userContentIntent + initialBaseline`：无用户意图时只有当前正文与打开基线逐字节相同才忽略 contentchange；内容真的变化或序列化失败仍会标脏，宁可多存不能漏数据。图片卡自愈仍通过显式 `onChange` 落盘。另修退出草稿：unmount / beforeunload 统一 `captureContent(noteId) ?? tab.content`，不再用 doc 的“最后已提交版本”作为兜底。隔离实例验证：打开不再出现保存点、不再触发 `note.save`；真实输入仍 dirty→1s 后正常保存。
+- **大纲点击二次上跳**：正式 JVM 文档隔离复现：首次对齐 `targetTop=0`，约 250ms 后引擎高度 `23584→23538`、目标变 `-27px`；原 50/200ms 固定校正正好漏掉。改为 `stabilizeNodeAlignment()`：ResizeObserver(`.ne-engine`) + rAF 持续锚定，安静 1s 停止、最多观察 2.2s，用户滚动/输入立即取消；桌面自建大纲、Lake 原生大纲、锁定态与移动端 OutlineSheet 共用。
+- **启动偶发空窗**：发现一条可稳定复现的空窗路径 —— renderer 崩溃后原实现只 `reload()`，窗口保持可见且等待隐藏态 rAF，可能一直不报 renderer-ready，最终 8s fallback 露出未绘制窗口。现在主窗新增主题底色；崩溃重载期间隐藏主窗、重新显示 boot；`renderer-ready` 不再只依赖 rAF（250ms timeout 兜底）；boot→主窗切换顺序改为 hide boot → show main → destroy boot。Page.crash 实测 boot 显示后主窗正常恢复（`renderer-ready` 88ms）。正式版此前偶发空窗是否同一路径仍需后续日志确认，但已消除该确定路径。
+- **最终实测**：大纲修复后同一场景 `targetTop` 全程保持 `0`（布局高度变化时同采样周期完成校正）；打开文档不触发 `note.save`，真实输入仍 dirty→1s 后保存。
+- **门禁**：`tsc` + electron typecheck 0；全量 vitest **1018 passed / 13 skipped（6461 passed / 14 skipped）**；`check:core` 0 违规；`check:bundle`/arch PASS（desktop 首屏 598.2/600KB）；`git diff --check` clean。
+
+### 261117 · Android AI 内嵌副栏重复顶部安全区修复（工作树）
+
+- **现场**：Android AI 分页的历史/新对话图标被推到内容中部，顶部出现一整段断层（用户截图）。
+- **根因**：AI 以首页第 4 格内嵌后，副工具栏仍复用全局 `.mobile-topbar` 的顶部安全区高度/上内距；它位于首页顶栏**之下**，导致顶部安全区被结算两次。模拟器注入 32px 顶部安全区可稳定复现。
+- **修复**：`.mobile-ai-page--embedded .mobile-ai-page__head` 固定为 44px，并清零 `margin-top` / `padding-top`；新增 `aiLayout.test.ts` 防止内嵌副栏再次引用 `--mobile-top-safe-area`。首页顶栏与独立全屏 AI 页的安全区逻辑不变。
+- **验证**：`tsc` 0；相关 vitest 4 文件 / 28 例通过；`check:mobileui` 通过；Android `--sync --install` 成功（versionCode 11306）；模拟 32px 顶部安全区后副栏 `top=68` / `height=44`，与首页舞台同顶，设备截图无断层。
+- **方案文档**：[docs/MOBILE-TOP-CHROME-REFACTOR.md](MOBILE-TOP-CHROME-REFACTOR.md)：顶部 Chrome 的当前模型、A/B/C 三方案、推荐迁移顺序与设备验收矩阵。
+
 ### 261118 · v1.3.6 发版（端口固定化：查漏补缺）
 
 - **发布**：`package.json 1.3.6`（Android versionCode 11306 由根 package.json 派生）；注解 tag **v1.3.6** 双远端推送。本批 = 1 commit（清理/补强，无正常路径行为变更）。
@@ -347,6 +390,7 @@
 
 **261118 · v1.3.6 基线（端口固定化查漏补缺，tag `v1.3.6`）**
 
+- **工作树（未提交）**：移动端顶部 Chrome 契约落地（方案 B B0–B2，含 AI 内嵌副栏修复收编与 Top Chrome 方案文档）；长按＋「速记」失效修复（261114 顺序重排回归）；正式数据三问题修复（打开伪保存 / 大纲二次跳 / renderer 恢复空窗）。相关文件见 `git status` 与 §0。
 - **分支**：`v1.3.5..v1.3.6` = 1 commit；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.5`（tag `e9f49cee`）。
 - **版本**：`package.json 1.3.6`；Android versionCode 11306（由根 package.json 派生）。
 - **端口（固定，不再回退）**：资源 packaged 19876 / dev 19877；Web packaged 19880 / dev 19881；`LAKE_ASSET_PORT`/`LAKE_WEB_PORT` 可覆盖；占用时明确报错；端口在 listen 前固定（失败也不退回默认常量），preload 只从 env 读。
@@ -411,7 +455,7 @@
 - 空间 / 契约：[docs/DIARY.md](DIARY.md) · [docs/AI-WRITING.md](AI-WRITING.md) · [docs/TAG-SYSTEM-DESIGN.md](TAG-SYSTEM-DESIGN.md) · [docs/PANEL-CONTRACT.md](PANEL-CONTRACT.md)
 - 发布 / 更新 / 换机：[docs/RELEASE-NOTES.md](RELEASE-NOTES.md) · [docs/RELEASE.md](RELEASE.md) · [docs/UPDATE-CENTER.md](UPDATE-CENTER.md) · [docs/PORTABLE-TRANSFER.md](PORTABLE-TRANSFER.md)
 - 内核 / 表格 / 多维表 / 手写板：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) · [docs/lakexEditor-developer-docs/](lakexEditor-developer-docs/) · [docs/USHEET-UPGRADE.md](USHEET-UPGRADE.md) · [docs/INK-PAD.md](INK-PAD.md) · [docs/BITABLE-VIEWPORT.md](BITABLE-VIEWPORT.md)
-- 移动端：[docs/MOBILE-OPS.md](MOBILE-OPS.md) · [docs/MOBILE-TECH-STACK.md](MOBILE-TECH-STACK.md) · [docs/MOBILE-AI.md](MOBILE-AI.md) · [docs/MOBILE-BITABLE-DINGTALK.md](MOBILE-BITABLE-DINGTALK.md) · [docs/MOBILE-USHEET-YUQUE-PARITY.md](MOBILE-USHEET-YUQUE-PARITY.md) · [docs/MOBILE-SHEET-EXCEPTIONS.md](MOBILE-SHEET-EXCEPTIONS.md) · [docs/MOBILE-LONG-DOC-PROBE.md](MOBILE-LONG-DOC-PROBE.md) · [docs/MOBILE-EMPTY-CATCH-LEDGER.md](MOBILE-EMPTY-CATCH-LEDGER.md)
+- 移动端：[docs/MOBILE-OPS.md](MOBILE-OPS.md) · [docs/MOBILE-TECH-STACK.md](MOBILE-TECH-STACK.md) · [docs/MOBILE-TOP-CHROME-REFACTOR.md](MOBILE-TOP-CHROME-REFACTOR.md) · [docs/MOBILE-AI.md](MOBILE-AI.md) · [docs/MOBILE-BITABLE-DINGTALK.md](MOBILE-BITABLE-DINGTALK.md) · [docs/MOBILE-USHEET-YUQUE-PARITY.md](MOBILE-USHEET-YUQUE-PARITY.md) · [docs/MOBILE-SHEET-EXCEPTIONS.md](MOBILE-SHEET-EXCEPTIONS.md) · [docs/MOBILE-LONG-DOC-PROBE.md](MOBILE-LONG-DOC-PROBE.md) · [docs/MOBILE-EMPTY-CATCH-LEDGER.md](MOBILE-EMPTY-CATCH-LEDGER.md)
 - 工程 / 排错：[docs/DEVELOPMENT.md](DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [docs/LOGGING.md](LOGGING.md) · [docs/LAKE-CONTENT-WRITING.md](LAKE-CONTENT-WRITING.md)
 - 使用手册：[guide/README.md](../guide/README.md)（19 章）
 - 审计（本轮）：[docs/audit-261112/00-MASTER-PLAN.md](audit-261112/00-MASTER-PLAN.md)（分册 02–07 同目录；裁决见附录 E）

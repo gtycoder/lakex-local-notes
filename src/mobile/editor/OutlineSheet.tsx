@@ -5,9 +5,10 @@
  * 两种形态：底部 sheet（缺省）与右侧抽屉（side，工作区用）。底部形态的 scrim / 右滑 / 返回栈 /
  * 焦点与滚动锁统一由 MobileSheet 负责；side 抽屉由全局 usePanelDrag 管手势，不套本原语。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Pin, PinOff } from "lucide-react";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { stabilizeNodeAlignment } from "../../features/editor/lakeTileRender";
 import { execEditorCommand } from "./execCommand";
 import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
@@ -38,6 +39,8 @@ export interface OutlineSheetProps {
 
 export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false, onTogglePin }: OutlineSheetProps) {
   const [entries, setEntries] = useState<TocEntry[]>([]);
+  const cancelJumpRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelJumpRef.current?.(), []);
 
   useEffect(() => {
     if (!open) return;
@@ -71,19 +74,13 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
       execEditorCommand(editor, "headingUnfold", id);
       renderer?.scrollByNodeId?.(id);
     } catch (error) { reportMobileActionError("大纲跳转", error); }
-    // DOM 校正（对齐桌面 handleOutlineNavigate）：viewer/懒卡片下 scrollByNodeId 可能不精确，按节点位置兜底滚动
+    // 与桌面同一套稳定锚定：懒卡片水合会在初滚后继续改高度，固定 50/200ms 会漏掉。
     try {
       const host = document.querySelector(".doc-pane.active .mobile-doc-body") ?? document.querySelector(".mobile-doc-body");
       if (host instanceof HTMLElement) {
         const scroller = resolveScrollNode(host);
-        const el = document.getElementById(id);
-        const correct = () => {
-          if (!el || !scroller) return;
-          const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-          if (Math.abs(delta) > 2) scroller.scrollTop += delta;
-        };
-        window.setTimeout(correct, 50);
-        window.setTimeout(correct, 200);
+        cancelJumpRef.current?.();
+        cancelJumpRef.current = stabilizeNodeAlignment(host, scroller, id);
       }
     } catch (error) { reportMobileActionError("大纲跳转位置校正", error); }
     onClose();
@@ -134,7 +131,7 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
       <div className={"side-mask" + (open ? " on" : "")} data-panel-mask="right" onClick={onClose}>
         <div className={"side-panel side-panel--right" + (open ? " on" : "")} onClick={(e) => e.stopPropagation()}>
           {/* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */}
-          <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
+          <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe data-mb-topbar data-edge="overlay">
             <div className="toolbar__scroll"><span className="toolbar__text">大纲</span></div>
             <TopBarIconButton label="收起" icon={<ChevronLeft />} onClick={onClose} />
           </div>

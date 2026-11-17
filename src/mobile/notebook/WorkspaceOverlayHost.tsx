@@ -124,7 +124,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
       {tabsOpen && (
         <div className="mobile-model-mask" onClick={props.onCloseTabs}>
           <div className="mobile-model" onClick={(e) => e.stopPropagation()}>
-            <div className="toolbar toolbar--border mobile-model-head">
+            <div className="toolbar toolbar--border mobile-model-head" data-mb-topbar data-edge="sheet" data-size="regular">
               <span className="toolbar__text">标签页</span>
               {tabs.length > 0 && (
                 <button className="mobile-model-closeall" onClick={props.onCloseAllTabs} aria-label="关闭全部标签页">关闭全部</button>

@@ -1,0 +1,38 @@
+/* ── 移动端顶部 Chrome 契约（方案 B · docs/MOBILE-TOP-CHROME-REFACTOR.md）────────────────
+ * 要解决的类问题（261027–261117 一族 bug）：顶部安全区是全局事实，消费却散在各局部组件，
+ * 顶部类名同时承担屏幕位置 / 页面角色 / 安全区 / 高度 / 滚动状态 ⇒ 改一处顶栏，别处冒出新差异。
+ *
+ * 契约：每个顶部表面在 JSX 声明 `data-mb-topbar` + `data-edge`（消费内容高时再加 `data-size`），
+ * 顶部几何只由两部分组成 —— 内容高（--mb-chrome-content-h）+ inset（--mb-chrome-inset-top）：
+ *   · data-edge="viewport"：根屏表面（首页 / 工作区 / 启动页），贴屏幕顶，消费顶部安全区一次；
+ *   · data-edge="overlay"  ：覆盖/推入的全屏与抽屉表面（设置 / AI / 历史 / 目录抽屉），同上；
+ *   · data-edge="nested"   ：位于其它顶栏之下（内嵌 AI 副栏 / 标签·日记页头 / 表格·多维表头部），inset 恒 0；
+ *   · data-edge="sheet"    ：底部 Sheet / 局部面板（.mb-sheet__head / 标签页列表），inset 恒 0。
+ * 护栏 src/mobile/topChromeContract.test.ts：所有顶部表面必须声明；var(--mobile-top-safe-area)
+ * 的直接引用只允许出现在该测试的允许清单（喂值通道 + 屏底容器 / 浮层定位等非 chrome 消费者）。
+ *
+ * iOS 口子：本文件不感知平台 —— inset 数值只来自 --mobile-top-safe-area（唯一喂值通道，
+ * 定义见 theme/tokens.css：max(env(safe-area-inset-*), 原生注入 --mobile-native-*-safe)）。
+ * iOS/WKWebView 的 env() 自身就正确，必要时注入同名 --mobile-native-*-safe 即可 ——
+ * 换喂值后端不改任何消费方；edge 语义与平台无关，可整套复用。
+ */
+:root {
+  /* 内容高两档（不含安全区）：compact = 首页/内嵌副栏 44；regular = 工作区/覆盖页 52。
+     与顶部 chrome 无关的图标/空槽尺寸仍用 --mobile-topbar-height（= regular 档）。 */
+  --mb-chrome-h-compact: 44px;
+  --mb-chrome-h-regular: 52px;
+  /* 旧口径过冲（B3 归一化候选）：chrome 允许向上伸进 inset 带 8px（内容少留 8px 白），
+     只被 .mobile-topbar 家族与平板悬浮锚点消费；归一化为 0 需设备矩阵复验，见方案文档。 */
+  --mb-chrome-inset-overhang: 8px;
+}
+
+[data-mb-topbar] {
+  --mb-chrome-inset-top: 0px;
+  --mb-chrome-content-h: var(--mb-chrome-h-compact);
+  --mb-chrome-air-top: 8px;
+}
+[data-mb-topbar][data-size="regular"] { --mb-chrome-content-h: var(--mb-chrome-h-regular); }
+[data-mb-topbar][data-edge="viewport"],
+[data-mb-topbar][data-edge="overlay"] { --mb-chrome-inset-top: var(--mobile-top-safe-area); }
+[data-mb-topbar][data-edge="nested"],
+[data-mb-topbar][data-edge="sheet"] { --mb-chrome-inset-top: 0px; --mb-chrome-air-top: 0px; }

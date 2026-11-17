@@ -81,9 +81,12 @@ describe("多选原语组件", () => {
   it("顶部栏：取消 / 已选 N / 全选（全选后变全不选），44 命中走 v2 选择顶栏", async () => {
     const onCancel = vi.fn();
     const onToggleAll = vi.fn();
-    await mount(createElement(SelectionTopBar, { count: 2, allSelected: false, onCancel, onToggleAll }));
+    await mount(createElement(SelectionTopBar, { edge: "nested", count: 2, allSelected: false, onCancel, onToggleAll }));
     const bar = host.querySelector('[role="toolbar"][aria-label="多选操作"]')!;
     expect(bar.className).toContain("mb-sel-topbar");
+    // Top Chrome 契约：选择顶栏把 edge 透传成 data-edge（inset 由契约按档位派生）
+    expect(bar.hasAttribute("data-mb-topbar")).toBe(true);
+    expect(bar.getAttribute("data-edge")).toBe("nested");
     expect(bar.textContent).toContain("已选 2");
     const buttons = [...bar.querySelectorAll("button")];
     expect(buttons.map((b) => b.textContent?.trim())).toEqual(["取消", "全选"]);
@@ -93,7 +96,7 @@ describe("多选原语组件", () => {
     expect(onCancel).toHaveBeenCalled();
     expect(onToggleAll).toHaveBeenCalled();
 
-    await mount(createElement(SelectionTopBar, { count: 3, allSelected: true, onCancel, onToggleAll }));
+    await mount(createElement(SelectionTopBar, { edge: "overlay", count: 3, allSelected: true, onCancel, onToggleAll }));
     expect([...host.querySelectorAll("button")].map((b) => b.textContent?.trim())).toEqual(["取消", "全不选"]);
   });
 

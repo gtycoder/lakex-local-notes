@@ -57,7 +57,8 @@
 }
 .attachment-preview__toolbar {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-  padding: calc(8px + var(--mobile-top-safe-area)) var(--mb-page-pad) 8px;
+  /* inset 走契约（overlay，见 topChrome.css；全屏预览贴屏幕顶）。 */
+  padding: calc(8px + var(--mb-chrome-inset-top)) var(--mb-page-pad) 8px;
   background: var(--lake-bg-panel); color: var(--lake-text-1);
   border-bottom: .5px solid var(--lake-border-1);
 }

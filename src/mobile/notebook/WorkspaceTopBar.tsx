@@ -37,6 +37,7 @@ export function WorkspaceTopBar(props: WorkspaceTopBarProps) {
   return (
     <header
       className={"toolbar toolbar--border mobile-topbar" + (autoHidden ? " mobile-topbar--auto-hidden" : "")}
+      data-mb-topbar data-edge="viewport" data-size="regular"
       aria-hidden={autoHidden ? "true" : "false"}
     >
       {padTwoPane ? (

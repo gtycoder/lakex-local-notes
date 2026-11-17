@@ -410,7 +410,8 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 - 设置/搜索由DeferredPanel首次打开才加载，关闭时隐藏加载壳，访问后保留表单状态；AI页保持按打开条件挂载。
 - PickerSheet保留原来只有标题的头部；与MobileSheet共用焦点/页面锁控制器，补方向键和焦点归还，不增加Tab陷阱。
 - 图片/附件预览、普通移动Sheet和桌面Dialog共用lib/pageScrollLock的计数控制。预览优先关闭；Pad Esc先消费返回栈，再处理页面。
-- 页面安全区只引用mobile-*-safe-area，env与原生WindowInsets的组合只在theme/tokens.css定义。
+- 页面安全区只引用mobile-*-safe-area，env与原生WindowInsets的组合只在theme/tokens.css定义（安全区数值的唯一喂值通道；iOS/WKWebView 的 env() 自身正确，必要时注入同名 --mobile-native-*-safe —— 换喂值后端不改任何消费方）。
+- 顶部 chrome 几何走契约（261117，方案 B · docs/MOBILE-TOP-CHROME-REFACTOR.md）：每个顶部表面声明 data-mb-topbar + data-edge（viewport/overlay = 贴屏幕顶、消费顶部安全区一次；nested = 在其它顶栏之下；sheet = 底部 Sheet/局部面板）+ data-size（内容高 compact 44 / regular 52）；业务 CSS 不直接写 --mobile-top-safe-area / 44px / 52px（护栏 src/mobile/topChromeContract.test.ts 的允许清单只收喂值通道与屏底容器/浮层定位）。
 - AI表单状态/动作归useAiSettingsForm，分类关闭使读取失效，重开刷新已保存元信息并保留未保存草稿；原生测试异常给出失败/重试提示并撤销验证。AI与基础设置视图归分类组件，SettingsDrawer保留导航与既有数据所有者。
 
 ## UI 原语与架构审计（261107）

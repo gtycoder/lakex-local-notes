@@ -542,7 +542,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           第 1 行 [☰ 表名 …… 字段 / 筛选 / ＋]；第 2 行 [视图页签横滚] [视图列表]（仅 header.showViews）。
           哪些部件出现只由 mobileBitableHeaderModel 回答（纯函数、不依赖 records）；
           「编辑中/只读」徽标与记录数不进头部（记录数在网格末尾统计行）。 */}
-      <header className="mbt-header" role="toolbar" aria-label="多维表头部">
+      <header className="mbt-header" role="toolbar" aria-label="多维表头部" data-mb-topbar data-edge="nested">
         <div className="mbt-header__row1">
           <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables" aria-label="数据表"
             onClick={() => setTableDrawerOpen(true)}>

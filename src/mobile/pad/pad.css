@@ -10,9 +10,10 @@
  * medium 仍单栏，只是内容限宽（规则在 mobile.css 的平板块，选择器同步为 data-form-factor）。
  */
 
-/* 悬浮层从顶栏下沿开始（顶栏高 44 + margin-top 8 + 安全区多出的部分）。 */
+/* 悬浮层从顶栏下沿开始（regular 顶栏 foot = 内容高 + 8px 空气 + inset 过冲；几何见 topChrome.css 契约，
+   本锚点是允许清单里的浮层定位消费者，不走 data-edge）。 */
 html[data-form-factor="expanded"] {
-  --pad-float-top: calc(var(--mobile-topbar-height) + 8px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
+  --pad-float-top: calc(var(--mb-chrome-h-regular) + 8px + max(0px, calc(var(--mobile-top-safe-area) - var(--mb-chrome-inset-overhang))));
   /* 侧栏宽度按**窗口比例**（261103 用户：固定值大平板/小平板都不好看）。钳制区间防止太窄/吃掉正文。 */
   --pad-tree-width: clamp(240px, 22vw, 360px);
   --pad-outline-width: clamp(240px, 25vw, 420px);

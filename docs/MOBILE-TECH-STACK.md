@@ -120,6 +120,7 @@
 6. **一个内核消费者必须自带宽样式**：内核 CSS 目前由消费者模块 import（桌面 `styles/index.css`、移动 `editor/DocumentEditor.tsx`、
    移动 `home/QuickNoteComposer.tsx`）。历史缺陷：小记作为冷启动后**第一个**内核消费者时渲染成大图标 + 原生 file input。
    改动装载/入口时必须重新验证这一条。
+7. **顶部 chrome 安全区只结算一次（261117，方案 B 契约）**：顶部表面在 JSX 声明 `data-mb-topbar` + `data-edge`（viewport/overlay/nested/sheet）+ `data-size`，几何 = `--mb-chrome-content-h` + `--mb-chrome-inset-top`（派生见 `src/mobile/topChrome.css`）；`var(--mobile-top-safe-area)` 直接引用只允许出现在 `src/mobile/topChromeContract.test.ts` 的允许清单（喂值通道 + 屏底容器/浮层定位）。inset 喂值通道 = `theme/tokens.css`（Android 原生注入 / iOS env() 可换后端，消费方不动）。历史缺陷：内嵌 AI 副栏重复消费安全区（261117）、多选顶栏漏消费（261107 丢失）、底部 Sheet 头误消费（261117 修复）。
 7. **面板不让视口变矮（只有输入法会）⇒ 外壳高度必须"钉住"**（261014 定稿，实测记录见 git 历史；设备/门禁口径见 `docs/MOBILE-OPS.md`）：
    adjustResize 下输入法把 WebView 压矮（842→530），而我们自己的面板（fixed 占键盘区）**不改视口** ⇒
    任何以视口高为基准的盒子在「键盘 ⇄ 面板」切换时都会变高变矮（实测写作卡 320 → 428 = 用户报的"编辑区跳动"）。

@@ -204,7 +204,10 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
 
   return (
     <div className={"mobile-ai-page" + (embedded ? " mobile-ai-page--embedded" : "")} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="AI 助手">
-      <header className={"toolbar toolbar--border mobile-topbar" + (embedded ? " mobile-ai-page__head" : "")}>
+      <header
+        className={"toolbar toolbar--border mobile-topbar" + (embedded ? " mobile-ai-page__head" : "")}
+        data-mb-topbar data-edge={embedded ? "nested" : "overlay"} data-size={embedded ? "compact" : "regular"}
+      >
         {!embedded && <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>}
         {/* 内嵌在首页第 4 格时：全局顶栏已经显示空间名「AI」⇒ 这里不再重复标题，只留动作钮。 */}
         {!embedded && <span className="mobile-topbar-title">AI 助手</span>}

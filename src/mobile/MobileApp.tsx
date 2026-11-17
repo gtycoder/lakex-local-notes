@@ -115,6 +115,21 @@ export type Route =
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
+  /** 上传超限提示由共享错误总线发出；动态加载避免把设置/体积文案模块塞进移动入口首屏。 */
+  useEffect(() => {
+    let cancelled = false;
+    let dispose: (() => void) | undefined;
+    void import("../lib/attachmentLimit").then(({ subscribeAttachmentLimitErrors }) => {
+      if (cancelled) return;
+      dispose = subscribeAttachmentLimitErrors((error) => {
+        showToast(error.message, { type: "error", timeout: 12_000 });
+      });
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, []);
   /**
    * 冷启动落点 = **设置 → 常规 → 默认空间**（261110 用户点单）；默认「小记」（261014 定）。
    * 只读设备本地偏好（settings/defaultSpace，前缀 lakex-local-notes-mobile.，不进 S3）；
@@ -1018,7 +1033,7 @@ function MobileBootErrorPage(props: {
   return (
     <div className="mobile-app">
       <div className="mobile-home">
-        <header className="toolbar toolbar--border mobile-topbar">
+        <header className="toolbar toolbar--border mobile-topbar" data-mb-topbar data-edge="viewport" data-size="regular">
           <span className="mobile-topbar-gap" aria-hidden="true" />
           <span className="mobile-topbar-title">启动失败</span>
           <span className="mobile-topbar-gap" aria-hidden="true" />
@@ -1064,7 +1079,7 @@ function MobileDatabaseProblemPage(props: {
   return (
     <div className="mobile-app">
       <div className="mobile-home">
-        <header className="toolbar toolbar--border mobile-topbar">
+        <header className="toolbar toolbar--border mobile-topbar" data-mb-topbar data-edge="viewport" data-size="regular">
           <span className="mobile-topbar-gap" aria-hidden="true" />
           <span className="mobile-topbar-title">本地数据库需要处理</span>
           <span className="mobile-topbar-gap" aria-hidden="true" />
@@ -1103,7 +1118,7 @@ function MobileHomeSkeleton() {
     <div className="mobile-app">
       <div className="mobile-home" aria-busy="true">
         {/* 与真实顶栏同构（261110 底部 Dock 改版）：左 = 设置，中 = **当前空间标题**，右 = 空间内动作 + 搜索 + 云同步。 */}
-        <header className="toolbar toolbar--border mobile-topbar mobile-topbar--home">
+        <header className="toolbar toolbar--border mobile-topbar mobile-topbar--home" data-mb-topbar data-edge="viewport" data-size="compact">
           <div className="mobile-topbar-group mobile-topbar-group--start">
             <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           </div>

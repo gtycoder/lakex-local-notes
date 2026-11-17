@@ -285,7 +285,10 @@
   --mobile-capsule-drop: 12px;
   /* 安全区：env() 与原生 WindowInsets 注入值取 max。
    * 261027：部分 ROM/edge-to-edge（targetSdk 36 / Android 15+ 强制）下 WebView 的
-   * env(safe-area-inset-top) 返回 0，而内容已经在状态栏/刘海下面 ⇒ 必须用原生 inset 兜底。 */
+   * env(safe-area-inset-top) 返回 0，而内容已经在状态栏/刘海下面 ⇒ 必须用原生 inset 兜底。
+   * 本层是安全区数值的**唯一喂值通道**（顶部 chrome 的消费方式见 topChrome.css 契约）；
+   * iOS 口子：WKWebView 的 env() 自身正确，必要时注入同名 --mobile-native-*-safe 即可，
+   * 换喂值后端不改任何消费方。 */
   --mobile-top-safe-area: max(env(safe-area-inset-top, 0px), var(--mobile-native-top-safe, 0px));
   --mobile-bottom-safe-area: max(env(safe-area-inset-bottom, 0px), var(--mobile-native-bottom-safe, 0px));
   /* 261103 六批 A1：**横屏左右安全区**（刘海/挖孔在横屏会切掉左右边）。

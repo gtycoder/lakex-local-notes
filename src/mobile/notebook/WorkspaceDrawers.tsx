@@ -51,13 +51,14 @@ export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "") + (selecting ? " side-panel--selecting" : "")} aria-label="目录">
         {selecting ? (
           <SelectionTopBar
+            edge="overlay"
             count={props.selectionCount ?? 0}
             allSelected={props.selectionAllSelected ?? false}
             onCancel={props.onCancelSelect ?? (() => undefined)}
             onToggleAll={props.onToggleAllSelect ?? (() => undefined)}
           />
         ) : (
-          <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
+          <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe data-mb-topbar data-edge="overlay">
             <div className="toolbar__scroll">
               {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
               <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>

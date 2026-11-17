@@ -52,13 +52,15 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 .mobile-topbar {
   display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
-  padding: max(0px, calc(var(--mobile-top-safe-area) - 8px)) max(var(--mb-page-pad), var(--mobile-right-safe-area)) 0 max(var(--mb-page-pad), var(--mobile-left-safe-area));
-  margin-top: 8px;
-  /* 高度必须把「安全区多出来的部分」算进去：只加 padding 不加高度会把 44px 内容区压扁/裁掉
+  /* 顶部几何全部走 Top Chrome 契约（topChrome.css）：内容高 --mb-chrome-content-h（data-size）
+     + inset --mb-chrome-inset-top（data-edge）；这里只保留旧口径「过冲」算式（--mb-chrome-inset-overhang，
+     B3 归一化候选）。高度必须把 inset 算进去：只加 padding 不加高度会把内容区压扁/裁掉
      （261027 刘海屏实机：顶栏文字被上下裁切）。auto-hidden 时整体归零，不受影响。 */
-  /* 261107 v2：内容区高 52（--mobile-topbar-height 已改）；初始 transparent + 无底线（与光场融合），
+  padding: max(0px, calc(var(--mb-chrome-inset-top) - var(--mb-chrome-inset-overhang))) max(var(--mb-page-pad), var(--mobile-right-safe-area)) 0 max(var(--mb-page-pad), var(--mobile-left-safe-area));
+  margin-top: var(--mb-chrome-air-top);
+  /* 261107 v2：内容区高 = --mb-chrome-content-h（regular 档 52）；初始 transparent + 无底线（与光场融合），
      滚动后的玻璃底/发丝线/渐隐统一在下方 .mobile-topbar.is-scrolled。 */
-  height: calc(var(--mobile-topbar-height) + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
+  height: calc(var(--mb-chrome-content-h) + max(0px, calc(var(--mb-chrome-inset-top) - var(--mb-chrome-inset-overhang))));
   position: sticky; top: 0; z-index: var(--mobile-z-topbar);
   /* 阅读时自动收起（261019，对齐思源）：收起靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
   /* 261107：overflow 必须可见 —— 滚动后的「底部 14px 渐隐」要垂到栏外；收起态再单独裁切（见 .mobile-topbar--auto-hidden）。 */
@@ -119,10 +121,9 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-topbar.mobile-topbar--home {
   --mb-home-col-gap: 2px;
   --mb-topbar-icon-w: var(--mb-tap-min);
-  /* 261110 用户点单：首页顶栏 52 → **44**（40 偏薄、52 偏厚取中间），
-     保留减重项（去顶部 8px 外边距、左右内距 12）；其它页顶栏（工作区/设置）仍 52。 */
-  height: calc(44px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
-  margin-top: 0;
+  /* 261110 用户点单：首页顶栏 52 → **44**（40 偏薄、52 偏厚取中间）——内容高走 compact（data-size）；
+     减重项 = 去顶部 8px 空气（--mb-chrome-air-top 清零）、左右内距 12；其它页顶栏仍 regular 52。 */
+  --mb-chrome-air-top: 0px;
   padding-left: max(12px, var(--mobile-left-safe-area));
   padding-right: max(12px, var(--mobile-right-safe-area));
   display: grid;
@@ -472,7 +473,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-settings-page--full { width: 100%; border-radius: 0; box-shadow: none; }
 .mobile-settings-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: calc(12px + var(--mobile-top-safe-area)) 16px 10px;
+  /* inset 走契约（根/子页 = overlay；标签·日记页头叠 .mobile-page-head 且 data-edge="nested" ⇒ +0）。 */
+  padding: calc(12px + var(--mb-chrome-inset-top)) 16px 10px;
   border-bottom: .5px solid var(--lake-border-1, var(--lake-border-1));
   position: sticky; top: 0; z-index: 2;
   /* v2：父级改成渐变光场后，background: inherit 会把整段渐变压进页头盒子（页头下沿出现色阶断层）
@@ -492,13 +494,13 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 }
 .mobile-settings-close:active { background: var(--lake-bg-panel, var(--lake-bg-window)); }
 
-/* 261106 task-76：一级「标签」页页头复用设置页 .mobile-settings-head（sticky + 左/中/右三格），需两处覆盖：
-   ① 背景不能 inherit —— 首页 .mobile-scroll 没有底色，滚动内容会从 sticky 页头下发透出来；
-   ② 上方已有 App 顶栏（含安全区）⇒ 不再叠加 --mobile-top-safe-area。
-   属**新增页面形态**，不是覆盖叠层（只有这两条，其它几何全部沿用设置页页头）。 */
+/* 261106 task-76：一级「标签」页页头复用设置页 .mobile-settings-head（sticky + 左/中/右三格），只需一处覆盖：
+   背景不能 inherit —— 首页 .mobile-scroll 没有底色，滚动内容会从 sticky 页头下发透出来。
+   顶部几何走契约：该页头 data-edge="nested"（首页顶栏之下）⇒ inset=0，padding-top = calc(12px + 0) = 12px，
+   不再需要本地覆盖安全区。属**新增页面形态**，不是覆盖叠层。 */
 /* v2：标签页 sticky 页头改玻璃底（与滚动后顶栏同档），不再铺平色窗底。 */
 .mobile-page-head {
-  padding-top: 12px; background: var(--mb-glass-bg-bar);
+  background: var(--mb-glass-bg-bar);
 }
 
 /* 261106 task-77/79：标签详情页副标题（N 篇文档、M 条小记）——在页头下方、**块外**；
@@ -509,8 +511,11 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    只有几何：页内距 + 底部安全区 + 发丝；fixed 变体给首页常驻层（列表 / Sheet 内用内联版）。
    flex-wrap：文档列表多选条有 4 个动作（创建副本/移动/移入回收站/打标签），窄屏一行放不下 ⇒ 允许换行
    且仍右对齐；动作 ≤3 个时（小记多选条）不换行，视觉与之前一致。 */
-/* v2（261107）：多选页重做 —— 顶栏与抽屉头同高（不跳高度）、动作条 = 浮动玻璃 + 等分图标格。 */
-.mb-sel-topbar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad); }
+/* v2（261107）：多选页重做 —— 顶栏与抽屉头同高（不跳高度）、动作条 = 浮动玻璃 + 等分图标格。
+   顶部 inset 走契约按 data-edge 结算（首页多选替换首页顶栏 = viewport；抽屉多选 = overlay；
+   Sheet / 平板栏 = sheet / nested）。261117 补：抽屉/首页多选态此前漏消费安全区（v2 重做时丢失，
+   真机上选择栏会顶进状态栏），仅 inset>0 设备可见，safe=0 几何不变。 */
+.mb-sel-topbar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); min-height: calc(var(--mb-ctl-h-lg) + var(--mb-chrome-inset-top)); padding: var(--mb-chrome-inset-top) var(--mb-page-pad) 0; }
 .mb-sel-topbar__btn { min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 2px; border: 0; background: transparent; color: var(--lake-accent-text); font: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mb-sel-topbar__btn:active { opacity: .55; }
 .mb-sel-topbar__count { flex: 1 1 auto; text-align: center; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); font-variant-numeric: tabular-nums; }
@@ -701,7 +706,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
 .mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--lake-bg-window, var(--lake-bg-window)); border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0; overflow: hidden; scrollbar-width: none; animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
-.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: calc(var(--mobile-topbar-height) + var(--mobile-top-safe-area)); padding: calc(8px + var(--mobile-top-safe-area)) var(--mb-page-pad) 8px var(--mb-page-pad); border-bottom: .5px solid var(--lake-bg-block); }
+/* 标签页列表是**底部 Sheet**（贴底、max-height 80%，永不达屏幕顶）⇒ data-edge="sheet"，inset 恒 0。
+   261117 修复：此前头部吃顶部安全区（min-height/padding 各叠一份）⇒ inset>0 设备上 Sheet 头异常变高；
+   safe=0 时几何不变（min-height 52 / padding 8）。 */
+.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: var(--mb-chrome-content-h); padding: 8px var(--mb-page-pad); border-bottom: .5px solid var(--lake-bg-block); }
 /* 标签页抽屉：标题右侧「关闭全部」（放在 × 左边；ml-auto 把它顶到右侧） */
 .mobile-model-closeall { margin-left: auto; margin-right: 4px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mobile-model-closeall:active { background: var(--lake-bg-hover); color: var(--lake-text-2); }
@@ -765,10 +773,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .side-panel > .toolbar .toolbar__icon { width: 40px; height: 40px; padding: 11px; margin: 2px; }
 .side-panel > .toolbar .toolbar__icon > svg { width: 18px; height: 18px; }
 .side-panel > .toolbar .toolbar__text { font-size: var(--lake-font-size-small); padding-left: 8px; }
-.side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: calc(48px + var(--mobile-top-safe-area)); padding-top: var(--mobile-top-safe-area); }
-/* 261106 task-8：抽屉里的多选顶栏（SelectionTopBar）顶部就是屏幕顶（没有 App 顶栏）⇒ 补顶部安全区，
-   与抽屉工具栏同口径；选择态下它是抽屉第一行。 */
-.side-panel .mobile-page-head { padding-top: calc(12px + var(--mobile-top-safe-area)); }
+/* 抽屉工具栏 = overlay（data-edge 声明）：inset 走契约 --mb-chrome-inset-top，不再直接写安全区。
+   （原 .side-panel .mobile-page-head 的安全区覆盖已删：261106 时多选顶栏还复用 .mobile-page-head，
+   261107 v2 改 .mb-sel-topbar 后该规则成死规则；多选顶栏的 inset 现由契约按各自 data-edge 结算。） */
+.side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: calc(48px + var(--mb-chrome-inset-top)); padding-top: var(--mb-chrome-inset-top); }
 /* 抽屉首行 = 笔记本行（图标 + 标题）：左侧留出与页面内距同档的空间（用户 261014：图标太贴边、顶到抽屉边缘）。
    只作用在抽屉工具栏的滚动区，其它工具栏不受影响。 */
 .side-panel > .toolbar .toolbar__scroll { padding-left: var(--mb-page-pad); }
@@ -831,7 +839,8 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 .side-panel-body .side-panel-row,
 .side-panel-body .side-panel-row__title { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* 小记写作的**全屏容器**（261111）：两条入口共用（capture 独立路由 / 首页新建），单一来源。
-   状态栏安全区以下起、外壳底部（键盘上方）止；卡片本体在它里面 flex 撑满 ⇒ 不再有 8px 浮卡外距。 */
+   状态栏安全区以下起、外壳底部（键盘上方）止；卡片本体在它里面 flex 撑满 ⇒ 不再有 8px 浮卡外距。
+   （屏幕容器起点，非顶栏 chrome ⇒ 是 topChromeContract 允许清单里的安全区直接消费者，不走 data-edge。） */
 .mobile-qn-screen {
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
   padding-top: var(--mobile-top-safe-area);

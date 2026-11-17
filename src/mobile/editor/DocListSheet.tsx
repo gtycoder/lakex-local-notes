@@ -320,6 +320,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose, flush
     >
       {selection.active ? (
         <SelectionTopBar
+          edge="sheet"
           count={selection.count}
           allSelected={selection.allSelected}
           onCancel={() => selection.exit()}

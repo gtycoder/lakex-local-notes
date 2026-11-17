@@ -64,7 +64,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
 
   return (
     <div className="mobile-document">
-      <header className="mobile-topbar">
+      <header className="mobile-topbar" data-mb-topbar data-edge="overlay" data-size="regular">
         <button className="mobile-icon-btn" onClick={onBack} aria-label="返回"><ArrowLeft size={22} /></button>
         <div className="mobile-topbar-title">{title || "回收站文档"}</div>
         <div className="mobile-topbar-actions">

@@ -8,11 +8,14 @@ export interface SelectionTopBarProps {
   allSelected: boolean;
   onCancel(): void;
   onToggleAll(): void;
+  /** Top Chrome 契约（topChrome.css）：本顶栏所在表面与屏幕顶的关系，决定是否消费顶部安全区。
+   *  首页多选替换首页顶栏 = viewport；抽屉多选 = overlay；Sheet 内 / 平板悬浮栏 = sheet / nested。 */
+  edge: "viewport" | "overlay" | "nested" | "sheet";
 }
 
-export function SelectionTopBar({ count, allSelected, onCancel, onToggleAll }: SelectionTopBarProps) {
+export function SelectionTopBar({ count, allSelected, onCancel, onToggleAll, edge }: SelectionTopBarProps) {
   return (
-    <header className="mb-sel-topbar" role="toolbar" aria-label="多选操作" data-prevent-swipe>
+    <header className="mb-sel-topbar" role="toolbar" aria-label="多选操作" data-prevent-swipe data-mb-topbar data-edge={edge}>
       <button type="button" className="mb-sel-topbar__btn" onClick={onCancel}>取消</button>
       <div className="mb-sel-topbar__count" aria-live="polite" aria-atomic="true">已选 {count}</div>
       <button type="button" className="mb-sel-topbar__btn" onClick={onToggleAll}>{allSelected ? "全不选" : "全选"}</button>

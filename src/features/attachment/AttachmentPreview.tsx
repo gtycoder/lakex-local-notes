@@ -74,7 +74,7 @@ export function AttachmentPreview() {
   return createPortal(
     <div className={"attachment-preview" + (isMac ? " is-mac" : "")} role="dialog" aria-modal="true" aria-label="附件预览"
       onClick={(e) => { if (e.target === e.currentTarget) closeAttachmentPreview(); }}>
-      <div className="attachment-preview__toolbar">
+      <div className="attachment-preview__toolbar" data-mb-topbar data-edge="overlay">
         <span className="attachment-preview__title"><Paperclip size={15} />{item.name}
           <small>{KIND_LABEL[kind] ?? "文件"}，{formatFileSize(item.size)}</small></span>
         <span className="attachment-preview__spacer" />

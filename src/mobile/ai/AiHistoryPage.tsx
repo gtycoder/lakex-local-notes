@@ -86,7 +86,7 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
 
   return (
     <div className="mobile-ai-page ai-history-page" role="dialog" aria-modal="true" aria-label="历史对话">
-      <header className="toolbar toolbar--border mobile-topbar">
+      <header className="toolbar toolbar--border mobile-topbar" data-mb-topbar data-edge="overlay" data-size="regular">
         <button type="button" className="toolbar__button" onClick={() => { if (detail) setDetail(null); else onClose(); }} aria-label="返回"><ArrowLeft size={20} /></button>
         <span className="mobile-topbar-title">{detail ? detail.title : "历史对话"}</span>
         {detail ? (

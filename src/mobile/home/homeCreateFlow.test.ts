@@ -187,6 +187,13 @@ describe("首页新建流（261014）", () => {
     expect(PAGER.match(/setTimeout\(/g) || []).toHaveLength(1);
     // 写作/编辑小记期间锁横滑（否则父级 [tab] effect 清掉写作卡 = 丢草稿）
     expect(HOME).toMatch(/composer !== null \? " mobile-tab-stage--locked" : ""/);
+    // 261117 回归：锁前归位只能走分页器机器的 alignNow（页码判据在 reducePager）——
+    // 曾硬编码 scrollTo({left:0}，261114 空间顺序改「知识库/小记/…」后写作卡一挂载就被滚到知识库页、
+    // 过半回写 tab ⇒ 重置 effect 清掉写作卡（长按＋速记 / 面板「小记」全部失效）。
+    expect(HOME).toContain("alignNow()");
+    expect(HOME, "禁止硬编码分页页码").not.toContain("scrollTo({ left: 0");
+    expect(PAGER).toContain("alignNow: () => void");
+    expect(PAGER).toMatch(/alignNow[\s\S]{0,240}dispatch\(\{ type: "resize"/);
     // 舞台 = 原生横向滚动 + 吸附；锁定态只留纵向滚动
     expect(CSS).toMatch(/\.mobile-tab-stage\s*\{[^}]*overflow-x:\s*auto/);
     expect(CSS).toMatch(/scroll-snap-type:\s*x mandatory/);

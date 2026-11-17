@@ -178,7 +178,8 @@
   position: relative; inset: auto; z-index: auto; height: 100%; min-height: 0;
   animation: none; background: transparent;
 }
-.mobile-ai-page--embedded .mobile-ai-page__head { padding-left: var(--mb-page-pad); }
-
-/* 261110 内嵌模式收尾：全局顶栏已显示「AI」⇒ 内嵌页不再重复标题（只剩 历史 / 新对话 两个动作，靠右）。 */
-.mobile-ai-page--embedded .mobile-ai-page__head { justify-content: flex-end; }
+/* 内嵌页位于首页顶栏**之下** ⇒ JSX 声明 data-edge="nested"（topChrome 契约）：
+ * inset=0 / 顶部空气=0 / 内容高 compact（44）全部由契约派生 —— 高度、上外边距、上内距不再本地复位
+ * （261117「重复结算安全区」的复位规则已收编进契约，防同类回归；护栏 aiLayout.test.ts）。
+ * 261110 内嵌模式收尾：全局顶栏已显示「AI」⇒ 内嵌页不再重复标题（只剩 历史 / 新对话 两个动作，靠右）。 */
+.mobile-ai-page--embedded .mobile-ai-page__head { padding-left: var(--mb-page-pad); justify-content: flex-end; }

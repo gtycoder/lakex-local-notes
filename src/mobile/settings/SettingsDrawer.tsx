@@ -300,7 +300,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     <>
       {!isSub && <div ref={maskRef} className="mobile-settings-mask" onClick={onClose} />}
       <div ref={pageRef} className={`mobile-settings-page${isSub ? " mobile-settings-page--full" : ""}`}>
-      <header className="mobile-settings-head">
+      <header className="mobile-settings-head" data-mb-topbar data-edge="overlay">
         {isSub ? (
           <button className="mobile-settings-close" onClick={() => { setView("menu"); setPreviewNoteId(null); }} aria-label="返回"><ArrowLeft size={22} /></button>
         ) : (
@@ -335,7 +335,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               </Item>
               <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
               {/* 261113 用户点单：常规页顺序对齐桌面 EditorSection（… 标签页 → 附件 → 启动/默认空间）。 */}
-              <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
+              <Item itemId="editor-max-attachment" name="附件大小上限" desc="图片、视频、PDF 或其他附件的本机上传上限；同步与下载统一按协议上限 100 MiB。">
                 <PickerSheet
                   label="附件大小上限"
                   value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))}

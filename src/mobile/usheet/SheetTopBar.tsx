@@ -31,7 +31,7 @@ export function SheetTopBar({
   onAddSheet,
 }: SheetTopBarProps) {
   return (
-    <div className="mb-usheet-topbar" data-prevent-swipe role="toolbar" aria-label="工作表">
+    <div className="mb-usheet-topbar" data-prevent-swipe role="toolbar" aria-label="工作表" data-mb-topbar data-edge="nested">
       <div className="mb-usheet-topbar__tabs" role="tablist" aria-label="工作表页签">
         {sheets.map((sheet) => (
           <button

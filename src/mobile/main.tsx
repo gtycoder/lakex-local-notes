@@ -28,6 +28,7 @@ import "./theme/index.css";
 import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
 import "./editor/editor-dock.css";
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
+import "./topChrome.css"; // 261117：顶部 Chrome 契约（data-edge 派生 inset / 内容高；docs/MOBILE-TOP-CHROME-REFACTOR.md）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
 import "./pad/pad.css"; // 261102：平板外壳（正文满宽 + 悬浮目录/大纲；判据见 pad/formFactor.ts）
 import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
