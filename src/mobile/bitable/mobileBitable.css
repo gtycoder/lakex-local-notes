@@ -799,6 +799,14 @@
 .mbt-calendar-event__bar { flex: 0 0 3px; align-self: stretch; border-radius: var(--lake-radius-pill); background: var(--lake-border-strong); }
 .mbt-calendar-event__title { flex: 1; min-width: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mbt-calendar-event__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
+/* 单选/多选折叠式选择器（261117 重做）：默认收起只显示已选值，点摘要行展开候选；
+ * 选中态 = 勾选 + 主色选中三件套（选项色底只给未选中做色相标识）。 */
+.mbt-select { display: flex; flex-direction: column; align-items: flex-end; gap: var(--lake-space-xs); min-width: 0; max-width: 100%; }
+.mbt-select__summary { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--lake-space-xs); min-height: var(--mb-ctl-h); padding: 0 2px; border: 0; background: transparent; color: var(--lake-text-1); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mbt-select__placeholder { color: var(--lake-text-4); font-size: var(--lake-font-size-small); }
+.mbt-select__options { justify-content: flex-end; }
+.mbt-select__add { border-style: dashed; }
+
 .mbt-form-edittoggle { display: flex; justify-content: flex-end; padding: var(--lake-space-sm) 0 0; }
 .mbt-form-editor { display: flex; flex-direction: column; gap: var(--lake-space-lg); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }
 .mbt-form-editor__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

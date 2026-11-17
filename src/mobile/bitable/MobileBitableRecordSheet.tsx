@@ -10,7 +10,7 @@
  * 与表单共用 MobileBitableAttachmentEditor）。其余类型（关联/系统时间/AI/Markdown）**只读展示并写明理由**。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import {
   BITABLE_RATING_MAX,
   bitableFieldText,
@@ -40,7 +40,8 @@ export interface MobileBitableRecordSheetProps {
   /** 写一个字段值（父级负责落 doc + 标脏保存）。 */
   onPatch: (fieldId: string, value: unknown) => void;
   /** 单选/多选新建选项；返回新选项 id 供立即选中。 */
-  onAddOption: (fieldId: string, name: string) => string | null;
+  /** 新建选项 = 跳字段编辑器（那里有回车流转批量录选项），不在记录面板内联录入（261117）。 */
+  onEditField: (fieldId: string) => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -99,58 +100,70 @@ function NumberControl({ value, onChange }: { value: unknown; onChange: (value: 
 }
 
 
-function SelectControl({ field, value, onChange, onAddOption }: {
-  field: BitableField; value: unknown; onChange: (value: unknown) => void; onAddOption: (name: string) => string | null;
+/**
+ * 单选/多选字段控件（261117 用户点单重做）：
+ * · 默认**折叠**：行内只显示已选值（不再平铺全部选项）；
+ * · 点摘要行展开候选：选中 = 勾选 + 主色选中三件套（选项色底只给未选中做色相标识 ——
+ *   之前选中态被选项色底淹没、完全看不出来）；
+ * · 单选点选即完成并收起；多选可连选，再点摘要行收起；
+ * · 「新建选项」= 跳**字段编辑器**（回车流转批量录选项），不在此处内联录入。
+ */
+function SelectControl({ field, value, onChange, onEditField }: {
+  field: BitableField; value: unknown; onChange: (value: unknown) => void; onEditField: (fieldId: string) => void;
 }) {
   const multi = field.type === "multiSelect";
   const selected = selectedOptionIds(value);
-  const [drafting, setDrafting] = useState(false);
-  const [draft, setDraft] = useState("");
-  const commit = () => {
-    const name = draft.trim();
-    setDrafting(false);
-    setDraft("");
-    if (!name) return;
-    const optionId = onAddOption(name);
-    if (!optionId) return;
-    // 新建即选中（单选取代、多选追加），与桌面 addOption 的记录内行为一致。
-    onChange(multi ? [...new Set([...selected, optionId])] : optionId);
+  const [open, setOpen] = useState(false);
+  const options = field.options ?? [];
+  const chosen = options.filter((option) => selected.includes(option.id));
+  const toggle = (optionId: string): void => {
+    if (multi) {
+      onChange(selected.includes(optionId) ? selected.filter((id) => id !== optionId) : [...selected, optionId]);
+      return;
+    }
+    onChange(selected.includes(optionId) ? "" : optionId);
+    setOpen(false); // 单选点选即完成
   };
   return (
-    <div className="mb-chip-row" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
-      {(field.options ?? []).map((option) => {
-        const on = selected.includes(option.id);
-        return (
-          <button
-            key={option.id}
-            type="button"
-            role={multi ? "checkbox" : "radio"}
-            aria-checked={on}
-            className={"mb-chip" + (on ? " is-on" : "")}
-            style={optionChipStyle(option.color)}
-            onClick={() => {
-              if (multi) onChange(on ? selected.filter((id) => id !== option.id) : [...selected, option.id]);
-              else onChange(on ? "" : option.id);
-            }}
-          >{option.name}</button>
-        );
-      })}
-      {drafting ? (
-        <span className="mb-input mbt-option-add">
-          <input
-            autoFocus
-            value={draft}
-            placeholder="新选项名称"
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) commit(); }}
-            onBlur={commit}
-            aria-label="新选项名称"
-          />
-        </span>
-      ) : (
-        <button type="button" className="mb-chip" onClick={() => setDrafting(true)} aria-label="新建选项">
-          <Plus size={14} />选项
-        </button>
+    <div className="mbt-select">
+      <button
+        type="button"
+        className="mbt-select__summary"
+        aria-expanded={open}
+        aria-label={field.name + "：" + (chosen.length ? chosen.map((option) => option.name).join("、") : "未选择")}
+        onClick={() => setOpen((on) => !on)}
+      >
+        {chosen.length ? (
+          <span className="mb-chip-row">
+            {chosen.map((option) => (
+              <span key={option.id} className="mb-chip" style={optionChipStyle(option.color)}>{option.name}</span>
+            ))}
+          </span>
+        ) : (
+          <span className="mbt-select__placeholder">未选择</span>
+        )}
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {open && (
+        <div className="mb-chip-row mbt-select__options" role={multi ? "group" : "radiogroup"} aria-label={"选择 " + field.name}>
+          {options.map((option) => {
+            const on = selected.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role={multi ? "checkbox" : "radio"}
+                aria-checked={on}
+                className={"mb-chip" + (on ? " is-on" : "")}
+                style={on ? undefined : optionChipStyle(option.color)}
+                onClick={() => toggle(option.id)}
+              >{on && <Check size={13} aria-hidden="true" />}{option.name}</button>
+            );
+          })}
+          <button type="button" className="mb-chip mbt-select__add" onClick={() => { setOpen(false); onEditField(field.id); }}>
+            <Plus size={14} />新建选项
+          </button>
+        </div>
       )}
     </div>
   );
@@ -212,7 +225,7 @@ function ProgressControl({ value, onChange }: { value: unknown; onChange: (value
   );
 }
 
-export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, onPatch, onAddOption, onDelete, onClose }: MobileBitableRecordSheetProps) {
+export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, onPatch, onEditField, onDelete, onClose }: MobileBitableRecordSheetProps) {
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
   // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body--form，视觉不变）。
   return (
@@ -236,7 +249,7 @@ export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, o
                 ) : field.type === "boolean" ? (
                   <BooleanControl value={value} onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "select" || field.type === "multiSelect" ? (
-                  <SelectControl field={field} value={value} onChange={(next) => onPatch(field.id, next)} onAddOption={(name) => onAddOption(field.id, name)} />
+                  <SelectControl field={field} value={value} onChange={(next) => onPatch(field.id, next)} onEditField={onEditField} />
                 ) : field.type === "date" ? (
                   <MobileBitableDateField value={value} ariaLabel={field.name} onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "number" ? (

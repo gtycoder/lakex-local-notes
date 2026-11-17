@@ -56,19 +56,21 @@ const html = renderToStaticMarkup(createElement(MobileBitableRecordSheet, {
   record,
   ctx: { tables: [table] },
   onPatch: () => {},
-  onAddOption: () => null,
+  onEditField: () => {},
   onDelete: () => {},
   onClose: () => {},
 }));
 
 describe("MobileBitableRecordSheet", () => {
-  it("按字段类型给控件：布尔=开关、单选/多选=选项 chips、评分=星、进度=滑杆", () => {
+  it("按字段类型给控件：布尔=开关、单选/多选=折叠摘要、评分=星、进度=滑杆", () => {
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="true"');
-    expect(html).toContain("mb-chip-row");
-    expect(html).toContain("进行中");
-    expect(html).toContain("mb-chip is-on"); // 已选中的单选
-    expect(html).toContain('aria-label="新建选项"');
+    // 261117：单选/多选默认**折叠** —— 行内只显示已选值，不平铺全部选项（交互见 render 测试）
+    expect(html).toContain("mbt-select");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("进行中");   // 已选的单选值进摘要
+    expect(html).toContain("紧急");     // 已选的多选值进摘要
+    expect(html).not.toContain("重要"); // 未选中的选项不平铺
     expect(html).toContain("mbt-rating-btn");
     expect(html).toContain('type="range"');
     expect(html).toContain("60%");

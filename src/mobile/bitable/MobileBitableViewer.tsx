@@ -72,7 +72,7 @@ import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitab
 import { submitMobileForm } from "./mobileBitableForm";
 import { EmptyState } from "../ui/EmptyState";
 import {
-  addMobileField, addMobileOption, addMobileRecord, deleteMobileField, deleteMobileRecord,
+  addMobileField, addMobileRecord, deleteMobileField, deleteMobileRecord,
   isMobileEditableField, recordWindow, serializeBitableBody, setMobileCell,
 } from "./mobileBitableEdit";
 import { isImeConfirming } from "../../core/ime";
@@ -465,14 +465,6 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     mutate((current) => setMobileCell(current, table.id, targetRecordId, fieldId, value));
   };
 
-  const addOption = (fieldId: string, name: string): string | null => {
-    const current = docRef.current;
-    if (!current || !editable) return null;
-    const result = addMobileOption(current, table.id, fieldId, name);
-    commit(result.doc);
-    return result.optionId;
-  };
-
   const deleteRecord = async () => {
     if (!sheetRecord) return;
     const recordNo = records.findIndex((item) => item.id === sheetRecord.id) + 1;
@@ -708,7 +700,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           record={sheetRecord}
           ctx={displayCtx}
           onPatch={(fieldId, value) => patchCell(sheetRecord.id, fieldId, value)}
-          onAddOption={addOption}
+          onEditField={(fieldId) => setEditingFieldId(fieldId)}
           onDelete={() => void deleteRecord()}
           onClose={() => setRecordId(null)}
         />

@@ -52,7 +52,7 @@ const renderFieldSheet = (onClose: () => void) => act(() => {
 const renderRecordSheet = (onClose: () => void) => act(() => {
   root.render(createElement(MobileBitableRecordSheet, {
     noteId: "n1",
-    table, fields, record, ctx: { tables: [table] }, onPatch: () => undefined, onAddOption: () => null, onDelete: () => undefined, onClose,
+    table, fields, record, ctx: { tables: [table] }, onPatch: () => undefined, onEditField: () => {}, onDelete: () => undefined, onClose,
   }));
 });
 
