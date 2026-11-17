@@ -12,13 +12,13 @@ import { useKeyboardRevealFocus } from "../hooks/useKeyboardStableSheet";
 import { CalendarDays, FileText, Hash, ListChecks, Link2, Paperclip, Star, ToggleLeft } from "lucide-react";
 import {
   BITABLE_RATING_MAX,
-  optionChipStyle,
   type BitableDisplayContext,
   type BitableField,
   type BitableTable,
   type BitableView,
 } from "../../core/bitableDoc.js";
-import { progressValue, ratingValue, selectedOptionIds, textInputValue } from "./mobileBitableEdit";
+import { progressValue, ratingValue, textInputValue } from "./mobileBitableEdit";
+import { BitableSelectControl } from "./BitableSelectControl";
 import { formDraftDefaults, formFieldsFor, formMissingFields, formableFields as formableBitableFields } from "./mobileBitableForm";
 import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
 import { MobileBitableDateField } from "./MobileBitableDateField";
@@ -110,25 +110,10 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
   const renderControl = (field: BitableField) => {
     const value = draft[field.id];
     if (field.type === "select" || field.type === "multiSelect") {
-      const options = field.options ?? [];
-      const selected = selectedOptionIds(value);
-      const multi = field.type === "multiSelect";
-      if (options.length === 0) return <span className="mbt-field-note">这个字段还没有选项</span>;
-      return (
-        <div className="mb-chip-row" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
-          {options.map((option) => {
-            const on = selected.includes(option.id);
-            return (
-              <button key={option.id} type="button" role={multi ? "checkbox" : "radio"} aria-checked={on}
-                className={"mb-chip" + (on ? " is-on" : "")} style={on ? optionChipStyle(option.color) : undefined}
-                onClick={() => {
-                  if (multi) setValue(field.id, on ? selected.filter((id) => id !== option.id) : [...selected, option.id]);
-                  else setValue(field.id, on ? "" : option.id);
-                }}>{option.name}</button>
-            );
-          })}
-        </div>
-      );
+      if ((field.options ?? []).length === 0) return <span className="mbt-field-note">这个字段还没有选项</span>;
+      // 261117 推广：与记录面板同一「项移动」选择器（单一来源 BitableSelectControl）；
+      // 表单填写场景不传 onEditField ⇒ 不提供「新建选项」（填写态不改字段）。
+      return <BitableSelectControl field={field} value={value} onChange={(next) => setValue(field.id, next)} />;
     }
     if (field.type === "boolean") {
       const on = value === true;

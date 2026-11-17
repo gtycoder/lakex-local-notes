@@ -99,7 +99,8 @@ export interface MobileSheetProps {
   bodyRef?: Ref<HTMLDivElement>;
   /** 无障碍名（默认取字符串标题）。 */
   ariaLabel?: string;
-  /** 头部拖拽可**自主调整高度**（261117 用户点单）：上拉变高、下拉变矮、松手停驻；到最小高度继续下拉松手 = 关闭。 */
+  /** 头部拖拽可**自主调整高度**（261117 用户点单，默认开 —— 全站 Sheet 手势统一）：
+   *  上拉变高、下拉变矮、松手停驻；到最小高度继续下拉松手 = 关闭。传 false 可退出（暂无用例）。 */
   resizable?: boolean;
   children: ReactNode;
 }
@@ -115,7 +116,7 @@ export function MobileSheet({
   bodyClassName,
   bodyRef,
   ariaLabel,
-  resizable = false,
+  resizable = true,
   children,
 }: MobileSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);

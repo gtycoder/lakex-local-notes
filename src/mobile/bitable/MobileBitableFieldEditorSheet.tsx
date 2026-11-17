@@ -147,7 +147,7 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
 
   if (!open || !field) return null;
   return (
-    <MobileSheet open={open} title="修改字段" bodyClassName="mb-sheet__body--form" onClose={onClose}
+    <MobileSheet open={open} className="mb-sheet--tall" title="修改字段" bodyClassName="mb-sheet__body--form" onClose={onClose}
       footer={
         <SheetFooter
           cancel={{ label: "取消", grow: true, onClick: onClose }}

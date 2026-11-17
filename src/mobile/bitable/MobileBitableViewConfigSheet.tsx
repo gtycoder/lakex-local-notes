@@ -104,7 +104,7 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
   };
 
   return (
-    <MobileSheet open={open} title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg mb-sheet__body--form">
+    <MobileSheet open={open} className="mb-sheet--tall" title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg mb-sheet__body--form">
       <div className="mbt-vcfg-tabs" role="tablist" aria-label="视图配置">
         {([["filter", "筛选"], ["sort", "排序"], ["group", "分组"], ["layout", "布局"]] as Array<[ConfigTab, string]>).map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key}

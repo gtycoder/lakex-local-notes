@@ -14,6 +14,7 @@ import { useSettingField } from "./fieldAccessibility";
 import { Check, ChevronDown } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
+import { useSheetResize } from "./useSheetResize";
 
 export interface PickerOption<T extends string | number = number> {
   value: T;
@@ -38,13 +39,16 @@ export function PickerSheet<T extends string | number>({
 }) {
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const accessibility = useSettingField();
   useSheetModalFocus(open, sheetRef);
   useEffect(() => { if (open) sheetRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus(); }, [open]);
   const current = options.find((o) => o.value === value);
 
-  useSwipeDownDismiss(sheetRef, () => setOpen(false), { enabled: open, scrollSelector: ".mb-sheet__body" });
+  useSwipeDownDismiss(sheetRef, () => setOpen(false), { enabled: open, scrollSelector: ".mb-sheet__body", ignoreSelector: ".mb-sheet__head" });
+// 261117 推广：头部拖拽调高（与 MobileSheet 同款手势；本组件是手写结构、不走 MobileSheet 原语）。
+useSheetResize(headRef, sheetRef, { enabled: open, onDismiss: () => setOpen(false) });
   useEffect(() => {
     if (!open) return;
     return pushBackHandler(() => { setOpen(false); return true; });
@@ -69,7 +73,7 @@ export function PickerSheet<T extends string | number>({
         <>
           <div className="mb-scrim" data-prevent-swipe onClick={() => setOpen(false)} />
           <div ref={sheetRef} className="mb-sheet mb-sheet--picker" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} data-prevent-swipe>
-            <div className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet">
+            <div ref={headRef} className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet">
               <span className="mb-sheet__title">{label}</span>
             </div>
             <div className="mb-sheet__body" role="listbox" aria-label={label} onKeyDown={(event) => {

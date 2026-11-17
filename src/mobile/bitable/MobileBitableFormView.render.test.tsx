@@ -27,13 +27,16 @@ const render = () => {
 };
 
 describe("MobileBitableFormView（填写态）", () => {
-  it("渲染字段/必填标记/选项 chips/提交条（无封面与重复标题）", () => {
+  it("渲染字段/必填标记/折叠式选择器/提交条（无封面与重复标题）", () => {
     const html = render();
     expect(html).toContain("mbt-form-fields");
     expect(html).not.toContain("mbt-form-cover");
     expect(html).not.toContain("收集表");
     expect(html).toContain('aria-label="必填"');
-    expect(html).toContain("mb-chip");
+    // 261117 推广：表单视图与记录面板同一「项移动」选择器 —— 默认折叠（只显示已选/占位），候选不平铺
+    expect(html).toContain("mbt-select");
+    expect(html).toContain("未选择");
+    expect(html).not.toContain("mbt-select__options");
     expect(html).toContain(">提交<");
     expect(html).toContain("已提交 0 条");
   });

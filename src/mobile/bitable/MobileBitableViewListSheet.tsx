@@ -57,7 +57,7 @@ export function MobileBitableViewListSheet({ open, table, activeViewId, editable
   };
 
   return (
-    <MobileSheet open={open} title="视图" onClose={onClose} bodyClassName="mbt-viewlist mb-sheet__body--form">
+    <MobileSheet open={open} className="mb-sheet--tall" title="视图" onClose={onClose} bodyClassName="mbt-viewlist mb-sheet__body--form">
       <div className={"mbt-viewlist-rows" + (drag ? " is-dragging" : "")}>
         {table.views.map((view: BitableView) => {
           const on = view.id === activeViewId;

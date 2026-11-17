@@ -24,8 +24,12 @@ const body = JSON.stringify({
 
 const fillAndSubmit = async (onPersistNow: (content: string) => Promise<void>) => {
   act(() => root.render(createElement(MobileBitableViewer, { noteId: "n1", content: body, onPersistNow })));
+  // 261117 折叠式选择器：先展开「类型」候选，再点选项
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>(".mbt-select__toggle")!.click();
+  });
   act(() => {
-    const chip = [...host.querySelectorAll<HTMLButtonElement>(".mb-chip")].find((b) => b.textContent === "复盘");
+    const chip = [...host.querySelectorAll<HTMLButtonElement>(".mbt-select__options .mb-chip")].find((b) => b.textContent === "复盘");
     chip?.click();
     const area = host.querySelector<HTMLTextAreaElement>(".mbt-form-textarea")!;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;

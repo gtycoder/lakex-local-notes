@@ -56,7 +56,7 @@ export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
   // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body，视觉不变）。
   return (
-    <MobileSheet open title={"字段：" + table.name} titleClassName="mb-ellipsis" ariaLabel="字段管理" bodyClassName="mb-sheet__body--form" onClose={onClose}>
+    <MobileSheet open className="mb-sheet--tall" title={"字段：" + table.name} titleClassName="mb-ellipsis" ariaLabel="字段管理" bodyClassName="mb-sheet__body--form" onClose={onClose}>
       <div className="mb-set-section">
         {fields.map((field) => (
           <div key={field.id} className="mb-set-item">
