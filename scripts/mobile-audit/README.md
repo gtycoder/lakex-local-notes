@@ -113,6 +113,38 @@ node scripts/mobile-audit/check-bitable-snap.mjs --port 9336 --write-baseline   
 - 夹具每次用**新 noteId**（先删后建）⇒ 设备本地布局偏好天然从默认（表格）起步，三态顺序稳定；实测两轮 0 差异。
 - 共享装置的导航/静默工具在 `snap-lib.mjs`（`tapByText` 等），整页快照脚本与它共用。
 
+## 多维表关键屏走查（261117 起，动多维表头部/面板/视图切换时跑）
+
+7 屏：网格 / 编辑记录 / 字段管理 / 修改字段 / 视图配置 / 表单填写 / 看板。与上面的 3 态快照互补 —— 快照盯整页计算值，
+这个探针盯**关键屏可达 + 可见**（rect>0 + 视口内 + `elementFromPoint` 命中三件套，keep-alive 隐藏 pane 骗不过）。
+
+```bash
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/bitable-screens.mjs <tag>            # 7 屏全跑
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/bitable-screens.mjs <tag> bitable-record,bitable-kanban  # 只跑受影响屏
+```
+
+- 夹具自建自删（标题「装置多维表-261117」）；截图 = 设备级 screencap → `.css-audit/bitable-screens/`（+ `report.json` 逐项检查结果）。
+- ⚠️ `.mbt-cell-btn` **不再只属于记录单元格**（列头「排序与筛选」入口同名类）⇒ 点记录单元格必须 `.mbt-grid tbody` 限定。
+- 每屏失败重跑一次再定论（装置抖动 ≠ 屏失败）。
+
+## 缺正文 / 缺小记恢复路径演练（261117 起，P0-2；动缺正文判据/恢复链路时跑）
+
+```bash
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/missing-body-drill.mjs <tag>
+```
+
+自建测试文档/小记（固定标记）→ **文件层**删正文（`adb run-as`）→ 行为取证（toast / 资源管理清单）→ 历史恢复 /
+云端恢复（无配置则登记跳过）/ 搜索索引兜底三条路径 → 文件层核对 + 彻底删除收尾。证据 → `.css-audit/resilience-drill-<tag>/`，
+checklist 与结论 = `docs/RESILIENCE.md` §3.7。⚠️ 小记 text_cache 搜索时惰性建 ⇒ 脚本删正文前先跑一次搜索。
+
+## 设备欠账冒烟（261117 起；更新中心校验通道 / 键盘 / 便携包导出）
+
+```bash
+node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/device-debt-smoke.mjs <tag>
+```
+
+A. 更新中心：原生清单获取（`Update.check`）+ sha256/证书校验通道（`Update.verify` 正/反例；包必须放 `cache/updates/`，路径门禁会拒别处）；B. 键盘冒烟：写作卡聚焦弹键盘（innerHeight 收缩 > 200px，before 必须无键盘态取样）+ 输入落字 + 取消不残留；C. 便携包导出到「下载」+ 产物核对。**不跑**：便携包导入（整库覆盖）、系统安装器（真机）。证据 → `.css-audit/device-debt-<tag>/`，欠账总表 = `design-plans/device-debt-261117.md`。
+
 ## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
 
 ```bash

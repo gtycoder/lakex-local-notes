@@ -46,10 +46,12 @@ bash scripts/emu-up.sh --no-window     # 无窗口启动（纯 CDP 远程会话�
 bash scripts/android-build.sh --sync --install
 bash scripts/emu-cdp.sh                # 转发到 tcp:9335（默认）
 bash scripts/emu-cdp.sh 9336           # 门禁实例用 9336
+bash scripts/emu-cdp.sh --watch 9335 2 # 常驻监视：掉线自动重转发（长跑探针时开着，App 重启不用人手重连）
 curl -s http://127.0.0.1:9335/json/list   # 应看到 "type":"page"
 ```
 
-- **`emu-cdp.sh` 的坑（本文最该记住的一条）**：WebView socket 名 = `webview_devtools_remote_<App 宿主 PID>`；App 重启或重装后**旧 socket 仍挂在 `/proc/net/unix`**，盲取 `tail -1` 会指向死 socket ⇒ `/json/list` 空、Node 侧 `fetch failed: other side closed`、装置报 `no page target`。**这不是 App 崩了**（`pidof` 仍在）。脚本已按当前 `pidof com.lakexlocalnotes.android` 精确取（取不到才回退），并在转发前 `adb forward --remove tcp:<port>`；**每次 App 重启/重装都要重跑它**。
+- **`emu-cdp.sh` 的坑（本文最该记住的一条）**：WebView socket 名 = `webview_devtools_remote_<App 宿主 PID>`；App 重启或重装后**旧 socket 仍挂在 `/proc/net/unix`**，盲取 `tail -1` 会指向死 socket ⇒ `/json/list` 空、Node 侧 `fetch failed: other side closed`、装置报 `no page target`。**这不是 App 崩了**（`pidof` 仍在）。脚本已按当前 `pidof com.lakexlocalnotes.android` 精确取（取不到才回退），并在转发前 `adb forward --remove tcp:<port>`。
+- **CDP 断连自动重连（261117 device-qa P1-6 装置投资）**：App 重启/重装后的 socket 失效不用再人手重连 —— ① `emu-cdp.sh --watch [port] [间隔s]` 常驻监视 `/json/list`，掉线自动重转发；② `drive.mjs` 自带自愈：connect 拿不到 page target 会自动调 `emu-cdp.sh` 修复转发重试；探针跑到一半断连会**自动重连并重试该次调用**（死转发黑洞 = 调用静默挂满超时，看门狗 12s×2 探测 `/json/list`，~15s 内判死并恢复）。**两条红线**：已发出未回包的 `Input.*` **不自动重试**（不知道手势有没有被处理，重放 = 双击/双滑；报错里会写明「请重跑该步骤」）；桌面 Electron 端口不在 `adb forward --list` 里 ⇒ 永远不会被 emu-cdp.sh 劫持（转发整个消失时设 `LK_CDP_FORWARD=adb` 显式允许重转发）。关掉自动重连 = `LK_CDP_RECONNECT=0`；App 重启后首个调用的恢复等待上限 = `LK_CDP_TIMEOUT_MS`（默认 90s，可临时调小）。
 - 手写等价命令（多设备时每条 adb 前加 `-s <serial>`，否则 adb 报 more than one device）：
 ```bash
 PID=$(adb shell pidof com.lakexlocalnotes.android | tr -d '\r' | awk '{print $1}')
@@ -137,6 +139,8 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 键盘开合 K1–K3 | 同上换 `keyboard-toggle.mjs` | 动 ⌨ / `viewportShell` / 外壳高 |
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |
 | 多维表专项快照（表单 / 内容表格 / 内容卡片） | `npm run check:bitablesnap`（默认 9336） | 动移动端多维表视图/布局/表单；**夹具自建自删**，不污染 6 态与走查 |
+| 多维表关键屏走查（网格 / 编辑记录 / 字段管理 / 修改字段 / 视图配置 / 表单填写 / 看板 7 屏） | `node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/bitable-screens.mjs [tag] [only]` | 动多维表头部/面板/视图切换/记录编辑；**新探针（261117）**：自建夹具自删（标题「装置多维表-261117」），可见性断言 = rect>0 + 视口内 + `elementFromPoint` 命中（keep-alive 隐藏 pane 骗不过），截图设备级 screencap → `.css-audit/bitable-screens/`；`only` 可只跑受影响屏 |
+| 缺正文/缺小记恢复路径演练（P0-2） | `node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/missing-body-drill.mjs [tag]` | 动缺正文/缺小记判据或恢复链路后；**新装置（261117）**：自建测试文档/小记（固定标记）→ 文件层删正文（`adb shell run-as … rm`）→ 行为取证（toast/资源管理）→ 历史恢复 / 云端恢复（无配置则登记跳过）/ 搜索索引兜底三条路径 → 文件层核对 + 彻底删除收尾；证据 → `.css-audit/resilience-drill-<tag>/`（截图 + steps.json + logcat），checklist = `docs/RESILIENCE.md` §3.7。⚠️ 小记 text_cache 是搜索时惰性建的 ⇒ 演练脚本删正文前先跑一次搜索（否则判「没有可用备份」） |
 | 窗口矩阵（折叠/分屏/横竖屏形态 + resize 状态保持） | `npm run check:windowsweep`（默认 CDP 9340） | 改形态判据 / 外壳 / 胶囊 / 侧栏时；7 个窗口尺寸，断言 formFactor 与 `body.lake-tablet` 同源 + 切窗不丢 tab/滚动 |
 | 平板专项快照（10 态，视口钉 1280×800；基线已重烤、两轮 0 差异） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
 
@@ -175,7 +179,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 
 | 现象 | 最可能原因 | 处置 |
 | --- | --- | --- |
-| `/json/list` 空、Node 侧 `fetch failed: other side closed`、装置报 `no page target` | CDP 转发指向 App 重启前的**死 socket**（App 没崩） | 重跑 `emu-cdp.sh <port>`；先 `adb shell pidof com.lakexlocalnotes.android` 确认进程在 |
+| `/json/list` 空、Node 侧 `fetch failed: other side closed`、装置报 `no page target` | CDP 转发指向 App 重启前的**死 socket**（App 没崩） | **先看 drive.mjs 是否已自动重连**（261117 起 connect/运行中都会自愈，日志有 `[drive] … 自动重连`）；仍不行再重跑 `emu-cdp.sh <port>`（或开 `--watch` 常驻），先 `adb shell pidof com.lakexlocalnotes.android` 确认进程在 |
 | `gradle 缓存缺失: …gradle-8.14.3/bin/gradle` | `~/.gradle/wrapper/dists` 里没有 8.14.3 | 按脚本提示备好 `gradle-8.14.3-bin`（脚本**不出网下载**） |
 | gradle 报 JDK / AGP 不兼容 | 手跑 `gradlew` 用了默认 JDK（1.8） | `export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home` |
 | adb `more than one device/emulator` | 多台设备/模拟器同时在跑 | `export ANDROID_SERIAL=<serial>` 或 `adb -s <serial>` |

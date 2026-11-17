@@ -86,6 +86,36 @@
 | 慢下载把错误卡窗口拉长 | 交互式远程图预算收窄为 **15s × 2**（`DOCUMENT_IMAGE_DOWNLOAD_LIMITS`），主进程 `download_remote_resource` 接收 limits 并夹在 [1s,60s]×[1,3]；渲染层对该类不再叠 `withRetry`。失败信息透传真实原因（不再 unknown error） | 正式日志：主进程 3×30s ≈91s 后才失败、卡片已 error；护栏 `electron/resourceRepository.downloadLimits.test.ts` |
 
 护栏：`uploadJournal.test.ts`、`imageUploadTask.test.ts`、`uploadCardRepair.test.ts`、`uploadRecoveryWiring.test.ts`、`electron/resourceRepository.downloadLimits.test.ts`；内核契约见 `docs/LAKEX-CONTRACT.md` §5.53。
+## 3.7 261117 缺正文 / 缺小记恢复路径设备演练（P0-2）
+
+> 装置 = `scripts/mobile-audit/missing-body-drill.mjs`（可重跑；用法见 MOBILE-OPS §5.5）；证据 = `.css-audit/resilience-drill-261117b/`（设备级截图 + `steps.json` + `logcat.txt`）。
+> **红线**：只用新建的测试文档/小记（固定标记「演练…-261117」）做破坏，收尾彻底删除 —— 用户已有数据一律不碰。
+> 破坏方式 = **文件层**删正文（`adb shell run-as com.lakexlocalnotes.android rm files/notes/<id>.lake` / `files/quick-notes/items/<id>.qnote`），不是产品删除入口。
+
+### Checklist 与实测结果（261117 · emulator-5554 / lake_mobile，演练 tag `261117b` 全绿）
+
+| # | 项 | 判据（单一来源） | 结果 |
+| --- | --- | --- | --- |
+| 1 | 测试数据就位 | 文档/小记正文文件存在（文件层）；文档 ≥1 份历史快照 | ✅ `docBefore/qnBefore=true`；历史快照 id=8 |
+| 2 | 文件层删正文后清单判据正确 | `missingBodyRecovery` / `missingQuickNoteRecovery`（core/missingBody） | ✅ 文档 `recovery:"history"（1 份历史）`；小记 `hasTextCache:true → recovery:"text"` |
+| 3 | 打开缺正文文档 = 不打开 + 提示 | `MISSING_DOC_OPEN_HINT`（missingBodyMessages 单一来源），每篇每会话一次 | ✅ toast 实录「文档打不开：可能已被删除，或正文文件缺失。可在「设置 → 资源管理」恢复或彻底删除」；活动标签无该文档 |
+| 4 | 打开缺小记 = 同口径 | `MISSING_QUICK_NOTE_OPEN_HINT` | ✅ toast 实录「小记打不开：正文文件缺失。可在「设置 → 资源管理」恢复或彻底删除」 |
+| 5 | 资源管理·缺正文清单 | MissingBodiesSheet（desc = `docRecoveryLabel`） | ✅ 「缺正文（1）」/「只能恢复历史版本，1 份历史」/ 动作 [恢复最新历史, 彻底删除]（无「从云端拉回」= 未配置云的正确表现） |
+| 6 | 资源管理·缺小记清单 | MissingBodiesSheet（desc = `quickNoteRecoveryLabel`） | ✅ 「缺小记（1）」/「可以用搜索缓存重建纯文本」/ 动作 [重建纯文本, 彻底删除] |
+| 7 | **云端恢复路径** | `restoreMissingNoteBody` / `restoreMissingQuickNoteFromCloud`（显式动作，失败给 reason 不静默） | ⏭️ **跳过（设备无 S3 配置）**：接口如实返回 `{ok:false, reason:"cloud-off"}`，UI 不出现「从云端拉回」（不诱导点了才报错）；真实云端拉回链路证据 = 桥级单测 `src/mobile/bridge/missingBodyRecovery.test.ts` |
+| 8 | **历史恢复路径**（文档） | 恢复最新历史 → `bridge.restoreHistory(lastHistoryId)` | ✅ 反馈「已恢复最新历史版本」；文件层复核正文文件回位且含标记段（`docAfterRestore/docContainsMark=true`，证据 `04-doc-history-restored.png`） |
+| 9 | **搜索索引兜底路径**（小记） | 重建纯文本 → `recoverMissingQuickNoteFromText`（二次确认明示丢图片/格式） | ✅ 反馈「已用搜索缓存重建纯文本，图片与格式会丢失」；文件层复核 `.qnote` 回位且含纯文本标记（`qnAfterRebuild/qnContainsMark=true`，证据 `06-qn-text-rebuilt.png`） |
+| 10 | 恢复后清单归零 | `listMissingBodies()` | ✅ docs/quickNotes 均空 |
+| 11 | 收尾无残留 | 测试数据彻底删除（trash+purge / purgeQuickNote） | ✅ `listMissingFinal` 空；用户数据未触碰 |
+
+证据：`01-doc-open-toast.png` / `02-qn-open-toast.png` / `03-doc-missing-sheet.png` / `04-doc-history-restored.png` / `05-qn-missing-sheet.png` / `06-qn-text-rebuilt.png` + `steps.json`（全部桥返回值/文案/文件层核对）+ `logcat.txt`。
+
+### 边界与已知行为（实测登记，261117）
+
+- **小记 text_cache 是搜索时惰性建的**（`quickNotesSearch` 按需对账；保存不建）：**从未被搜索/打标的新小记**在正文丢失后 `hasTextCache=false` ⇒ 判「没有可用备份」、不出现「重建纯文本」（演练第一轮实测，证据 `.css-audit/resilience-drill-261117/`）。演练脚本因此在删正文前先跑一次 `searchNotes` 触发索引；潜在改进「保存即建 text_cache」超出本次范围，留用户/lead 裁决。
+- 云端恢复入口只在 **已配置 S3 且本机有同步基线**（hasSyncBase）时出现；本机未配置时三条路里的云端这条不可达（关云同步 = 完全没配置，AGENTS §3#20）。
+- 小记「重建纯文本」产出**本机新版本**（is_dirty），下次同步会上传、可能覆盖云端 —— 二次确认已明示（产品既有文案口径）。
+
 ## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**
@@ -155,6 +185,8 @@
 | 网络 DNS 类一次性自愈 | 未采用 | 已有 classifyS3v3Error 分类 + 发布锁重试；DNS 刷新列为 backlog |
 
 ## 8. 验证债（已登记，不假装已验）
+
+> **261117 device-qa 登记**：设备欠账总表（模拟器可验项逐项验 + 真机专属「不可行 + 需真机」清单）= [design-plans/device-debt-261117.md](../design-plans/device-debt-261117.md)。与本文相关的新债：① 缺正文/缺小记**云端拉回**链路只有桥级单测，设备侧本轮无 S3 配置跳过（§3.7 #7），需配好 S3 的设备/真机补一次端到端；② **2 万文档 / 20 万附件规模验收 = 用户裁决不做**（禁止执行，勿立项）。
 
 - 恢复页/从备份恢复：需真机或打包版冒烟（hash 动作通道、恢复后重启）。
 - Kotlin 侧（CrashLogPlugin、MainActivity 崩溃 handler）未编译/未真机验证。
