@@ -21,6 +21,7 @@ import {
 } from "./noteBodies.js";
 import { quickNoteTagNames } from "./quickNoteTagsRepository.js";
 import { listAllQuickNoteTagIds, listQuickNoteTagIds, removeQuickNoteLinks, setQuickNoteTagVersion } from "./quickNoteTagLinksRepository.js";
+import { indexQuickNote } from "./quickNotesSearch.js";
 
 /**
  * 移动端小记仓储（261019 起与桌面存储架构对齐）：
@@ -256,6 +257,15 @@ async function persistQuickNoteContent(
   } catch (error) {
     await restoreQuickNoteBody(id, previous.raw);
     throw error;
+  }
+  // 261118 用户裁决（恢复演练实锤的兜底缺口）：**保存即建 text_cache** —— 此前搜索/打标才惰性建，
+  // 「从没搜过的新小记」缺正文后若未同步则三条恢复路全断（UI 只能报「没有可用备份」）。索引是派生数据：
+  // 失败只 warn 不影响保存（下次搜索仍会补建）；force=false 靠 content_hash 短路重复劳动；纯本地写，
+  // 不进「保存并同步」快路径的请求预算。
+  try {
+    await indexQuickNote(d, id);
+  } catch (error) {
+    console.warn("[quick-notes] 保存后建索引失败（下次搜索补建）", error);
   }
 }
 

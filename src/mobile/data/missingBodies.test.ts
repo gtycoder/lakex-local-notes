@@ -202,8 +202,17 @@ describe("缺正文扫描（只 stat，不读正文）", () => {
 
     let items = await scanMissingQuickNotes(db, { cloudConfigured: false });
     expect(items.map((q) => q.id)).toEqual(["q1"]);
-    expect(items[0].recovery).toBe("none");
+    // 261118「保存即建 text_cache」：保存路径即建兜底缓存 ⇒ 刚保存、从没搜过的小记缺正文也能重建
+    // 纯文本（此前「没搜过 ⇒ 无备份」死胡同，恢复演练实锤后收口）。
+    expect(items[0].hasTextCache).toBe(true);
+    expect(items[0].recovery).toBe("text");
     expect(items[0].previewText).toContain("缺正文的小记");
+
+    // 旧版本遗留的无索引行（未经新保存路径）⇒ 仍如实「没有可用备份」（判据不变）
+    await db.prepare("DELETE FROM quick_notes_search_index WHERE quick_note_id=?").run("q1");
+    items = await scanMissingQuickNotes(db, { cloudConfigured: false });
+    expect(items[0].hasTextCache).toBe(false);
+    expect(items[0].recovery).toBe("none");
 
     // 搜索索引全文缓存 ⇒ text（小记**没有历史快照**，别造历史路径）
     await db.prepare(

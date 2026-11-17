@@ -48,9 +48,11 @@ function firstLine(text: string): string {
   return text.split(/\r?\n/).map((line) => line.trim()).find(Boolean)?.slice(0, 120) ?? "";
 }
 
-/** 单条建/更新索引（FTS 不可用时 no-op；搜索走内存降级）。`force` = 标签改名/关系变化时强刷。 */
+/** 单条建/更新索引。`force` = 标签改名/关系变化时强刷。
+ * 261118 解耦：**text_cache 无条件写**（它是缺正文恢复的兜底来源，不该依附 FTS）；
+ * 只有 FTS 倒排部分受 hasQuickFts 门控（无 FTS5 的环境搜索走内存降级）。 */
 export async function indexQuickNote(d: MobileDb, id: string, force = false): Promise<void> {
-  if (!(await hasQuickFts(d))) return;
+  const hasFts = await hasQuickFts(d);
   const row = await d.prepare(
     "SELECT content_hash FROM quick_notes WHERE id=? AND deleted_at IS NULL AND restore_pending_at IS NULL"
   ).get(id) as { content_hash: string } | undefined;
@@ -64,8 +66,10 @@ export async function indexQuickNote(d: MobileDb, id: string, force = false): Pr
     ? ((await d.prepare("SELECT fts_rowid FROM quick_notes_search_index WHERE quick_note_id=?").get(id)) as { fts_rowid: number }).fts_rowid
     : Number(((await d.prepare("SELECT IFNULL(MAX(fts_rowid), 0) AS m FROM quick_notes_search_index").get()) as { m: number }).m) + 1;
   await d.transaction(async () => {
-    if (prev) await d.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(rowid);
-    await d.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)").run(rowid, segmentToIndexText(content.text), segmentToIndexText(tagsText));
+    if (hasFts) {
+      if (prev) await d.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(rowid);
+      await d.prepare("INSERT INTO quick_notes_fts(rowid, body, tags) VALUES(?,?,?)").run(rowid, segmentToIndexText(content.text), segmentToIndexText(tagsText));
+    }
     await d.prepare(QUICK_INDEX_UPSERT_SQL).run(id, rowid, row.content_hash, content.text, tagsText, new Date().toISOString());
   });
 }
@@ -74,8 +78,9 @@ export async function indexQuickNote(d: MobileDb, id: string, force = false): Pr
 export async function removeQuickNoteFromIndex(d: MobileDb, id: string): Promise<void> {
   const prev = await d.prepare("SELECT fts_rowid FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { fts_rowid: number } | undefined;
   if (!prev) return;
+  const hasFts = await hasQuickFts(d);
   await d.transaction(async () => {
-    await d.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(prev.fts_rowid);
+    if (hasFts) await d.prepare("DELETE FROM quick_notes_fts WHERE rowid=?").run(prev.fts_rowid);
     await d.prepare("DELETE FROM quick_notes_search_index WHERE quick_note_id=?").run(id);
   });
 }
