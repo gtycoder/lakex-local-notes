@@ -107,4 +107,36 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     })));
     expect(host.textContent).toContain("请在桌面端修改");
   });
+
+  it("选项回车 = 完成当前并跳下一个；末尾回车 = 新增并聚焦；IME 组字回车不流转（261117 用户点单）", async () => {
+    const onSave = vi.fn();
+    render({ ...createBitableField("select", "类型", "f-type"), options: [
+      { id: "o1", name: "复盘", color: "green" },
+      { id: "o2", name: "提问", color: "blue" },
+    ] }, onSave);
+    const inputs = () => host.querySelectorAll<HTMLInputElement>(".mbt-feditor__option input");
+    const pressEnter = async (input: HTMLInputElement, extra: KeyboardEventInit = {}) => {
+      await act(async () => {
+        input.focus();
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...extra }));
+        // 新增行的挂载/聚焦可能退避几帧 ⇒ 多等几帧
+        for (let i = 0; i < 4; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    };
+    // 中间项回车 ⇒ 聚焦下一项
+    await pressEnter(inputs()[0]);
+    expect(document.activeElement).toBe(inputs()[1]);
+    // 末尾项回车 ⇒ 新增第 3 项并聚焦
+    await pressEnter(inputs()[1]);
+    expect(inputs().length).toBe(3);
+    expect(document.activeElement).toBe(inputs()[2]);
+    // IME 组字中的回车不触发（core/ime 守卫）：不新增、不跳
+    await pressEnter(inputs()[2], { isComposing: true });
+    expect(inputs().length).toBe(3);
+    expect(document.activeElement).toBe(inputs()[2]);
+    // 收尾：提交的选项名不丢
+    act(() => btnByText("确认")!.click());
+    const patch = onSave.mock.calls[0][0] as { options: Array<{ name: string }> };
+    expect(patch.options.map((o) => o.name)).toEqual(["复盘", "提问", "选项 3"]);
+  });
 });

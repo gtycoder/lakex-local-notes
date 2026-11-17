@@ -14,7 +14,8 @@
  * 底栏 = .mb-sheet__foot、页内距 = .mb-sheet__body--form（--mb-page-pad）。
  * 本文件只保留「选项行 / 色板」两个布局槽（数据驱动）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { isImeConfirming } from "../../core/ime";
 import { Plus, Trash2 } from "lucide-react";
 import {
   BITABLE_DATE_FORMAT_OPTIONS,
@@ -89,6 +90,26 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
   const removeOption = (id: string) => {
     setOptions((prev) => prev.filter((option) => option.id !== id));
     if (defaultText === id) setDefaultText("");
+  };
+
+  // 261117 用户点单：选项输入里**回车 = 完成当前选项并跳到下一个**（没有下一个就新增一个并聚焦）——
+  // 否则连着加选项时没有可靠的「完成当前项」方式。IME 组字中的回车不触发（core/ime 同款守卫）。
+  // 聚焦走 state + effect（refs 挂载后才聚焦，时序确定；不用 rAF 竞态）。
+  const optionInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [focusOptionIndex, setFocusOptionIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusOptionIndex == null) return;
+    const input = optionInputRefs.current[focusOptionIndex];
+    if (!input) return;
+    input.focus();
+    const len = input.value.length;
+    try { input.setSelectionRange(len, len); } catch { /* 部分输入类型不支持选区 */ }
+    setFocusOptionIndex(null);
+  }, [focusOptionIndex, options]);
+  const advanceFromOption = (index: number): void => {
+    if (index < options.length - 1) { setFocusOptionIndex(index + 1); return; }
+    addOption();
+    setFocusOptionIndex(options.length); // 新增项排在末尾 = 旧长度下标
   };
 
   const save = () => {
@@ -211,7 +232,14 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
                     <div key={option.id} className="mbt-feditor__option">
                       <span className="mbt-feditor__swatch" style={optionColorHex(option.color) ? { background: optionColorHex(option.color) } : undefined} aria-hidden="true" />
                       <input className="mbt-form-input" value={option.name} placeholder={"选项 " + (index + 1)} aria-label={"选项 " + (index + 1)}
-                        onChange={(event) => commitOptionName(option.id, event.target.value)} />
+                        ref={(el) => { optionInputRefs.current[index] = el; }}
+                        onChange={(event) => commitOptionName(option.id, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !isImeConfirming(event)) {
+                            event.preventDefault();
+                            advanceFromOption(index);
+                          }
+                        }} />
                       <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
                     </div>
                   ))}
