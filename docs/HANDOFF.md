@@ -7,6 +7,15 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · 长按图标快捷菜单：拍照小记 / 剪切板小记（点单交付，未发版）
+
+- **三快捷方式**（res/xml/shortcuts.xml，同 QuickNoteAlias + ic_launcher）：旧「小记」block 逐字未动（无 query 深链全文件仅一条、文案钉死 ⇒ 零变化）；新增「拍照小记」`?src=camera`、「剪切板小记」`?src=clipboard`。深链解析 `quickNoteShortcutMode()` → plain|camera|clipboard|null（未知 src 不劫持旧语义）；manifest intent-filter 未动（query 不影响 scheme+host 匹配，已 resolve-activity 实证）。
+- **capture 时序**（三模式共用假单独模块语义：不主动同步/退出退 App/raiseKeyboard 全不变）：camera = 写作卡就绪（whenReady=懒加载壳同一 loader）→ 懒调 `takeCameraPhoto()`（261119 原语义不动）→ 图经 composer initialInsert/insertFiles 通道入卡（与首页「拍摄」同语义，**并入**恢复草稿）；取消 ⇒ 空卡保留、不再自动弹。clipboard = **读完剪贴板才挂写作卡**（避免双倍内核实例化）→ 自有 `ClipboardTextPlugin.kt`（primaryClip 只取文本）预填正文（captureSeed 草稿通道，与系统分享同机制 = **替换**未提交旧草稿）；空/非文本 ⇒ toast + 空卡（500ms 复读兜 Android 10+ 焦点时序）。取数流每触发只跑一次。
+- **预算零调升且达标**：mobile-entry 余量仅 81B ⇒ 先懒化 4 处存量（PinShortcut 探测拆 `native/pinShortcut.ts`、dbHealth/assetPerf/缺资产占位安装器改动态 import、captureModeFlow 禁入入口图模块——实测共享提升会把 modulepreload 顶爆）⇒ entry 51,356→**50,949B**（余 491B）/preload 12/12。
+- **门禁**：tsc 0；全量 vitest **1055 文件 / 6684 例 0 failed**；android `testDebugUnitTest` 全绿（ShortcutsConfigTest 3 例钉三 shortcut/URI/旧文案/filter 无 path）+ `assembleDebug` ✓；git diff --check 干净。
+- **顺带裁决**：check-arch 桌面首屏 601,551B > 600,000B —— 归因 = 共享组件 QuickNotePreview 的槽位/展开过渡（特征串 `7.5em` 命中真入口，其余本批代码均不在桌面首屏图）；**用户批准登记上调 600,000→602,000**（理由入 check-arch.mjs 注释；组件拆分让 slot 代码出桌面图 = 登记在案的瘦身方向，再涨须重新论证）。注：261119 修复批复盘发现其终轮 check:arch 曾用陈旧 dist/ 误报 PASS，本批起**门禁一律先重建产物**。
+- **设备验证**：三条深链 resolve-activity 已实证（含 query）；相机/剪贴板全链路与长按图标菜单 UI 待装包实测（步骤见待办）。
+
 ### 261119 · 移动端修复批（4 组点单 + 跳变八项 + 拍照直出相机）+ README 双语/徽章 + 视频弹窗内核化（v1.4.0 后，未发版）
 
 用户点单四组 + 只读审计八项 + 两个文档点单，9 条并行流（写范围互斥）+ lead 集成；全部门禁绿、APK 已装 lake_mobile。
@@ -501,7 +510,7 @@
 **261119 · 修复批基线（未发版；v1.4.0 之后）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
-- 全量 vitest：**文件 1053（passed / 13 skipped）/ 用例 6663（passed / 14 skipped）/ 0 failed**。
+- 全量 vitest：**文件 1055（passed / 13 skipped）/ 用例 6684（passed / 14 skipped）/ 0 failed**（含 261119 快捷菜单批新增 21 例）。
 - `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0）；`cssLayers`/`mobileLayers` 棘轮按实测登记：selectionToolbar.css **164**、mobile-find.css **20**、mobileBitable.css **1109**、notePaneSkeleton.css **23**（新）、quick-notes.css **277**、floating.css **316**、mobile.css **1487**、kit.css 659。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:arch` 0 违规（desktop 首屏 599,783/600,000）；`check:bundle` PASS（mobile entry **51,359/51,440**（261119 用户批准登记上调，理由入脚本注释）、移动 CSS 140,465/141,312、preload 12/12）。
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
@@ -618,7 +627,10 @@
 
 **261119 批待办**
 
-- **长按图标快捷菜单两项（261119 点单，开发中）**：「拍照小记」（快捷方式 → capture 并直接调相机，拍完图入小记；取消留空卡不退）与「剪切板小记」（最新一条剪贴板内容预填小记；空则提示）。落点 = Android App Shortcuts（res/xml 快捷方式 + 深链 `lakexlocalnotes://quick-note?src=…`）+ capture 种子链路；剪贴板读取走自有 Kotlin 插件（不新增 npm 依赖）。
+- **快捷菜单设备验证（261119 已开发完、待装包实测）**：① `am start -a VIEW -d 'lakexlocalnotes://quick-note?src=camera'` ⇒ 直出相机，拍完图入卡，取消留空卡且不再弹；② 复制文字后 `…?src=clipboard` ⇒ 正文预填，空剪贴板 ⇒ toast + 空卡；③ 长按桌面图标三项并列、旧「小记」零变化。真机（小米）相机/剪贴板一并验。
+- **快捷菜单语义差待用户裁决（261119 登记）**：剪切板预填**替换**未提交旧草稿（与系统分享同语义）vs camera **并入**恢复草稿（insertFiles）；如需统一再定。camera 取消返回后键盘可能未弹（点正文即起，口径未动）。
+- **QuickNotePreview slot 代码出桌面图（261119 登记瘦身方向）**：组件拆分使 slotFrame/展开过渡不进桌面首屏（check-arch.mjs 注释同步登记）。
+- **QuickNoteComposer 草稿防抖边缘（261119 观察）**：内核就绪前 300ms 到点会写 body:""、下次恢复丢富格式（只影响「打完字立刻杀进程」）。
 - **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
 - **视频宽度弹窗桌面实机目视**（261119）：机制与其它卡工具条菜单同款，低风险。
 - **真机（小米）拍照复核**（261119）：模拟器已验直出相机；MIUI OEM 行为按 task-2 报告步骤（取消/EXTRA_OUTPUT 兜底）。
