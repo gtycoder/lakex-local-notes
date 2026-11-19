@@ -586,8 +586,18 @@
    * 已删除；值现在只在本条 shell 层规则里）。注意 app/shell.css 里那条 .note-row 的 padding
    * 是 legacy 层、被本条覆盖，属死声明。 */
   padding: 2px 8px;
+  /* 行间空隙（261119 用户点单「稀疏一点点 + 选中行与相邻行要有空隙」）：每行行尾 1px ⇒
+   * 相邻行块之间留出 1px 底色缝，hover/选中的圆角块与相邻块各自独立（思源式独立行块），
+   * 相邻两行同时 hover/选中也一眼可辨。行高 27/29 档位、行内 2px 内距、字号全部不动。
+   * 1px 属令牌外微调（令牌最小档 2px），理由：用户明示「1–2px 级别起步、宁可偏小、幅度不要太大」，
+   * 且思源参照行 margin 为 1px/侧（行间隙实测 ≈1px）；Electron 实测本值下笔记本行前的缝
+   * 因外边距合并仍是 1px（与现状逐像素相同），密度观感只「透气一点」。
+   * 可再调旋钮：下一档 = --lake-space-xxs（2px），用户口径「绝不 4px+」。 */
+  margin-bottom: 1px;
   border-radius: var(--lake-radius-sm);
-  color: var(--lake-text-2);
+  /* 261119 用户试调（推翻 260923 的 text-2 降档）：目录行文字取**正文同款**——text-1 近黑 + 常规字重，
+     一并落「颜色有点浅」与「正文的字重放到目录」两条点单；嫌重回调 text-2 即可（旋钮）。 */
+  color: var(--lake-text-1);
   background: transparent;
 }
 .tree-row.type-notebook { margin-top: 1px; }
@@ -600,13 +610,13 @@
 .note-row.is-multi-selected:hover { background: var(--lake-bg-selected-hover); }
 .note-row.is-multi-selected .tree-row-icon { color: var(--lake-accent-text); }
 .note-row-copy strong {
-  /* 260923：标题色 text-1（近黑）→ text-2（中灰）——与内核原生大纲的普通项同色，
-     近黑在 500 字重下显得又重又密，中灰更轻更透气（用户对比原生大纲后要求）。 */
-  color: var(--lake-text-2);
+  /* 261119 用户试调：回 text-1 近黑 **且字重降正文档 400**——260923 的「又重又密」是 text-1+500 组合问题，
+     现按「正文的字重放到目录」取 text-1 + regular 400；选中仍 semibold（261115 口径不变）。 */
+  color: var(--lake-text-1);
   /* 260923：13px → 14px（--lake-font-size-body），对齐内核原生大纲项的字面（14px/line-height 22px）。
      261015 试调过 15 / 14.5 两档（用户均判不合适）⇒ 回到 14px。 */
   font-size: var(--lake-font-size-body);
-  font-weight: var(--lake-font-weight-medium);
+  font-weight: var(--lake-font-weight-regular);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;

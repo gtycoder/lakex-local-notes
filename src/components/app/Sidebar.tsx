@@ -31,6 +31,7 @@ import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
+import { toggleExpandedNode } from "./sidebar/treeExpandState";
 import {
   readPinnedOpen,
   readPinnedTreeIds,
@@ -155,6 +156,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  /**
+   * 目录树展开集（261119 用户点单）：**只活在会话内**，不写 localStorage / device_state、不进 S3 ——
+   * 不记录上次展开的层级，重启回到默认展开（笔记本/分组）。收起清整棵子树、展开只开一级，
+   * 判据单一来源 = sidebar/treeExpandState.ts。
+   */
   const [expanded, setExpanded] = useState<Set<string>>(() => autoExpanded(props.nodes));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
@@ -818,7 +824,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setDropTarget(null);
     setDraggingId(id);
   }, []);
-  const toggleNode = useCallback((id: string) => setExpanded((current) => toggleSet(current, id)), []);
+  // 点击展开/收起：收起清整棵子树的展开态，展开只开一级（261119 用户点单）。
+  const toggleNode = useCallback((id: string) => setExpanded((current) => toggleExpandedNode(current, id, props.nodes)), [props.nodes]);
   const setContextNode = useCallback((id: string) => setContextId(id), []);
   const consumeSuppressedClick = useCallback(() => suppressClickRef.current, []);
   const setTreeIcon = useCallback((node: TreeNode, event: React.MouseEvent<HTMLElement>) => {
@@ -1425,12 +1432,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     </aside>
   );
 });
-
-function toggleSet(current: Set<string>, id: string): Set<string> {
-  const next = new Set(current);
-  next.has(id) ? next.delete(id) : next.add(id);
-  return next;
-}
 
 // 展开目标节点及其全部祖先，确保新创建的子节点可见
 function expandAncestors(current: Set<string>, nodes: TreeNode[], targetId: string): Set<string> {
