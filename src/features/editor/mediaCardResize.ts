@@ -11,6 +11,10 @@
  * 内核原生 .ne-ui-image-resizer 四角 resizer 已由本模块接管（feature.css 隐藏其点与命中区，
  * 保留 selection box 描边）：旧把手是「画框预览 + 松手跳变」且右缘把手会盖住右上/右下命中区
  * （261117 用户反馈「四角不能用」的主因），继续共存只会是两套手感。
+ *
+ * 261119 用户裁决：**移动端禁用图片/视频的拖拽缩放**（移动场景用得少；桌面拖拽缩放保持不变）——
+ * 禁的是拖拽缩放手柄/边缘拖拽（本模块的把手/盒/拖拽/键盘交互与扫描器），挂载点按平台短路整链不装
+ * （见 mediaCardResizeEnabled / mountMediaCardResize）；尺寸菜单类调整（桌面浮层）不受影响。
  */
 import {
   previewImageWidth,
@@ -201,10 +205,22 @@ function ensureHandles(cardEl: HTMLElement, kind: MediaKind, state: ResizeState)
 }
 
 /**
+ * 拖拽缩放是否启用（261119 用户裁决：移动端禁用图片/视频拖拽缩放）。
+ * 平台判据 = 既有 `body.lake-mobile` 口径（移动端入口模块求值时打标，AGENTS；桌面/测试环境无标记 = 照常）。
+ * EditorTab / LakeEditor / createLakeDocument 面全部经此判据短路（lakeRuntime 挂载入口 + 本模块入口自卫）。
+ */
+export function mediaCardResizeEnabled(): boolean {
+  return !document.body.classList.contains("lake-mobile");
+}
+
+/**
  * 图片/视频媒体缩放器。
  * interactive=false（阅读态）只清不建；editor 挂 interactive 手柄（lakeRuntime mode==="editor"）。
+ * 移动端（mediaCardResizeEnabled()=false）挂载点直接短路：把手/盒/拖拽/键盘与扫描器
+ * （ensureBox 周期写回）整链不安装、不运行。
  */
 export function mountMediaCardResize(host: HTMLElement, interactive: boolean): () => void {
+  if (!mediaCardResizeEnabled()) return () => {};
   let disposed = false;
   let timer: number | undefined;
   let session: ResizeSession | null = null;

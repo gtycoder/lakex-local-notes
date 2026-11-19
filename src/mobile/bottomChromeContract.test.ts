@@ -107,8 +107,7 @@ const BOTTOM_SAFE_ALLOWLIST: { file: string; selectorIncludes: string; why: stri
   { file: "ink/inkPad.mobile.css", selectorIncludes: "data-overlay=\"palette\"", why: "手写板工具坞上方色板/笔宽浮层（锚定坞内，不贴屏底）" },
   // ── 内部装饰/卡内定位（非屏底表面）──
   { file: "bitable/mobileBitable.css", selectorIncludes: ".mbt-viewrow.is-drop-after::after", why: "拖拽落点线（行内装饰伪元素）" },
-  { file: "editor/edit-surface-kernel.css", selectorIncludes: ".lake-media-resize-handle--e", why: "内核媒体缩放手柄（媒体卡内定位）" },
-  { file: "editor/edit-surface-kernel.css", selectorIncludes: ".lake-media-resize-handle--c", why: "内核媒体缩放角点手柄（媒体卡内定位）" },
+  // （261119 移动端禁拖拽缩放：把手族规则整族删除 ⇒ 对应 2 条允许条目按「只减不增」摘除。）
   // ── 待设备实测登记（审计 B-12/B-13，报告 mobile-button-boundary-audit-261119）──
   { file: "editor/editor-dock.css", selectorIncludes: ".mobile-editor-dock", why: "B-12 登记：编辑 dock 族不消费底部安全区，需手势条 AVD 实测定级后统一修" },
   { file: "editor/editor-dock.css", selectorIncludes: ".med-toolbar", why: "B-12 登记：编辑 dock 底条（bottom 只吃 --kb-offset、无 safe）" },

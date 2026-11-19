@@ -65,7 +65,9 @@ body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-prev
 
 /* ⑦ 视频卡（261117 用户反馈）：内核桌面规则写死 450px 高，移动端虽然把 video 高度放开，
  * 但竖屏视频仍占满整行、两侧留白。完成态按 intrinsic ratio 收窄卡片；宽度存储为正文宽度百分比，
- * DOM 投影到 --lake-video-max-width；默认左对齐，可持久化为居中/右对齐，并提供边缘拖拽手柄。 */
+ * DOM 投影到 --lake-video-max-width；默认左对齐，可持久化为居中/右对齐。
+ * （261119 用户裁决：移动端禁用图片/视频拖拽缩放——把手族已删、JS 挂载点同判据禁挂；
+ *  本布局投影保留 = 正文媒体卡仍按持久化宽度/对齐渲染。） */
 body.lake-mobile [data-mb-edit-host] .ne-card-video-content.ne-card-video-done { display: flex; justify-content: flex-start; width: fit-content; max-width: 100%; height: auto; margin-inline: 0; background: transparent; }
 body.lake-mobile [data-mb-edit-host] .ne-card-video-content.ne-card-video-done video { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; border-radius: var(--lake-radius-sm); background: var(--lake-media-video); }
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) { width: fit-content; max-width: min(100%, var(--lake-video-max-width, 100%)); margin-left: 0; margin-right: auto; }
@@ -73,33 +75,14 @@ body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-align="right"]:has(.ne-card-video-done) { margin-left: auto; margin-right: 0; }
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-container,
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-video { width: auto; max-width: 100%; }
-/* 媒体缩放把手（261117 重构，与桌面 feature.css 同一几何/手感，命中区 44px 触屏档）：
- * 把手盒贴媒体视觉盒，只在会动的边出边缘长条 + 角点；内核原生 .ne-ui-image-resizer* 隐藏由 JS 模块接管。 */
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-box { position: absolute; z-index: 3; pointer-events: none; }
-body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"] > .lake-media-resize-box { inset: 0; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right { top: 8px; bottom: 8px; width: 44px; cursor: ew-resize; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left { left: -22px; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right { right: -22px; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl { width: 44px; height: 44px; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl { left: -22px; top: -22px; cursor: nwse-resize; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr { right: -22px; top: -22px; cursor: nesw-resize; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br { right: -22px; bottom: -22px; cursor: nwse-resize; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl { left: -22px; bottom: -22px; cursor: nesw-resize; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) .lake-media-resize-handle,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left::after,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right::after { content: ""; width: 4px; height: 44px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl::after,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr::after,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br::after,
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl::after { content: ""; width: 10px; height: 10px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
-body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -24px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
-body.lake-media-resizing .lake-media-resize-handle.is-active::before { opacity: 1; }
-body.lake-media-resizing { user-select: none; }
+/* 内核原生 .ne-ui-image-resizer* 四角拖拽 resizer 在移动端整组继续隐藏（261119 用户裁决：移动端禁用
+ * 图片/视频拖拽缩放的 CSS 兜底）：我们的 .lake-media-resize-box/--handle 把手族（边缘长条/角点/值泡）
+ * 已整族删除、JS 挂载点同判据禁挂（mediaCardResize，body.lake-mobile 短路）——这条若放开，内核自带的
+ * 四角拖拽缩放会在移动端回流。桌面接管同 styles/feature.css（隐藏点与命中区、保留 selection box 描边）。 */
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="image"] .ne-ui-image-resizer,
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="image"] .ne-ui-image-resizer-handler { display: none; }
+/* 书签卡封面两级皆败 ⇒ 静默隐藏缩略框（261119 用户裁决；桌面镜像 = styles/feature.css 同名规则，
+   移动端样式层不加载桌面 CSS ⇒ 这里镜像一份，parity 断言见 bookmarkCoverFallbackGuard.test）。 */
+.lake-bookmark-cover-failed { display: none; }
+.lake-bookmark-cover-failed + .ne-card-bookmark-body,
+.lake-bookmark-cover-failed + .h5-ne-card-bookmark-body { margin-left: 0; }

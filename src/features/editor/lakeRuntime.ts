@@ -16,7 +16,7 @@ import { ASSET_ORIGIN } from "../../lib/assetPort";
 import { createImageThumbUploadTracker } from "./imageThumbUploadTracker";
 import { LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT, injectKatexScriptsInOrder } from "./lakeKatexInjection";
 import { setupAudioCardRetry } from "./lakeAudioCardRetry";
-import { mountMediaCardResize } from "./mediaCardResize";
+import { mediaCardResizeEnabled, mountMediaCardResize } from "./mediaCardResize";
 import { mountVideoCardLayoutSync } from "./videoCardOps";
 import { installBookmarkCoverFallbackGuard } from "./bookmarkCoverFallbackGuard";
 import { setupTocScrollFollow } from "./lakeTocScrollFollow";
@@ -536,7 +536,12 @@ export function createLakeDocument(
   // error→重拉→error 的网络节奏闪烁环；挂元素级 src 守卫后同值写直接跳过（详见模块头注释）。
   appendDisposeExtras(editor, installBookmarkCoverFallbackGuard(mount));
   appendDisposeExtras(editor, mountVideoCardLayoutSync(mount, editor, { interactive: mode === "editor" }));
-  appendDisposeExtras(editor, mountMediaCardResize(mount, mode === "editor"));
+  // 媒体缩放把手/拖拽（桌面）：261119 用户裁决移动端禁用图片/视频拖拽缩放 ⇒ 挂载点按平台短路，
+  // 与 mediaCardResize 模块入口自卫同一判据（mediaCardResizeEnabled / body.lake-mobile）：
+  // 把手/盒/边缘/角点/值泡/键盘 ←→/拖拽与其扫描器整链不装；尺寸菜单类调整不受影响。
+  if (mediaCardResizeEnabled()) {
+    appendDisposeExtras(editor, mountMediaCardResize(mount, mode === "editor"));
+  }
   // 261114 二批：点失败图卡（ne-image-error）→ 立刻重试本篇所有可重试的失败图；
   // 后台定时补拉在 EditorTab（桌面）与 LakeEditor(journalRecovery)（移动）里调度。
   if (journalImageUploads) appendDisposeExtras(editor, attachImageErrorRetryClick(mount, noteId));

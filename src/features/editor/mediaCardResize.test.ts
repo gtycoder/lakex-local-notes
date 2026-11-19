@@ -288,3 +288,56 @@ describe("媒体缩放 · 内核原生 resizer 接管", () => {
     }
   });
 });
+
+describe("移动端平台闸门（261119 用户裁决：移动端禁用图片/视频拖拽缩放）", () => {
+  it("移动端（body.lake-mobile）挂载点不安装把手/盒；挂载后新增卡也不装（扫描器整链不跑）", async () => {
+    document.body.classList.add("lake-mobile");
+    try {
+      const image = imageCard(300, "left");
+      const video = videoCard(50, "center");
+      const disposeImage = mountMediaCardResize(image.host, true);
+      const disposeVideo = mountMediaCardResize(video.host, true);
+      expect(image.card.querySelectorAll(".lake-media-resize-box, .lake-media-resize-handle")).toHaveLength(0);
+      expect(video.card.querySelectorAll(".lake-media-resize-box, .lake-media-resize-handle")).toHaveLength(0);
+      // 挂载后再插入的卡：扫描器（ensureBox 周期写回）若在跑，会经 MutationObserver → setTimeout(scan,0) 装上把手。
+      const late = videoCard(50, "left");
+      image.host.appendChild(late.card);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(late.card.querySelectorAll(".lake-media-resize-box, .lake-media-resize-handle")).toHaveLength(0);
+      // 拖拽交互零接入：按下不进拖动态（body 不加 lake-media-resizing / data-resize-cursor）。
+      image.card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 0 }));
+      expect(document.body.classList.contains("lake-media-resizing")).toBe(false);
+      expect(document.body.hasAttribute("data-resize-cursor")).toBe(false);
+      disposeImage();
+      disposeVideo();
+    } finally {
+      document.body.classList.remove("lake-mobile");
+    }
+  });
+
+  it("移动端阅读态（interactive=false）同样零安装", () => {
+    document.body.classList.add("lake-mobile");
+    try {
+      const video = videoCard(50);
+      const dispose = mountMediaCardResize(video.host, false);
+      expect(video.card.querySelectorAll(".lake-media-resize-box")).toHaveLength(0);
+      dispose();
+    } finally {
+      document.body.classList.remove("lake-mobile");
+    }
+  });
+
+  it("桌面照常（无 lake-mobile 标记 = 原语义：把手照旧安装）", () => {
+    const { card, host } = imageCard(300, "left");
+    const dispose = mountMediaCardResize(host, true);
+    expect(card.querySelectorAll(".lake-media-resize-handle")).toHaveLength(3);
+    dispose();
+  });
+
+  it("createLakeDocument 挂载入口按平台短路（EditorTab/LakeEditor 共用入口的源码级接线）", () => {
+    const runtime = readFileSync(join(process.cwd(), "src/features/editor/lakeRuntime.ts"), "utf8");
+    expect(runtime).toContain("import { mediaCardResizeEnabled, mountMediaCardResize }");
+    expect(runtime).toContain("if (mediaCardResizeEnabled())");
+    expect(runtime).toContain('mountMediaCardResize(mount, mode === "editor")');
+  });
+});
