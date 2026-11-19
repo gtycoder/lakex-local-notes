@@ -46,6 +46,9 @@ export interface LocalNoteSummary {
   /** 创建时间（261110，schema v13）：日记同一天多篇按它倒序，**不随编辑漂移**。 */
   createdAt: string;
   parentId: string | null;
+  /** purge 标记行（行保留可恢复；旧数据/便携包导入常见）：core.isGoneNote 判定原料 ——
+   *  首页计数（notebook/notebookDocCounts）按同一口径把它剔出活文档，别数进卡片。 */
+  isPurged?: boolean;
 }
 
 function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
@@ -68,6 +71,7 @@ function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
     id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at),
     createdAt: String(r.created_at ?? "") || String(r.updated_at),
     parentId: r.parent_id ? String(r.parent_id) : null,
+    ...(Number(r.is_purged) === 1 ? { isPurged: true } : {}),
   };
 }
 
@@ -130,7 +134,8 @@ export async function orphanFilenamesForNote(d: MobileDb, noteId: string): Promi
 }
 
 export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
-  const rows = await d.prepare("SELECT id, title, updated_at, created_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
+  // is_purged 随行带出（不改行集合）：首页计数按 core.isGoneNote 口径剔除 purge 行（见 notebook/notebookDocCounts）。
+  const rows = await d.prepare("SELECT id, title, updated_at, created_at, parent_id, is_purged FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
   return rows.map(rowToNoteSummary);
 }
 

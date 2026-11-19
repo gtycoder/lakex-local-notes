@@ -11,6 +11,7 @@ import { isGoneNote } from "../core/syncDecisions";
 import { diaryEntries, diaryNotebooks } from "../core/diary.js";
 import { diaryNodesFrom } from "./diary/diaryNodes.js";
 import { libraryNotebooks } from "./notebook/libraryNotebooks";
+import { notebookSubtreeDocCounts } from "./notebook/notebookDocCounts";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
@@ -773,12 +774,11 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   /** 首页常驻渲染：工作区打开期间它只是被盖住（inert），tab 值取当前 home 路由或回退「知识库」（返回落点）。 */
   // 工作区打开期间首页被盖住：tab 取「来源页」（从日记进入 ⇒ 日记页留在下层，返回时不会先闪一下知识库）。
   const homeTab: HomeTab = route.kind === "home" ? route.tab : (workspaceOriginTabRef.current ?? "library");
-  // 笔记本 → 直接文档数（首页列表行 .counter；与 getWorkspaceSnapshot 的树归属口径一致）
-  const docCounts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const n of notes) { if (n.parentId) m[n.parentId] = (m[n.parentId] ?? 0) + 1; }
-    return m;
-  }, [notes]);
+  // 笔记本 → **整棵子树的文档总数**（261119 用户点单：首页卡片要数全 —— 分组/子分组里的文档也算进
+  // 所属笔记本，不是只数根目录直属；旧实现只按 parentId 归组 ⇒ 文档全在分组里时卡片显示「0 篇」）。
+  // 判据与聚合在 ./notebook/notebookDocCounts（纯函数 + 单测）：树聚合处一次 O(n) 算好整张表，
+  // 口径与 core.isGoneNote / 树可见性一致（回收站子树、purge、trashed 墓碑行都不计）。
+  const docCounts = useMemo(() => notebookSubtreeDocCounts(treeNodes, notes), [treeNodes, notes]);
 
   const requestWorkspaceBack = useCallback(() => {
     const handler = workspaceBackRef.current;
