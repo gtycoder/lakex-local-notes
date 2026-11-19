@@ -205,15 +205,26 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setHeaderFieldId(null);
   }, [editable]);
 
-  // 记录详情 = 子页全屏：请求父级隐藏工作区 chrome；返回键先关详情（不是退工作区）。
-  useEffect(() => {
-    onFullscreenRef.current?.(detailId !== null);
-  }, [detailId]);
-  useEffect(() => () => { onFullscreenRef.current?.(false); }, []);
+  /**
+   * 记录详情 = 子页全屏：返回键先关详情（不是退工作区）。
+   * 261119（跳变审计 R-1）：打开/关闭详情与 chrome 隐藏/恢复必须**同一次提交**通知父级 ——
+   * 原来走 useEffect 通知（挂载后再通知）⇒ 详情页先按旧几何画一帧、父级顶栏再塌，两级提交 = 打开/返回都跳变。
+   * setDetail 把通知放进事件处理（与 setDetailId 同批），并只在开/合真正变化时通知一次。
+   */
+  const detailOpenRef = useRef(false);
+  const setDetail = useCallback((id: string | null) => {
+    const open = id !== null;
+    if (detailOpenRef.current !== open) {
+      detailOpenRef.current = open;
+      onFullscreenRef.current?.(open);
+    }
+    setDetailId(id);
+  }, []);
+  useEffect(() => () => { detailOpenRef.current = false; onFullscreenRef.current?.(false); }, []);
   useEffect(() => {
     if (!detailId) return;
-    return pushBackHandler(() => { setDetailId(null); return true; });
-  }, [detailId]);
+    return pushBackHandler(() => { setDetail(null); return true; });
+  }, [detailId, setDetail]);
 
   const table = doc?.tables.find((item) => item.id === tableId) ?? doc?.tables[0] ?? null;
   const navViewId = readBitableNav(noteId).viewIds?.[table?.id ?? ""] ?? "";
@@ -329,7 +340,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setViewId("");
     setVisibleCount(MOBILE_BITABLE_PAGE);
     setRecordId(null);
-    setDetailId(null);
+    setDetail(null);
     setTableDrawerOpen(false);
     writeBitableNav(noteId, { ...readBitableNav(noteId), tableId: created.id });
   };
@@ -341,7 +352,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setViewId("");
     setVisibleCount(MOBILE_BITABLE_PAGE);
     setRecordId(null);
-    setDetailId(null);
+    setDetail(null);
     // 切表只写设备本地导航（不进正文、不标脏、不同步）
     writeBitableNav(noteId, { ...readBitableNav(noteId), tableId: id });
     setTableDrawerOpen(false);
@@ -362,7 +373,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setViewId("");
     setVisibleCount(MOBILE_BITABLE_PAGE);
     setRecordId(null);
-    setDetailId(null);
+    setDetail(null);
     setTableDrawerOpen(false);
     writeBitableNav(noteId, { ...readBitableNav(noteId), tableId: result.tableId });
     showToast("已复制数据表");
@@ -379,7 +390,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
       setViewId("");
       setVisibleCount(MOBILE_BITABLE_PAGE);
       setRecordId(null);
-      setDetailId(null);
+      setDetail(null);
       writeBitableNav(noteId, { ...readBitableNav(noteId), tableId: fallback });
     }
     setTableDrawerOpen(false);
@@ -392,7 +403,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setViewId(nextViewId);
     setVisibleCount(MOBILE_BITABLE_PAGE);
     setRecordId(null);
-    setDetailId(null);
+    setDetail(null);
     const nav = readBitableNav(noteId);
     writeBitableNav(noteId, { ...nav, viewIds: { ...(nav.viewIds ?? {}), [table.id]: nextViewId } });
   };
@@ -575,7 +586,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
 
   const openRecord = (recordIdToOpen: string) => {
     if (editable) setRecordId(recordIdToOpen);
-    else setDetailId(recordIdToOpen);
+    else setDetail(recordIdToOpen);
   };
 
   const fillStyleOf = (recordIdForStyle: string, fieldId: string): CSSProperties | undefined => {
@@ -686,16 +697,22 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   };
 
   return (
-    <div className={"mobile-bitable" + (editable ? " is-editing" : "") + (isFormView ? " mbt-is-form" : "")} data-mobile-bitable data-prevent-swipe>
+    // 根类不随视图变化（261119 切换收口）：表单/表格的几何差异只由内容区（.mbt-form / .mbt-grid-wrap）表达，
+    // 壳层与头部同一套类 —— 旧行 .mbt-is-form 另设容器/头部 padding 是「切换跳动」的根因之一，已删。
+    <div className={"mobile-bitable" + (editable ? " is-editing" : "")} data-mobile-bitable data-prevent-swipe>
       {/* 头部 = 两行（261103 四批）：
           第 1 行 [☰ 表名 …… 字段 / 筛选 / ＋]；第 2 行 [视图页签横滚] [视图列表]（仅 header.showViews）。
           哪些部件出现只由 mobileBitableHeaderModel 回答（纯函数、不依赖 records）；
           「编辑中/只读」徽标与记录数不进头部（记录数在网格末尾统计行）。 */}
-      {/* 批量选择态：头部整体换成多选顶栏（与首页小记多选同一形态，edge=nested：嵌在工作区内不重复消费安全区）。 */}
-      {selection.active ? (
-        <SelectionTopBar count={selection.count} allSelected={selection.allSelected}
-          onCancel={() => selection.exit()} onToggleAll={() => selection.toggleAll()} edge="nested" />
-      ) : (
+      {/* 头部槽 = 几何恒定（261119 F-D）：常规两行头部与多选顶栏在**同一个槽**里换装 —— 头部留在流里定高，
+          多选栏（edge=nested：嵌在工作区内不重复消费安全区）绝对定位盖上去，进入/退出多选网格不位移。 */}
+      <div className={"mbt-headslot" + (selection.active ? " is-selecting" : "")}>
+      {selection.active && (
+        <div className="mbt-headslot__sel">
+          <SelectionTopBar count={selection.count} allSelected={selection.allSelected}
+            onCancel={() => selection.exit()} onToggleAll={() => selection.toggleAll()} edge="nested" />
+        </div>
+      )}
       <header className="mbt-header" role="toolbar" aria-label="多维表头部" data-mb-topbar data-edge="nested">
         <div className="mbt-header__row1">
           <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables mb-tap" aria-label="数据表"
@@ -749,7 +766,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           </div>
         )}
       </header>
-      )}
+      </div>
 
       {isFormView ? (
         <MobileBitableFormView noteId={noteId} table={table} view={view} ctx={displayCtx} onSubmit={submitForm}
@@ -925,18 +942,18 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           total={records.length}
           onPrev={() => {
             const prev = records[(Math.max(0, detailIndex) - 1 + records.length) % records.length];
-            if (prev) setDetailId(prev.id);
+            if (prev) setDetail(prev.id);
           }}
           onNext={() => {
             const next = records[(Math.max(0, detailIndex) + 1) % records.length];
-            if (next) setDetailId(next.id);
+            if (next) setDetail(next.id);
           }}
-          onClose={() => setDetailId(null)}
+          onClose={() => setDetail(null)}
           collectForm={isFormView}
           onRequestEdit={onRequestEdit && !bodyUnreadable ? () => {
             // 261117 用户裁决：详情页「编辑」= 进入编辑并打开本记录的编辑面板。
             const id = detailRecord.id;
-            setDetailId(null);
+            setDetail(null);
             onRequestEdit();
             setRecordId(id);
           } : undefined}

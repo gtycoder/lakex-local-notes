@@ -192,7 +192,11 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   return (
     <>
-      {/* 文档内查找条（移动端；入口 = 工作区顶栏右上角） */}
+      {/* 文档内查找条（移动端；入口 = 工作区顶栏右上角）。
+          261119 F-A（平滑度审计 P1）：覆盖式浮条 —— .mb-find 绝对定位脱离正文流（mobile-find.css），
+          锚在 .mobile-workspace-body 顶部（= 工作区顶栏下沿），开/关**不占正文流** ⇒ 正文几何完全不动
+          （此前条件插在 .mobile-doc-body 之前的正文流里，开/关把整篇正文下压/回弹约 50px）。
+          查找条自身交互（输入/计数/n/m 跳转）不变。 */}
       {findOpen && <MobileFindBar root={findRoot} revision={content} editor={editorInstance} onClose={() => onCloseFind?.()} />}
       {/* data-mb-edit-host / data-mb-kernel：编辑面契约（内核几何收口见 edit-surface-kernel.css） */}
       <section className="mobile-doc-body" ref={setBody} data-mb-edit-host data-mb-kernel="doc">

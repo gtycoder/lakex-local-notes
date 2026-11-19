@@ -1,0 +1,26 @@
+/* F-E（261119 移动端平滑度审计）：重依赖正文（表格 / 多维表 / 手写板）首开的**同构骨架**几何。
+ *
+ * 背景：这三个查看器按需分包，旧 Suspense 兜底是居中文字空态（「正在加载…」）——模块到达后
+ * 整个查看器（头部行 / 工具条 / 画布）替换进来 ⇒ 页面高度、顶部元素位置全变（换构跳变）。
+ * 现在 fallback 与查看器**同构同槽**（.mb-skel 先例：结构与真实同构、尺寸同源、填充不跳动）：
+ * 呼吸填充 = .mb-skel（mobile.css，自带 prefers-reduced-motion 关闭），本文件**只定尺寸与排布**。
+ *
+ * 尺寸同源清单（改动必须同步真实端，对拍护栏 = notePaneSkeleton.geometry.test.ts）：
+ *   · 满幅盒 = .mobile-bitable / .mobile-usheet / .ink-pad（height:100%、min-height:0、flex 列）；
+ *   · 多维表顶部留白 = .mobile-bitable 的 padding-top var(--lake-space-md)（mobile/bitable/mobileBitable.css）；
+ *     左右内距 = 页面内距 --mb-page-pad（唯一来源；真实端由 .mbt-header / 内容块自管，骨架合并到根，视觉同源）；
+ *   · 多维表头部两行 = .mbt-header：row1 var(--mb-ctl-h-lg) + 行距 var(--lake-space-xxs)
+ *     + row2 40px + 下距 var(--lake-space-sm)；
+ *   · 表格顶条 = .mb-usheet-topbar（mobile/usheet/usheet-chrome.css，height:40px），画布满幅；
+ *   · 手写板 = 满幅纸面（.ink-pad--mobile 的导航/工具坞是 overlay，不占布局）。 */
+.mb-pane-skel { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.mb-pane-skel--bitable { padding: var(--lake-space-md) var(--mb-page-pad) 0; }
+/* 头部槽位（与真实头部同源的 gap/下距；两行条只做占位，不复用真实类名 —— 真实类名随分包 CSS 未加载）。 */
+.mb-pane-skel__head { display: flex; flex-direction: column; gap: var(--lake-space-xxs); margin-bottom: var(--lake-space-sm); }
+.mb-pane-skel__bar--row1 { min-height: var(--mb-ctl-h-lg); }
+.mb-pane-skel__bar--row2 { min-height: 40px; }
+.mb-pane-skel__bar--tab { min-height: 40px; }
+/* 网格行框（表格/多维表的行区域）与满幅画布（表格）/纸面（手写板）。 */
+.mb-pane-skel__rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--lake-space-xs); overflow: hidden; }
+.mb-pane-skel__row { min-height: var(--mb-ctl-h); }
+.mb-pane-skel__paper { flex: 1 1 auto; min-height: 0; margin: var(--lake-space-md); }

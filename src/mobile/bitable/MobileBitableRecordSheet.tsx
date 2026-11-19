@@ -22,7 +22,7 @@ import {
   isMobileEditableField, mobileFieldNote, progressValue, ratingValue, textInputValue,
 } from "./mobileBitableEdit";
 import { MobileBitableDateField } from "./MobileBitableDateField";
-import { dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
+import { onBitablePointerDown } from "./bitablePointerFocus";
 import { MobileSheet } from "../ui/MobileSheet";
 import { BitableSelectControl } from "./BitableSelectControl";
 import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
@@ -159,7 +159,10 @@ export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, o
   // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body--form，视觉不变）。
   return (
     <MobileSheet open resizable className="mb-sheet--tall" title={"编辑记录：" + table.name} titleClassName="mb-ellipsis" ariaLabel="编辑记录" bodyClassName="mb-sheet__body--form" onClose={onClose}>
-      <div className="mb-set-section" onPointerDown={dismissKeyboardOnPointerDown}>
+      {/* 261119 同型收口（lead 裁定）：进度滑杆（input[type=range]，触屏不接焦点）落在共享处理器的
+          input 早退豁免里 ⇒ 拖滑杆时文本框保留持焦、键盘被拉回；换 bitablePointerFocus 收紧口径
+          （只在文本输入控件落点放行聚焦）。 */}
+      <div className="mb-set-section" onPointerDown={onBitablePointerDown}>
         {fields.map((field) => {
           const value = record.values[field.id];
           const editable = isMobileEditableField(field);

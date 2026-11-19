@@ -116,6 +116,24 @@ describe("MobileBitableViewer（批量选择记录）", () => {
     expect(addRowBtn()).toBeTruthy();
   });
 
+  it("多选态与常规头部同槽换装（261119 F-D）：进入/退出多选头部都留在 DOM、槽不换高（网格不位移）", async () => {
+    renderViewer({ editing: true, onChange: vi.fn() });
+    expect(host.querySelector(".mbt-headslot")).not.toBeNull();
+    expect(host.querySelector(".mbt-headslot.is-selecting")).toBeNull();
+    await longPress(rows()[0]);
+    // 头部保留在 DOM（同槽定高，visibility 换装）⇒ 两元素不再互换导致网格上跳 ≈50px
+    expect(host.querySelector(".mbt-headslot.is-selecting")).not.toBeNull();
+    expect(host.querySelector(".mbt-header")).not.toBeNull();
+    // 多选栏 = 槽内覆盖层，edge=nested（嵌在工作区内不重复消费顶部安全区）
+    const selBar = host.querySelector(".mbt-headslot__sel .mb-sel-topbar");
+    expect(selBar).not.toBeNull();
+    expect(selBar!.getAttribute("data-edge")).toBe("nested");
+    await click(topButtons()[0]);
+    expect(host.querySelector(".mbt-headslot.is-selecting")).toBeNull();
+    expect(host.querySelector(".mbt-headslot__sel")).toBeNull();
+    expect(host.querySelector(".mbt-header")).not.toBeNull();
+  });
+
   it("删除 N 条：确认弹窗照 deleteRecord 文案口径（不能撤销）→ 删记录并退出多选", async () => {
     const onChange = vi.fn();
     renderViewer({ editing: true, onChange });

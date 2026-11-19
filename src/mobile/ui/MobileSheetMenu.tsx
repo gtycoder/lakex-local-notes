@@ -91,7 +91,9 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
         {it.note && <span className="mb-menu-note">{it.note}</span>}
         {hasChildren && <span className="mb-menusheet__icon"><ChevronRight size={16} /></span>}
         {hasChildren && (
-          <div className="mb-menusheet__submenu">
+          /* 261119 F-G（跳变审计潜伏项）：整屏子菜单按 topChrome 契约登记 overlay —— 顶部安全区在本表面消费一次，
+             否则下钻菜单一旦启用就复刻「标题压状态栏」。 */
+          <div className="mb-menusheet__submenu" data-mb-topbar data-edge="overlay">
             <div className="mb-menusheet__items">{renderLevel(it.children!, depth + 1)}</div>
           </div>
         )}

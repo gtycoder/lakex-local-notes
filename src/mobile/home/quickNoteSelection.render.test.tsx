@@ -149,9 +149,11 @@ describe("小记列表多选（task-82）", () => {
     await renderHome();
     const first = cards()[0];
     await longPress(first);
+    // 261119 F-B 首屏正文预热会在渲染期读详情 ⇒ 这里只看交互之后的增量（吞掉的 click 不许触发 openEdit 的整篇读取）。
+    const before = mocks.readQuickNote.mock.calls.length;
     await click(first); // 补发 click
     expect(host.textContent).toContain("已选 1");
-    expect(mocks.readQuickNote).not.toHaveBeenCalled(); // 没有进编辑器（openEdit 会读全文）
+    expect(mocks.readQuickNote.mock.calls.length).toBe(before); // 没有进编辑器（openEdit 会读全文）
 
     await click(cards()[1]);
     expect(topBar()!.textContent).toContain("已选 2");

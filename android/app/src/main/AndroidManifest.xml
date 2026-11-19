@@ -116,6 +116,17 @@
         </provider>
     </application>
 
+    <!-- 相机直出（261118）：Android 11+（targetSdk 36）包可见性过滤下，没有这条 <queries> 时
+         resolveActivity(ACTION_IMAGE_CAPTURE) 恒返回 null ⇒ WebView 文件选择器（Capacitor
+         BridgeWebChromeClient.showImageCapturePicker）判定「capture 起不来」⇒ 静默退化成普通文件选择器
+         （Android 13+ = 系统 Photo Picker/相册，即「拍照变相册」根因之二；根因之一见 res/xml/file_paths.xml）。
+         CameraCapturePlugin（ACTION_IMAGE_CAPTURE 直调）与 <input capture> 的回退路径都依赖能解析到相机应用。 -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

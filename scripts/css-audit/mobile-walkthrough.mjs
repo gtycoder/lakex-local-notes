@@ -4,6 +4,9 @@
 import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { data } from "./paths.mjs";
+// 261118（task-2 拍照改走原生相机）：「拍照」步骤的桩点换到 cameraCapture 链路（拦截 Capacitor.nativePromise），
+// 旧 input[type=file].click 桩对拍照已完全失效。打桩/自证/还原/交还用户重启的口径都在该模块里（§7#21/#24）。
+import { installCameraCaptureStub, proveCameraCaptureStub, restoreCameraCaptureStub, restartApp } from "../mobile-audit/cameraCaptureStub.mjs";
 
 // ⚠️ Android WebView 的 CDP Page.captureScreenshot **抓不到 GPU canvas 层**（实测：usheet 网格画布 toDataURL() 有完整内容、
 // 设备级 adb screencap 也正常，但页面截图整片空白）。所以移动端走查截图一律用**设备级** screencap。
@@ -167,6 +170,7 @@ export default async function run(ctx) {
   await page.send("Runtime.enable"); await page.send("Page.enable");
   await sleep(800);
   const screens = [];
+  let stubEverUsed = false;
   const add = (name, fn) => screens.push([name, fn]);
   add("home-library", async () => { await goHome(); await tapExpr(centerByText(".mb-home-dock__item", "知识库"), "知识库", 1100); });
   add("home-quicknotes", async () => { await tapExpr(centerByText(".mb-home-dock__item", "小记"), "小记", 1400); });
@@ -186,6 +190,45 @@ export default async function run(ctx) {
     // 这里走用户口径的「正常点击创建小记」：＋ → 空白小记 → 写作卡（长按上滑速记那条由设备探针单独验）。
     await tapExpr(centerByText(".mb-home-fab", String.fromCharCode(0x65b0, 0x5efa)), "新建", 1200);
     await tapExpr(centerByText(".mb-create__tile", "空白小记"), "空白小记", 2600);
+  });
+  // 261118（task-2）：dock「拍照」现在直调原生相机（CameraCapture 插件）⇒ 必须按**新链路桩点**打桩
+  // （cameraCaptureStub 拦截 CameraCapture.takePhoto / Filesystem.readFile），否则点下去会真拉起系统相机、
+  // 本屏卡死或误判。顺序：canary 自证桩命中（计数 1/1）→ 真机点按「拍照」→ 计数必须再 +1（已知命中的样本）
+  // → 正文必须出现图片卡 → **立即还原**；run 结束统一重启 App 交还用户（§7#24 红线）。
+  add("quicknote-insert-camera", async () => {
+    await goHome();
+    await tapExpr(centerByText(".mb-home-dock__item", "小记"), "小记 tab", 1500);
+    await tapExpr(centerByText(".mb-home-fab", String.fromCharCode(0x65b0, 0x5efa)), "新建", 1200);
+    await tapExpr(centerByText(".mb-create__tile", "空白小记"), "空白小记", 2600);
+    await installCameraCaptureStub(pageRef);
+    stubEverUsed = true;
+    try {
+      const canary = await proveCameraCaptureStub(pageRef);
+      console.log("[mwalk] camera stub canary ok: photoHits=" + canary.photoHits + " readHits=" + canary.readHits);
+      await tapExpr(center('button[aria-label="插入"]'), "dock 插入", 1200);
+      await tapExpr(centerByText(".med-ins-label", "拍照"), "拍照", 3200);
+      const state = await pageRef.evaluate(`(function () {
+        var stub = window.__lakeCameraStub;
+        var ed = document.querySelector(".mobile-qn-composer .ne-engine, .mobile-qn-composer [contenteditable]");
+        var html = ed ? ed.innerHTML : "";
+        return { photoHits: stub ? stub.state.photoHits : -1, readHits: stub ? stub.state.readHits : -1, hasImageCard: html.indexOf('name="image"') >= 0, htmlLen: html.length };
+      })()`);
+      if (!(state.photoHits >= canary.photoHits + 1) || !(state.readHits >= canary.readHits + 1)) {
+        throw new Error("拍照没走 cameraCapture 链路（桩计数未 +1）：" + JSON.stringify(state));
+      }
+      if (!state.hasImageCard) {
+        throw new Error("拍照没有插入图片卡（insertFiles 链路断）：" + JSON.stringify(state));
+      }
+      console.log("[mwalk] camera stub hit after tap: photoHits=" + state.photoHits + " readHits=" + state.readHits + " imageCard=1");
+    } finally {
+      // §7#24：桩用完**立即**还原（绝不留给下一步/用户）；还原自带校验，校验不过会抛。
+      await restoreCameraCaptureStub(pageRef);
+    }
+    // 清掉这屏开的写作卡草稿（清理失败不翻红本屏；goHome 会兜底关）。
+    try {
+      await tapExpr(centerByText(".mobile-qn-actions button", "取消"), "取消草稿", 1000);
+      await tapExpr(centerByText(".mb-actionsheet__item", "放弃"), "放弃", 1200);
+    } catch (e) { console.log("[mwalk] camera screen draft cleanup skipped: " + String(e && e.message || e).slice(0, 80)); }
   });
   add("doc-outline", async () => {
     await goHome(); await openDoc(0);
@@ -228,6 +271,14 @@ export default async function run(ctx) {
     if (rec.pageOverflowX) bad.push("pageX:" + rec.pageOverflowX);
     console.log("[mwalk] " + name + " " + (rec.ok ? "ok" : "ERR " + rec.error) + (bad.length ? "  " + bad.join(" ") : ""));
   }
+  // §7#24 红线：打过桩的会话交还用户前必须重启 App（桩不随脚本退出自动还原）。
+  // 这里再防御性还原一次（幂等），然后重启；重启后 CDP 转发要重跑 emu-cdp.sh（drive.mjs 会自愈）。
+  let handback = { ok: true, note: "未打桩，无需重启" };
+  if (stubEverUsed) {
+    try { await restoreCameraCaptureStub(pageRef); } catch (e) { console.log("[mwalk] 防御性还原失败: " + String(e && e.message || e).slice(0, 80)); }
+    handback = restartApp();
+    console.log("[mwalk] §7#24 交还用户：" + handback.note);
+  }
   fs.writeFileSync(OUT + "/report.json", JSON.stringify(report, null, 1));
-  return { screens: Object.keys(report.screens).length, out: OUT };
+  return { screens: Object.keys(report.screens).length, out: OUT, cameraStub: { used: stubEverUsed, handback } };
 }

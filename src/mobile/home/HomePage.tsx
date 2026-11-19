@@ -18,6 +18,7 @@ import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
 import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { quickNotePrewarmIds } from "../../core/quickNoteDetailPrewarm";
 import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { MobileSheet } from "../ui/MobileSheet";
@@ -300,6 +301,22 @@ export function HomePage(props: HomePageProps) {
   } = useQuickNoteListModel(quickNotes, quickNoteDetails, tagDirectory);
 
   /**
+   * 首屏正文预热（AGENTS「列表投影不带正文 ⇒ 首屏正文必须预热」；判据单一来源 core/quickNoteDetailPrewarm）。
+   * 恒定槽位（QuickNotePreview slotFrame）已经让「正文到达」不再改卡高；预热再把内容本身赶在首屏前读回
+   * （一屏 8 条上限，**不**按虚拟窗口扩：单条正文实测可达 660KB）。缓存命中（updatedAt 相同）自动跳过；
+   * 已带正文的卡（详情已合并）不进候选。只在小记页生效（别在别的页白付 IPC）。
+   * 261119 F-B：此前移动端只有 IntersectionObserver 懒读（回调必然晚于首帧），预热窗内首帧即富预览。
+   */
+  useEffect(() => {
+    if (tab !== "quick") return;
+    const cachedHashes = new Map(Array.from(quickNoteDetails, ([id, detail]) => [id, detail.updatedAt] as const));
+    const candidates = sortedQuickNotes.filter((note) => !note.body).map((note) => ({ id: note.id, contentHash: note.updatedAt }));
+    for (const id of quickNotePrewarmIds(candidates, cachedHashes)) {
+      void loadQuickNoteDetail(id);
+    }
+  }, [quickNoteDetails, loadQuickNoteDetail, sortedQuickNotes, tab]);
+
+  /**
    * 多选模式（261106 task-82）：只给小记列表用（目录抽屉/标签页长按仍是拖拽，笔记本卡片长按仍是菜单）。
    * 可见集合 = sortedQuickNotes（当前筛选+排序后的列表，全选/剪枝都以它为准）。
    * 动作 = 打标签 / **移入回收站**（软删，可恢复；不做批量彻底删除）。
@@ -543,7 +560,10 @@ export function HomePage(props: HomePageProps) {
         startNewQuickNote();
         return;
       case "camera": {
-        const file = await pickLocalFile("image/*", "environment");
+        // 261119 拍照收口（task-2 同口径）：走原生相机插件 —— 直出系统相机，绝不静默开相册；取消返回 null 不回退。
+        // 动态 import：拍照入口不在首屏路径上，不占 mobile-entry 预算。
+        const { takeCameraPhoto } = await import("../native/cameraCapture");
+        const file = await takeCameraPhoto();
         if (file) startNewQuickNote({ files: [file] });
         return;
       }
@@ -1316,22 +1336,24 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
         </div>
       )}
       <div className="qn-card__body">
-        {note.body ? (
-          <QuickNotePreview
-            ellipsisClassName="mb-ellipsis"
-            body={note.body}
-            noteId={note.id}
-            assets={previewAssets}
-            // 图片：单击看大图、双击进编辑（261112 用户定稿；判定窗见 handleImageTap）。
-            onImageClick={handleImageTap}
-            // 封面上方已经画过第一张图 ⇒ 预览不再重复（261112 用户报「插一张图预览里出现两张」）。
-            hiddenMediaNames={thumbUrl && note.firstImage ? new Set([note.firstImage]) : undefined}
-            // 勾选框可点（与桌面卡片预览同能力）；组件内部已 stopPropagation ⇒ 不会顺带进编辑态。
-            onToggleTask={onToggleTask}
-          />
-        ) : (
-          <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
-        )}
+        <QuickNotePreview
+          // F-B/F-C/F-H（261119 平滑度审计）：恒定槽位 —— 占位（previewText）与富预览同槽同高，
+          // 正文到达/内核兜底落地都不改卡高（判据与槽高见 QuickNotePreview.slotFrame）。
+          // 多图卡（封面之外还有图）= 折叠上限恒定槽；纯文本卡 = 摘要槽。
+          slotFrame={note.imageCount > 1 ? "media" : "text"}
+          ellipsisClassName="mb-ellipsis"
+          body={note.body ?? ""}
+          // 占位/回落文本 = 列表投影里的纯文本摘要（正文没到时的那半帧）。
+          fallbackText={note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}
+          noteId={note.id}
+          assets={previewAssets}
+          // 图片：单击看大图、双击进编辑（261112 用户定稿；判定窗见 handleImageTap）。
+          onImageClick={handleImageTap}
+          // 封面上方已经画过第一张图 ⇒ 预览不再重复（261112 用户报「插一张图预览里出现两张」）。
+          hiddenMediaNames={thumbUrl && note.firstImage ? new Set([note.firstImage]) : undefined}
+          // 勾选框可点（与桌面卡片预览同能力）；组件内部已 stopPropagation ⇒ 不会顺带进编辑态。
+          onToggleTask={onToggleTask}
+        />
         <div className="qn-card__meta">
           <span className="qn-card__date">{formatDateOnly(dateValue)}</span>
           {selecting ? (

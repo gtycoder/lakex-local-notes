@@ -57,6 +57,9 @@ class MainActivity : BridgeActivity() {
         // 原生崩溃记录（261105）：读上次崩溃 / 清空。崩溃本身的落盘在 installCrashHandler() 里。
         registerPlugin(CrashLogPlugin::class.java)
         // 应用内更新中心（261109）：清单检查 / DownloadManager 下载 / sha256+证书校验 / 系统安装器。
+        // 拍照（相机直出，261118）：「拍照」入口直接拉 ACTION_IMAGE_CAPTURE（落盘回传），不再走 <input capture>
+        //（其 capture 会被 WebView 文件选择器退化成相册，见 CameraCapturePlugin 头注释）。
+        registerPlugin(CameraCapturePlugin::class.java)
         registerPlugin(UpdatePlugin::class.java)
         // 便携包导入（261109）：系统文件选择 + zip 解压 + 只读读桌面库 + 文件复制 + 回滚隔离。
         registerPlugin(PortablePackagePlugin::class.java)

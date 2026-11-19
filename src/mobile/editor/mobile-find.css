@@ -1,6 +1,15 @@
-/* 移动端「文档内查找」条（261016）：自有命名 mb-*，只加容器与命中高亮；
+/* 移动端「文档内查找」条（261016；261119 F-A 改覆盖式）：自有命名 mb-*，只加容器与命中高亮；
    输入与图标按钮复用 kit 的 .mb-input / .mb-iconbtn--compact，不另造一套控件。
-   命中高亮走 CSS Custom Highlight API（::highlight），不改正文 DOM。 */
+   命中高亮走 CSS Custom Highlight API（::highlight），不改正文 DOM。
+   【覆盖式（261119 F-A，平滑度审计 P1）】此前 .mb-find 是正文流里的普通 flex 行、条件插在
+   .mobile-doc-body 之前 ⇒ 开/关瞬间把整篇正文下压/回弹约 50px（丝滑准则①：条件元素不进正文流）。
+   现在绝对定位**脱离正文流**：挂载/卸载正文几何完全不动。定位锚 = 最近的定位祖先
+   .mobile-workspace-body（mobile.css 已 position:relative；其顶部即工作区顶栏下沿）⇒
+   top:0 即贴顶栏下沿，不写高度/安全区估算值。topChrome 契约口径 = nested 语义（inset 恒 0，
+   不消费 --mobile-top-safe-area，本文件无该变量引用）。
+   层序走既有令牌 --mobile-z-topbar（与工作区顶栏同档）：底部 dock（editor-dock.css z=4）与
+   工作区胶囊（z=2~3）都在屏幕底部、与顶部浮条无几何重叠，不为它们抬层；抽屉/Sheet/菜单
+   （--mobile-z-drawer/sheet/menu ≥ 45）照常盖过查找条。 */
 .mb-find {
   display: flex;
   align-items: center;
@@ -8,6 +17,12 @@
   padding: 6px 10px;
   background: var(--lake-bg-panel);
   border-bottom: .5px solid var(--lake-border-1);
+  /* 覆盖式浮条：出流 + 贴住工作区正文容器顶部、横跨全宽（left/right 同为 0 ⇒ 宽度自动铺满） */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--mobile-z-topbar);
 }
 .mb-find__count {
   flex: 0 0 auto;

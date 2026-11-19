@@ -136,8 +136,9 @@ describe("首页新建流（261014）", () => {
     expect(SHEET).toMatch(/文档与知识库/);
   });
 
-  it("拍摄/图片走取文件 → 内核 insertFiles；待办走内核命令；空白文档只选已有笔记本", () => {
-    expect(HOME).toMatch(/pickLocalFile\("image\/\*", "environment"\)/);
+  it("拍摄走原生相机插件、图片走取文件 → 内核 insertFiles；待办走内核命令；空白文档只选已有笔记本", () => {
+    // 261119 拍照收口（task-2 同口径）：拍摄 = takeCameraPhoto()（原生相机直出，绝不静默开相册）；图片仍走 pickLocalFile。
+    expect(HOME).toMatch(/takeCameraPhoto\(\)/);
     expect(HOME).toMatch(/pickLocalFile\("image\/\*"\)/);
     expect(HOME).toMatch(/command: "taskList"/);
     expect(HOME).toMatch(/initialInsert=\{composer\.mode === "new"/);

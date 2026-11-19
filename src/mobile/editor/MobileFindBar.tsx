@@ -100,7 +100,7 @@ export function MobileFindBar({ root, revision, editor, onClose }: MobileFindBar
   }, [usingKernel, kernelCount, kernelIndex, ranges.length]);
 
   return (
-    <div className="mb-find" role="search">
+    <div className="mb-find" role="search" data-mb-topbar data-edge="nested">
       <input
         ref={inputRef}
         className="mb-input mb-flex1"

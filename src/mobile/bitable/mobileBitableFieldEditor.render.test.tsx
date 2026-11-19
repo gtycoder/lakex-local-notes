@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileBitableFieldEditorSheet } from "./MobileBitableFieldEditorSheet";
 import { createBitableField } from "../../core/bitableDoc";
+import { COLOR_BOARD_VALUES } from "../../core/colorPalette";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -138,5 +139,44 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     act(() => btnByText("确认")!.click());
     const patch = onSave.mock.calls[0][0] as { options: Array<{ name: string }> };
     expect(patch.options.map((o) => o.name)).toEqual(["复盘", "提问", "选项 3"]);
+  });
+
+  it("选项色点可改色：点色点展开同款色板（候选 = 桌面选项色板同一来源），选色落 option.color", () => {
+    const onSave = vi.fn();
+    render({ ...createBitableField("select", "状态", "f-status"), options: [{ id: "o1", name: "复盘", color: "green" }] }, onSave);
+    // 色点 = 可点按钮（旧实现是 aria-hidden 的 span，改不了色）
+    const swatch = host.querySelector<HTMLButtonElement>('button[aria-label="选项颜色：复盘"]');
+    expect(swatch).toBeTruthy();
+    expect(swatch!.getAttribute("aria-expanded")).toBe("false");
+    // 点色点 → 展开本面板同款 .mbt-feditor__colors 色板（与「进度条颜色」同一原语）
+    act(() => swatch!.click());
+    expect(swatch!.getAttribute("aria-expanded")).toBe("true");
+    const palette = host.querySelector('[role="group"][aria-label="选项颜色：复盘"]');
+    expect(palette).toBeTruthy();
+    expect(palette!.className).toContain("mbt-feditor__colors");
+    // 候选色集合 = COLOR_BOARD_VALUES（core/colorPalette；桌面端字段编辑器选项色板 ColorPalette 同一数据源，不自造色值）
+    const candidates = [...palette!.querySelectorAll<HTMLButtonElement>('button[aria-label^="颜色 "]')]
+      .map((b) => b.getAttribute("aria-label")!.slice("颜色 ".length));
+    expect(candidates.length).toBe(COLOR_BOARD_VALUES.length);
+    expect(new Set(candidates)).toEqual(new Set(COLOR_BOARD_VALUES));
+    // 选色 → 确认后 patch.options[0].color = 该 hex（optionColorHex 原样透传）
+    act(() => palette!.querySelector<HTMLButtonElement>('button[aria-label="颜色 #F5222D"]')!.click());
+    act(() => btnByText("确认")!.click());
+    expect((onSave.mock.calls[0][0] as { options: Array<{ color?: string }> }).options)
+      .toEqual([{ id: "o1", name: "复盘", color: "#F5222D" }]);
+  });
+
+  it("选项色点：旧命名色经 optionColorHex 回显；「默认颜色」清掉 option.color", () => {
+    const onSave = vi.fn();
+    render({ ...createBitableField("select", "状态", "f-status"), options: [{ id: "o1", name: "复盘", color: "green" }] }, onSave);
+    // 旧命名色（green = #d3f0df）在色点上按 optionColorHex 回显（它不在 70 色板里，与桌面 ColorPalette 同口径）
+    const swatch = host.querySelector<HTMLButtonElement>('button[aria-label="选项颜色：复盘"]')!;
+    expect(swatch.style.background).toBe("rgb(211, 240, 223)");
+    act(() => swatch.click());
+    const palette = host.querySelector('[role="group"][aria-label="选项颜色：复盘"]')!;
+    act(() => palette.querySelector<HTMLButtonElement>('button[aria-label="默认颜色"]')!.click());
+    act(() => btnByText("确认")!.click());
+    expect((onSave.mock.calls[0][0] as { options: Array<{ color?: string }> }).options)
+      .toEqual([{ id: "o1", name: "复盘", color: undefined }]);
   });
 });

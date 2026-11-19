@@ -31,7 +31,8 @@ import {
 } from "./mobileBitableFormDraft";
 import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
 import { MobileBitableDateField } from "./MobileBitableDateField";
-import { dismissKeyboard, dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
+import { dismissKeyboard } from "../ui/dismissKeyboard";
+import { onBitablePointerDown } from "./bitablePointerFocus";
 import { submitStateText } from "./mobileBitableFormat";
 import { bridge } from "../bridge";
 import { showToast } from "../ui/toastBus";
@@ -225,9 +226,15 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
   const formRef = useRef<HTMLDivElement | null>(null);
   useKeyboardRevealFocus(formRef, true);
 
+  /**
+   * 261119 用户点单（录屏 form_005/011）：文本框失焦后拖「进度」滑杆，键盘每次都被拉回文本框、光标还在里面。
+   * 根因 = 共享 dismissKeyboardOnPointerDown 对任何 input 落点都放行 ⇒ 滑杆/复选框**不会**让文本框真失焦。
+   * 收紧口径 = bitablePointerFocus.onBitablePointerDown（只在文本输入控件落点放行聚焦；表单里没有任何
+   * .focus() 回弹路径，不要新增）。
+   */
   return (
-    <div className="mbt-form" ref={formRef}>
-      <div className="mbt-form-scroll" onPointerDown={dismissKeyboardOnPointerDown}>
+    <div className="mbt-form" ref={formRef} onPointerDown={onBitablePointerDown}>
+      <div className="mbt-form-scroll">
         {canEditForm && (
           <div className="mbt-form-edittoggle">
             <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => setFormEditing((on) => !on)}>

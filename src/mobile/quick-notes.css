@@ -25,7 +25,7 @@
 
 /* 261106 task-76/78：标签详情里的小记卡 —— 复用 .quick-note-preview，但**限高**；
    渐隐**只在真溢出时**画（.is-clipped，组件按 scrollHeight > clientHeight + 2 判定），短内容不出现渐隐也不出现「展开」；
-   × 放在 .mb-set-item__ctl 右侧独立列，不与正文重叠。属新增交互形态（标签详情页），非覆盖叠层。 */
+   条目动作走**长按 / 右键动作菜单**（261119 用户裁决：× 已移除），卡片不放任何行内控件列。属新增交互形态（标签详情页），非覆盖叠层。 */
 .tag-quick-card { position: relative; max-height: 180px; overflow: hidden; }
 .tag-quick-card.is-clipped::after { content: ""; position: absolute; inset: auto 0 0 0; height: 36px; background: linear-gradient(to bottom, transparent, var(--lake-bg-window)); pointer-events: none; }
 .tag-quick-card.is-expanded { max-height: none; overflow: visible; }
@@ -60,6 +60,19 @@
 .quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
 
 .quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: .5px dashed var(--lake-border-2); border-radius: var(--mb-radius-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+/* F-B/F-C/F-H（261119 平滑度审计）：首页小记列表卡预览 = **恒定槽位**（QuickNotePreview 的 slotFrame 模式）。
+   根因：列表投影不带正文 ⇒ 卡片先画 previewText 纯文本、正文到达再换富预览，两态高度不同 ⇒ 下方卡片位移
+   （F-B）；内核兜底的 Suspense fallback 又是第三种高度（F-C）。收口 = 外框几何只由槽决定，与内容无关：
+   · 文本卡槽 = 5 行摘要（行内 maxHeight 7.5em）；多图卡槽 = 折叠上限 220px **恒定**（图文到达只填内容不改框）；
+   · 占位与富预览同容器同排版（本类统一字号/行高）⇒ 纯文本卡两态逐像素同高；渐隐复用 .quick-note-preview.is-collapsed；
+   · 内核兜底：fallback 保留占位文本、外框只在正文到达时上一阶（折叠上限），内核落地不改外框（「单阶」）。
+   F-H：展开/收起 = 结构展开位移过渡（只走既有 motion 令牌）。 */
+.qn-preview-slot { overflow: hidden; font-size: var(--lake-font-size-small); line-height: 1.5; }
+/* 内容盒（槽宿主唯一子元素）：块间距与 .quick-note-preview 同款；独立成盒 ⇒ ResizeObserver 能看到异步内容长高（标签详情卡先例）。 */
+.qn-preview-slot > div { display: flex; flex-direction: column; gap: 6px; }
+.qn-preview-slot.is-animating { transition: height var(--mobile-duration-panel) var(--mobile-ease-out), max-height var(--mobile-duration-panel) var(--mobile-ease-out); }
+@media (prefers-reduced-motion: reduce) { .qn-preview-slot.is-animating { transition: none; } }
 
 /* 小记标签（261020）：候选标签从有效小记派生；本层只画移动端形态。
  * 261030 用户点单「标签要有点着重」⇒ 对齐语雀 App：**浅灰绿实底 / 无边框 / 圆角 8 / 左右内距较宽 / 文字深灰**。

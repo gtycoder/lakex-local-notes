@@ -161,9 +161,34 @@ interface QuickNotePreviewProps {
    * 只影响 image 卡；附件/音视频卡没有封面语义，照常渲染。
    */
   hiddenMediaNames?: ReadonlySet<string>;
+  /**
+   * **恒定槽位**模式（261119 平滑度审计 F-B/F-C/F-H；移动端首页小记列表卡专用）。
+   * 不传 = 经典行为（桌面 / 标签详情），与 261010 定稿一致。
+   *
+   * 为什么需要：列表投影不带正文 ⇒ 卡片先画 `fallbackText` 纯文本、正文到达再换富预览，
+   * 两态高度不同 ⇒ 下方卡片位移（F-B）；内核兜底的 Suspense fallback 又是第三种高度（F-C）。
+   * 槽位模式把「外框几何」从内容手里拿走，只由槽决定：
+   *  - `text`（纯文本卡）= 5 行摘要槽（SLOT_TEXT_MAX）：占位与富预览同容器同排版 ⇒ 两态同高；
+   *  - `media`（封面之外还有图）= 折叠上限槽（COLLAPSED_MAX_PX）**恒定** ⇒ 图文到达只填内容不改框；
+   *  - 内核兜底：Suspense fallback 继续画占位文本（不再换成 unsupported 标签片），外框只在
+   *    正文到达时上一阶（「单阶」验收口径），内核落地不改外框。
+   * 展开/收起 = 结构展开位移过渡（既有 motion 令牌；reduced-motion 瞬切）。
+   */
+  slotFrame?: "text" | "media";
 }
 
-export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask, ellipsisClassName = "ln-ellipsis", hiddenMediaNames }: QuickNotePreviewProps) {
+/** 折叠上限（px）：超长小记卡收起后的预览高（用户 260919 #5：否则一条长小记会把其他小记挤走）。 */
+const COLLAPSED_MAX_PX = 220;
+/**
+ * 槽位模式「文本卡」的槽高（em，相对槽内字号；行高 1.5 ⇒ 5 行）。
+ * 取 5 行 = `previewText`（主进程截断 120 字）在主流机型宽度上的自然换行高 ⇒
+ * 占位与富预览都从同一档截断 ⇒ 纯文本卡两态逐像素同高（F-B 恒定几何）。
+ */
+const SLOT_TEXT_MAX = "7.5em";
+/** 溢出判定余量（亚像素/滚动条误差；与标签详情小记卡同口径）。 */
+const OVERFLOW_SLACK_PX = 2;
+
+export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask, ellipsisClassName = "ln-ellipsis", hiddenMediaNames, slotFrame }: QuickNotePreviewProps) {
   const nodes = useMemo(() => parseQuickNotePreview(body), [body]);
   /** 封面已展示的图不重复画 ⇒ 只剩这些节点时整块预览就不占位（否则卡片中间留一片空白）。 */
   const visibleNodes = useMemo(
@@ -173,40 +198,138 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
   /** 快路径还原不了 ⇒ 整条卡片交给内核（判据 = 解析器自己的 unsupported 节点，不另立清单）。 */
   const kernelFallback = useMemo(() => hasUnsupportedNodes(nodes), [nodes]);
   const hostRef = useRef<HTMLDivElement>(null);
+  /** 槽位模式的内容盒：外框被槽钉住后宿主不再变高 ⇒ 异步内容（正文/内核/图片）长高由它上报（标签详情卡先例）。 */
+  const contentRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
-  /** 超长默认收起一部分（用户 260919：#5 —— 否则一条长小记会把其他小记挤走），点「展开」看全部。 */
-  const COLLAPSED_MAX_PX = 220;
+  /** F-H 展开/收起位移过渡：动画期行内高由下方 effect 接管，React 的 style 只回写 max-height:none。 */
+  const [animating, setAnimating] = useState(false);
+  const animatingRef = useRef(false);
+  const animTargetRef = useRef<{ from: number; to: number } | null>(null);
+  /** 收起动画回落的槽高 = 展开前实测的折叠高。 */
+  const collapseTargetRef = useRef<number | null>(null);
+
+  /** 占位 = `fallbackText` 纯文本，与富预览**同一容器、同一排版**（槽位两态同高的前提）。 */
+  const placeholder = fallbackText ? <p className="quick-note-preview-paragraph">{fallbackText}</p> : null;
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const measure = () => setOverflowing(host.scrollHeight > COLLAPSED_MAX_PX + 8);
+    const measure = () => {
+      if (animatingRef.current) return;
+      setOverflowing(slotFrame
+        ? host.scrollHeight > host.clientHeight + OVERFLOW_SLACK_PX
+        : host.scrollHeight > COLLAPSED_MAX_PX + 8);
+    };
     measure();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     observer?.observe(host);
-    return () => observer?.disconnect();
-  }, [body, kernelFallback]);
-  useEffect(() => { setExpanded(false); }, [body]);
-  if (!kernelFallback && visibleNodes.length === 0) {
+    if (slotFrame && contentRef.current) observer?.observe(contentRef.current);
+    // 异步内容到达与 ResizeObserver 回调可能同帧错位 ⇒ 补一帧复测（标签详情卡先例）。
+    const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame(measure) : 0;
+    return () => {
+      observer?.disconnect();
+      if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+    };
+  }, [body, kernelFallback, slotFrame]);
+  useEffect(() => {
+    setExpanded(false);
+    collapseTargetRef.current = null;
+  }, [body]);
+
+  /** F-H：展开/收起 = 结构展开位移过渡（只走既有 motion 令牌；reduced-motion 下瞬切）。 */
+  useEffect(() => {
+    if (!animating) return;
+    const host = hostRef.current;
+    const target = animTargetRef.current;
+    if (!host || !target) {
+      animatingRef.current = false;
+      return;
+    }
+    host.style.maxHeight = "none";
+    host.style.height = target.from + "px";
+    void host.offsetHeight; // 起点先落定，否则同帧改终点会被合并成瞬切
+    const frame = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame(() => { host.style.height = target.to + "px"; })
+      : 0;
+    let finished = false;
+    const finish = (event?: TransitionEvent): void => {
+      if (event && event.target !== host) return; // 子元素冒泡上来的 transitionend 不算
+      if (finished) return;
+      finished = true;
+      animatingRef.current = false;
+      animTargetRef.current = null;
+      host.style.height = "";
+      host.style.maxHeight = "";
+      setAnimating(false);
+    };
+    host.addEventListener("transitionend", finish);
+    // transition 没跑（reduced-motion / 样式缺位）不会有 transitionend ⇒ 超时兜底收尾。
+    const timer = window.setTimeout(finish, 400);
+    return () => {
+      if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+      host.removeEventListener("transitionend", finish);
+      window.clearTimeout(timer);
+    };
+  }, [animating]);
+
+  const toggleExpanded = (event: React.MouseEvent): void => {
+    event.stopPropagation();
+    const next = !expanded;
+    const host = hostRef.current;
+    const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!slotFrame || !host || reduced) {
+      setExpanded(next);
+      return;
+    }
+    const from = host.clientHeight;
+    const to = next ? host.scrollHeight : Math.min(host.scrollHeight, collapseTargetRef.current ?? from);
+    if (next) collapseTargetRef.current = from;
+    animatingRef.current = true;
+    animTargetRef.current = { from, to };
+    setExpanded(next);
+    setAnimating(true);
+  };
+
+  // 经典路径（桌面 / 标签详情）：保持 261010 定稿行为。
+  if (!slotFrame && !kernelFallback && visibleNodes.length === 0) {
     return fallbackText ? <p className="quick-note-preview-paragraph">{fallbackText}</p> : null;
   }
-  const collapsed = overflowing && !expanded;
+  const collapsed = slotFrame
+    ? !expanded && (overflowing || (slotFrame === "media" && body.length === 0))
+    : overflowing && !expanded;
+  /** 槽位夹持：文本卡 = 摘要槽；多图卡 = 折叠上限恒定；内核兜底 = 折叠上限（外框「单阶」上跳后不再变）。 */
+  const clampStyle: React.CSSProperties | undefined = slotFrame && !expanded && !animating
+    ? slotFrame === "media"
+      ? { height: COLLAPSED_MAX_PX }
+      : { maxHeight: kernelFallback && noteId ? COLLAPSED_MAX_PX : SLOT_TEXT_MAX }
+    : undefined;
+  const style = animating ? { maxHeight: "none" } : clampStyle;
+  // 槽位模式的类名拼装（qn-preview-slot* 只有移动端样式；桌面不传 slotFrame ⇒ 从不渲染这些类）。
+  const className = slotFrame
+    ? ["quick-note-preview", "qn-preview-slot", "qn-preview-slot--" + slotFrame, collapsed ? "is-collapsed" : "", expanded ? "is-expanded" : "", animating ? "is-animating" : ""].filter(Boolean).join(" ")
+    : "quick-note-preview" + (collapsed ? " is-collapsed" : "");
+  const fastPath = <Nodes nodes={visibleNodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />;
+  const chips = <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />;
+  const content = kernelFallback && noteId
+    ? (
+      // F-C：槽位模式下 fallback 保留**占位文本**（与外框同构），内核到达不改外框；
+      // 经典模式保持原「unsupported 标签片」fallback。
+      <Suspense fallback={slotFrame ? (placeholder ?? chips) : chips}>
+        {/* 内核只读兜底无法摘掉首图（它按正文自己渲染）⇒ 这条路径仍可能与封面重复；只在快路径里去重。 */}
+        <QuickNoteKernelPreview body={body} noteId={noteId} />
+      </Suspense>
+    )
+    : visibleNodes.length > 0
+      ? fastPath
+      : (slotFrame ? placeholder : fastPath);
   return <>
-    <div
-      ref={hostRef}
-      className={"quick-note-preview" + (collapsed ? " is-collapsed" : "")}
-      style={collapsed ? { maxHeight: COLLAPSED_MAX_PX } : undefined}
-    >
-      {kernelFallback && noteId
-        ? <Suspense fallback={<Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />}>
-            {/* 内核只读兜底无法摘掉首图（它按正文自己渲染）⇒ 这条路径仍可能与封面重复；只在快路径里去重。 */}
-            <QuickNoteKernelPreview body={body} noteId={noteId} />
-          </Suspense>
-        : <Nodes nodes={visibleNodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />}
+    <div ref={hostRef} className={className} style={style}>
+      {slotFrame ? <div ref={contentRef}>{content}</div> : content}
     </div>
     {overflowing && <button
       className="quick-note-preview-toggle"
-      onClick={(event) => { event.stopPropagation(); setExpanded((value) => !value); }}
+      onClick={toggleExpanded}
     >{expanded ? <><ChevronUp size={13} />收起</> : <><ChevronDown size={13} />展开</>}</button>}
   </>;
 }

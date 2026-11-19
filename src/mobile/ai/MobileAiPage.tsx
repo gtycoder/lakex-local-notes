@@ -35,7 +35,8 @@ import {
 } from "./aiChatStore";
 import { appendPendingImages, compressImageFile, type AiPendingImage } from "./aiImages";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
-import { pickLocalFile, pickLocalFiles } from "../ui/pickFile";
+import { pickLocalFiles } from "../ui/pickFile";
+// takeCameraPhoto 动态引入（点击时才加载，不占 mobile-entry 预算）
 import { toastActionError } from "../lib/actionError";
 import { isImeConfirming } from "../../core/ime";
 
@@ -378,7 +379,7 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
           <div className="mb-actionsheet is-open" role="dialog" aria-modal="true" aria-label="附件">
             <div className="mb-actionsheet__group">
               <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); openCorpus(); }}><FileText size={18} />资料<span className="ai-action__sub">选择文档</span></button>
-              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFile("image/*", "environment").then((file) => addPickedImages(file ? [file] : [], "拍照")); }}><Camera size={18} />拍照<span className="ai-action__sub">拍一张</span></button>
+              <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void import("../native/cameraCapture").then((m) => m.takeCameraPhoto()).then((file) => addPickedImages(file ? [file] : [], "拍照")); }}><Camera size={18} />拍照<span className="ai-action__sub">拍一张</span></button>
               <button type="button" className="mb-actionsheet__item" onClick={() => { setActionsOpen(false); void pickLocalFiles("image/*").then((files) => addPickedImages(files, "相册")); }}><ImageIcon size={18} />相册<span className="ai-action__sub">从相册选</span></button>
               <button type="button" className="mb-actionsheet__item" onClick={() => {
                 setActionsOpen(false);

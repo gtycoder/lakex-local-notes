@@ -441,6 +441,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 @keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask,
+  .mobile-settings-preview,
   .pad-tree, .pad-outline { animation: none; transition: none; }
   .mobile-htab, .mobile-icon-btn, .mobile-doc-row,
   .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
@@ -586,7 +587,13 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    在 P4 重写后已永不命中 ⇒ 261013 删除（移动端 TSX 的这两类类名 token 由护栏卡成 0）。 */
 
 /* 设置→回收站（总回收站：笔记+小记合并）+ 内嵌只读预览浮层 */
-.mobile-settings-preview { position: fixed; inset: 0; z-index: var(--mobile-z-settings-preview); background: var(--lake-bg-window, var(--lake-bg-window)); display: flex; }
+/* F-F（261119 平滑度审计）：预览层 = 压栈整页，此前一帧盖上/一帧消失（瞬时全屏跳变）。
+ * 只做**入场**的淡入 + 微位移（准则②：入场/位移走既有 --mobile-duration-panel / --mobile-ease-out；
+ * 不做颜色/hover/背景过渡）。位移只动 transform/opacity（合成层）；reduced-motion 已登记下方名单
+ * （与 .mobile-settings-mask 同组）。退出仍直切（AGENTS「返回可直切」先例；退场过渡需挂载点
+ * MobileApp/SettingsDrawer 收起时序配合，不在本次改动范围）。 */
+@keyframes mobile-preview-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+.mobile-settings-preview { position: fixed; inset: 0; z-index: var(--mobile-z-settings-preview); background: var(--lake-bg-window, var(--lake-bg-window)); display: flex; animation: mobile-preview-in var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-settings-preview .mobile-document { flex: 1 1 auto; }
 .mobile-trash-list { padding-top: 4px; }
 .mobile-trash-empty { padding: 40px 24px; text-align: center; color: var(--lake-text-2, var(--lake-text-3)); font-size: var(--lake-font-size-tiny); }

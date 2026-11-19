@@ -46,7 +46,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限 空间 独立 日记 文档" },
   { id: "editor-clear-tabs-on-exit", category: "editor", label: "退出时关闭全部标签", keywords: "标签 恢复 退出 关闭 清空 tab session 重启 下次启动" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
-  { id: "space-diary", category: "editor", label: "日记空间", keywords: "空间 关闭 隐藏 日记 入口 Dock 菜单 ⌘3 diary space" },
+  { id: "space-diary", category: "editor", label: "日记空间", keywords: "空间 关闭 隐藏 日记 入口 Dock 菜单 ⌘5 diary space" },
   { id: "space-ai-writing", category: "editor", label: "AI 写作空间", keywords: "空间 关闭 隐藏 AI 写作 入口 Dock 菜单 ⌘4 ai writing space" },
   { id: "editor-default-space", category: "editor", label: "默认空间", keywords: "默认空间 启动 首屏 进入 打开 空间 知识库 文档 小记 日记 AI 写作 标签 startup default workspace space 本机" },
   // 261116：主题从分段按钮改下拉（值仍是 LAKE_THEMES id）——搜索词补上「清爽 / chat / 冷调」，其余同义词保留。

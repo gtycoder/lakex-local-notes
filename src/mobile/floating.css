@@ -199,6 +199,9 @@
 .mb-menusheet__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-menusheet__submenu {
   position: fixed; top: 0; left: 100vw; width: 100vw; bottom: 0; z-index: var(--mobile-z-menu);
+  /* 261119 F-G：整屏子菜单 = topChrome overlay 表面（data-mb-topbar/data-edge 见 MobileSheetMenu），
+     顶部安全区在此消费一次（此前 top:0 直贴状态栏，下钻菜单启用即压系统时钟）。 */
+  padding-top: var(--mb-chrome-inset-top);
   background: var(--lake-bg-panel); overflow-y: auto; overscroll-behavior: contain;
   transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }

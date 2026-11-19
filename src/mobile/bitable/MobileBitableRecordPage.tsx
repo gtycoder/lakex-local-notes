@@ -34,7 +34,9 @@ export function MobileBitableRecordPage({ noteId, table, fields, record, ctx, in
   const title = (primary ? bitableFieldText(record, primary, ctx) : "").trim() || "记录 " + (index + 1);
   return (
     <section className="mbt-page" aria-label="记录详情">
-      <header className="mbt-page-bar">
+      {/* 261119 task-5（topChrome 契约）：整页从屏幕顶展开 ⇒ 顶栏按 overlay 消费顶部安全区**一次**
+          （此前没声明 ⇒ 右上「编辑/只读」压在系统状态栏上）。 */}
+      <header className="mbt-page-bar" data-mb-topbar data-edge="overlay">
         <button type="button" className="mb-iconbtn" aria-label="返回" onClick={onClose}><ArrowLeft size={18} /></button>
         <span className="mbt-page-bar__title">记录详情</span>
         {onRequestEdit && (

@@ -2,7 +2,8 @@
 /**
  * 261106 用户验收：一级「标签」页（flomo 式：标签即入口；**没有「管理」模式**）。
  * 本轮（261106 三次返工）锁：行 ⋯ 菜单（重命名弹输入并全选 / 合并提示与实参 / 删除确认逐字）、
- * 行主区点击进详情、长按 350ms 拖拽排序（且拖拽后那次 click 不进详情）、详情行尾 × + 二次确认。
+ * 行主区点击进详情、长按 350ms 拖拽排序（且拖拽后那次 click 不进详情）；
+ * 详情条目动作（261119 用户裁决：× 已移除）= 长按 / 右键弹动作菜单（打开 / 移除标签 / 取消）+ 二次确认。
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -175,6 +176,33 @@ const typeInto = async (input: HTMLInputElement, value: string): Promise<void> =
   });
 };
 const openRowMenu = async (name: string): Promise<void> => { await click(byAria("标签操作 " + name)); };
+/** 详情条目（文档行 / 小记卡同一容器 .mb-set-item）按标题找行。 */
+const detailRow = (title: string): HTMLElement => {
+  const row = [...host.querySelectorAll<HTMLElement>(".mb-set-item")].find(
+    (el) => (el.querySelector(".mb-set-name")?.textContent ?? "").trim() === title
+      || el.querySelector('.mb-set-item__main[aria-label="打开小记 ' + title + '"]') !== null,
+  );
+  expect(row).toBeTruthy();
+  return row!;
+};
+/** 真机长按：touchstart → 350ms 到点（弹菜单）→ 松手；补发 click 由用例按需自行模拟。 */
+const longPressRow = async (el: Element): Promise<void> => {
+  await act(async () => {
+    const start = new Event("touchstart", { bubbles: true });
+    Object.defineProperty(start, "touches", { value: [{ clientX: 10, clientY: 10 }] });
+    el.dispatchEvent(start);
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    el.dispatchEvent(new Event("touchend", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+/** 右键 / 外接键盘 ContextMenu 键 = 与长按同一个菜单入口。 */
+const contextMenuOn = async (el: Element): Promise<void> => {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -438,21 +466,30 @@ describe("行主区 / 长按拖拽", () => {
     expect(byAria("新建标签")).toBeTruthy();
   });
 
-  it("× 在行右侧（文档/小记同一套；小记卡不再有底部单独 ×）；详情返回键先回列表", async () => {
+  it("详情条目无 ×（文档/小记同一套）；长按 / 右键弹动作菜单（打开 / 移除标签 / 取消）；详情返回键先回列表", async () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
-    const removeButtons = [...host.querySelectorAll<HTMLElement>('.mb-set-item__ctl [aria-label^="移除标签"]')];
-    expect(removeButtons.map((el) => el.getAttribute("aria-label"))).toEqual(["移除标签「周报」", "移除标签「月报」", "移除标签「想法一」"]);
-    for (const button of removeButtons) {
-      expect(button.className).toContain("mb-iconbtn");   // 44×44 命中
-      expect(button.textContent ?? "").toBe("");          // 只有图标
-    }
-    // × 只在右侧独立列（__ctl）里；卡片底部没有额外动作行。
-    const quickRow = host.querySelector('.mb-set-item__main[aria-label="打开小记 想法一"]')!.closest(".mb-set-item")!;
-    const ctlButtons = [...quickRow.querySelectorAll<HTMLElement>(".mb-set-item__ctl button")];
-    expect(ctlButtons.map((el) => el.getAttribute("aria-label"))).toEqual(["移除标签「想法一」"]);
-    expect(quickRow.querySelectorAll(".mb-set-item__ctl .mb-iconbtn").length).toBe(1);
+    // 无 × 渲染（261119 用户裁决：× 换长按动作菜单）：没有「移除标签」按钮、也没有独立控件列。
+    expect(host.querySelector('[aria-label^="移除标签"]')).toBeNull();
+    expect(host.querySelector(".mb-set-item__ctl")).toBeNull();
+    expect(TAB_SRC).not.toMatch(/aria-label=\{"移除标签/);
+    expect(CARD_SRC).not.toMatch(/aria-label=\{"移除标签/);
 
+    // 长按文档行 → 动作菜单（文档行与小记卡同一套语义）。
+    await longPressRow(detailRow("周报"));
+    for (const label of ["打开", "移除标签", "取消"]) expect(byText(label)).toBeTruthy();
+    expect(mocks.confirmMobile).not.toHaveBeenCalled();  // 菜单只弹出，不进确认
+    await click(byText("取消"));
+    expect(mocks.setNoteTags).not.toHaveBeenCalled();     // 取消 = 不调桥
+
+    // 右键（鼠标 / 外接键盘 ContextMenu 键）= 同一个菜单；小记卡同套。
+    await contextMenuOn(detailRow("想法一"));
+    expect(byText("打开")).toBeTruthy();
+    expect(byText("移除标签")).toBeTruthy();
+    await click(byText("取消"));
+
+    // 菜单收完再验返回栈（MobileSheetMenu 退场 170ms 后才卸载它的 backStack 处理器）。
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 220)); });
     // 详情注册了返回栈：consumeBack 先回列表（不会落到「两次返回退出」）。
     await act(async () => { expect(consumeBack()).toBe(true); });
     expect(inDetail()).toBe(false);
@@ -578,41 +615,61 @@ describe("行主区 / 长按拖拽", () => {
 });
 
 describe("详情 / 新建 / 空态 / 降级", () => {
-  it("详情行尾 = ×（IconButton/44 命中、aria 明确）；点击先二次确认，文案说明只删关联；取消不调桥", async () => {
+  it("长按菜单「移除标签」→ 二次确认（文案说明只删关联）→ 文档 setNoteTags(剩余)；确认里取消不调桥", async () => {
     await renderTab();
     await click(rowMain("工作"));
-    const removeBtn = byAria("移除标签「周报」");
-    expect(removeBtn).toBeTruthy();
-    expect(removeBtn!.className).toContain("mb-iconbtn");
-    expect(removeBtn!.textContent ?? "").toBe("");
     mocks.confirmMobile.mockResolvedValueOnce(false);
-    await click(removeBtn);
-    expect(mocks.setNoteTags).not.toHaveBeenCalled();
+    await longPressRow(detailRow("周报"));
+    await click(byText("移除标签"));
     const options = mocks.confirmMobile.mock.calls[0]?.[0] as { title?: string; body?: string };
     expect(options.title).toContain("移除标签「工作」");
     expect(options.body).toContain("仅");
     expect(options.body).toContain("不受影响");
     expect(options.body).toContain("标签本身");
+    expect(mocks.setNoteTags).not.toHaveBeenCalled();   // 确认里取消 = 不调桥
 
     mocks.confirmMobile.mockResolvedValue(true);
-    await click(byAria("移除标签「月报」"));
+    await longPressRow(detailRow("月报"));
+    await click(byText("移除标签"));
     expect(mocks.setNoteTags).toHaveBeenCalledWith("n2", ["t_b"]);
     expect(mocks.listNoteTagLinks).toHaveBeenCalledTimes(2);
     expect(mocks.showToast).toHaveBeenCalledWith("已移除标签");
   });
 
-  it("小记行 ×：确认后 setQuickNoteTags(剩余)；失败给 error toast", async () => {
+  it("小记：长按菜单「移除标签」→ 确认后 setQuickNoteTags(剩余)；失败给 error toast", async () => {
     await renderTab();
     await click(rowMain("工作"));
-    await click(byAria("移除标签「想法一」"));
+    await longPressRow(detailRow("想法一"));
+    await click(byText("移除标签"));
     expect(mocks.setQuickNoteTags).toHaveBeenCalledWith("q1", []);
 
     mocks.showToast.mockClear();
     mocks.setNoteTags.mockRejectedValueOnce(new Error("数据库忙"));
-    await click(byAria("移除标签「周报」"));
+    await longPressRow(detailRow("周报"));
+    await click(byText("移除标签"));
     const [message, options] = mocks.showToast.mock.calls[0] as [string, { type?: string }];
     expect(message).toContain("移除标签失败");
     expect(options?.type).toBe("error");
+  });
+
+  it("长按菜单「打开」与点条目同一动作；长按过的那次补发 click 被吞掉不误开", async () => {
+    await renderTab();
+    await click(rowMain("工作"));
+    await longPressRow(detailRow("周报"));
+    await click(byText("打开"));
+    expect(onOpenNote).toHaveBeenCalledWith("n1");
+    onOpenNote.mockClear();
+
+    // 长按弹菜单后，浏览器在松手时补发的那次 click 必须被吞掉（否则菜单 + 打开同时发生）。
+    const row = detailRow("月报");
+    const main = row.querySelector(".mb-set-item__main")!;
+    await longPressRow(row);
+    await click(main);
+    expect(onOpenNote).not.toHaveBeenCalled();
+    await click(byText("取消"));
+    // 下一次正常点击仍能打开。
+    await click(main);
+    expect(onOpenNote).toHaveBeenCalledWith("n2");
   });
 
   it("「＋新建」：弹输入 → 落库 → 刷新（同名再建就地报错、不调桥）", async () => {

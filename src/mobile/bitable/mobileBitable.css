@@ -4,17 +4,19 @@
  * 单一来源：移动端自有样式层（不引桌面样式）；颜色/字号/间距/圆角**只用令牌**（ui-metrics 硬指标）。
  * 结构类名沿用 `mbt-` 前缀；表单/详情/配置是新增交互形态，不是对旧规则的覆盖。
  */
-/* 261112 域归位（04 报告 P1-1）：多维表只读/编辑态规则从 mobile.css 原样迁入（只搬不写）。
-   放在本文件 .mobile-bitable 规则**之前**：保持「mobile.css 在前、mobileBitable.css 在后」的原级联顺序
-   （.mobile-bitable 的 padding 简写 → 下方 padding-left/right 长写仍然后者生效，安全区不受影响）。 */
+/* 261112 域归位（04 报告 P1-1）：多维表只读/编辑态规则从 mobile.css 原样迁入（只搬不写）。 */
 /* 多维表只读视图（kind=bitable）：表名/视图元信息 + 横向滚动网格 + 选项色块 + 附件缩略图。 */
 .mobile-bitable {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  /* 261030：多维表内容区左右内距跟页面内距对齐（原来 10 太贴边，卡片/表格贴着边框）。 */
-  padding: var(--lake-space-md) var(--mb-page-pad) 0;
+  /* 261119（task-3 表格↔表单切换跳动收口）：壳层只留「顶部留白 + 左右安全区」，页面内距 --mb-page-pad
+     由各内容块自管（.mbt-header / .mbt-grid-wrap / .mbt-scroll / .mbt-form-fields… 同一来源）⇒ 两种视图
+     容器几何同源、切换不跳。此前这里写 --mb-page-pad，被 261103 A1 的安全区长写整体顶掉（竖屏归 0）⇒
+     表格贴边、序号列贴左缘、「N 条记录」顶到右缘；表单态又在 .mbt-is-form 下另起一套头部内距 ⇒ 头部跳位。 */
+  padding: var(--lake-space-md) var(--mobile-right-safe-area) 0 var(--mobile-left-safe-area);
   overflow: hidden;
 }
 /* 261103 六批 A2：旧的元信息行（.mbt-meta*）与编辑态工具行（.mbt-toolbar）已随「3 行 → 1 行/2 行」头部收口删除，
@@ -27,7 +29,7 @@
   background: var(--lake-border-2);
 }
 .mbt-view-notice {
-  margin: 0 0 8px;
+  margin: 0 var(--mb-page-pad) 8px;
   padding: 6px 10px;
   border: .5px solid var(--lake-border-1);
   border-radius: var(--mb-radius);
@@ -39,6 +41,8 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* 页面内距自管（261119 切换收口）：序号列不贴左缘、「N 条记录」统计行完整可见。 */
+  margin: 0 var(--mb-page-pad);
   border: .5px solid var(--lake-border-1);
   border-radius: var(--mb-radius) var(--mb-radius) 0 0;
 }
@@ -225,6 +229,11 @@
 .mbt-load-more:active {
   background: var(--lake-bg-press);
 }
+/* 看板/画册分支里直接挂在 .mobile-bitable 下的「加载更多」：同样吃页面内距（td 内的同名按钮不动）。 */
+.mobile-bitable > .mbt-load-more {
+  width: auto;
+  margin: 0 var(--mb-page-pad);
+}
 /* 面板内控件排版（记录 / 字段两个面板共用） */
 .mbt-record-readonly {
   color: var(--lake-text-2);
@@ -275,12 +284,8 @@
   gap: 8px;
 }
 
-.mobile-bitable {
-  position: relative;
-  /* 261103 六批 A1：横屏刘海下整块多维表让出左右安全区（竖屏 0；内部 --mb-page-pad 仍生效）。 */
-  padding-left: var(--mobile-left-safe-area);
-  padding-right: var(--mobile-right-safe-area);
-}
+/* 261103 六批 A1 的安全区长写已并入上方 .mobile-bitable 单条规则（261119）：横屏刘海下整块多维表让出
+   左右安全区，页面内距由内容块自管，避免两套 padding 声明互相顶掉。 */
 
 /* ── 头部 = 两行（261103 四批：页签单独一行，放在表名行下面）──
  * 第 1 行：[☰ 数据表名] …… [字段] [筛选] [＋]
@@ -291,6 +296,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--lake-space-xxs);
+  /* 头部左右内距 = 页面内距（唯一来源）：两视图（表格/表单）头部同一几何，只换按钮集合，不换槽位。 */
+  padding: 0 var(--mb-page-pad);
   margin-bottom: var(--lake-space-sm);
 }
 .mbt-header__row1 {
@@ -377,6 +384,12 @@
 }
 .mbt-viewmore:active { background: var(--lake-bg-press); }
 
+/* 261119 F-D（UI 跳变审计）：多选态顶栏与两行头部**同槽换装**——头部留在流里定高（1 行 56 / 2 行 98 同源），
+   SelectionTopBar 绝对定位盖在同一个槽上，进入/退出多选网格不位移（原先两个元素互换 ⇒ 上跳 ≈50px）。 */
+.mbt-headslot { position: relative; }
+.mbt-headslot.is-selecting .mbt-header { visibility: hidden; }
+.mbt-headslot__sel { position: absolute; inset: 0; }
+
 /* 网格末尾统计行（记录数从头部移来；不参与头部布局，头部也就不依赖 records）。 */
 .mbt-grid-foot {
   display: flex;
@@ -418,8 +431,8 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  /* 滚到底时最后一张卡要停在胶囊之上：56 + 间隔 + 安全区 + 20 + 32（实测需 ≈112，取 116）。 */
-  padding-bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--lake-space-xxl) + var(--lake-space-huge));
+  /* 左右 = 页面内距（自管）；滚到底时最后一张卡要停在胶囊之上：56 + 间隔 + 安全区 + 20 + 32（实测需 ≈112，取 116）。 */
+  padding: 0 var(--mb-page-pad) calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--lake-space-xxl) + var(--lake-space-huge));
 }
 .mbt-grid-wrap {
   /* 同上：表格滚到底时最后一行不能被底部胶囊压住。 */
@@ -479,9 +492,8 @@
 .mbt-cards__list.cols-2 .mbt-card__k { display: block; margin-bottom: 2px; }
 
 /* ── 表单（填写态）──────────────────────────────────────────── */
-.mobile-bitable.mbt-is-form { padding: 0; }
-/* 表单页容器 padding:0（表单自己接管内距）⇒ 头部要单独补页面内距，否则贴边。 */
-.mobile-bitable.mbt-is-form .mbt-header { padding: 0 var(--mb-page-pad); }
+/* 261119：表单态不再单设容器/头部 padding（几何与表格视图同源，见文件头 .mobile-bitable 注释）；
+   表单自己的 .mbt-form-fields / .mbt-form-submit 与网格 .mbt-grid-wrap 同样自管 --mb-page-pad。 */
 .mbt-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .mbt-form-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--lake-bg-window); }
 .mbt-form-fields { display: flex; flex-direction: column; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }
@@ -593,12 +605,15 @@
   display: flex;
   align-items: center;
   gap: var(--lake-space-md);
-  padding: var(--lake-space-xs) var(--mb-page-pad);
+  /* 261119 task-5（topChrome 契约 data-edge="overlay"）：整页从屏幕顶展开 ⇒ 顶部安全区在本表面消费**一次**
+     （此前不消费 ⇒ 右上「编辑/只读」压在系统时钟上）。 */
+  padding: calc(var(--lake-space-xs) + var(--mb-chrome-inset-top)) var(--mb-page-pad) var(--lake-space-xs);
   border-bottom: .5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
 }
 .mbt-page-bar__title { flex: 1; color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium); }
-.mbt-page-body { flex: 1; min-height: 0; overflow: auto; padding: var(--lake-space-xxl) var(--mb-reader-pad); }
+
+.mbt-page-body { flex: 1; min-height: 0; overflow: auto; padding: var(--lake-space-xxl) var(--mb-page-pad); }
 .mbt-page-title { margin: 0 0 var(--lake-space-xl); color: var(--lake-text-1); font-size: var(--lake-font-size-display); line-height: 1.35; }
 .mbt-detail { padding: var(--lake-space-xs) var(--lake-space-lg); border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }
 .mbt-detail-row { display: flex; gap: var(--lake-space-lg); padding: var(--lake-space-lg) 0; border-top: .5px solid var(--lake-border-1); }
@@ -717,6 +732,7 @@
   min-height: 0;
   display: flex;
   gap: var(--lake-space-md);
+  padding: 0 var(--mb-page-pad);
   overflow-x: auto;
 }
 .mbt-kanban-col {
@@ -762,7 +778,7 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--lake-space-md);
   align-content: start;
-  padding-bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--lake-space-xxl));
+  padding: 0 var(--mb-page-pad) calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--lake-space-xxl));
 }
 .mbt-gallery-card {
   overflow: hidden;
@@ -779,7 +795,7 @@
 .mbt-gallery-hint { grid-column: 1 / -1; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.6; text-align: center; }
 /* 261110：月历头/星期行/42 格/日号/打点 已收编为共享原语（ui/MonthCalendar → ui/monthCalendar.css 的 .mb-calendar-*），
    本文件只保留多维表日历**视图自己**的容器与「选中日日程列表」。 */
-.mbt-calendar { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.mbt-calendar { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--mb-page-pad); overflow: auto; }
 .mbt-calendar-list { margin-top: var(--lake-space-xl); }
 .mbt-calendar-list__head { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); margin-bottom: var(--lake-space-sm); }
 .mbt-calendar-empty { padding: var(--lake-space-xl) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); text-align: center; }
@@ -810,7 +826,7 @@
 /* 值溢出 +N 徽标（261117）：中性弱化，title 列全量 */
 .mbt-value-more { color: var(--lake-text-3); background: transparent; border: .5px dashed var(--lake-border-strong); }
 
-.mbt-form-edittoggle { display: flex; justify-content: flex-end; padding: var(--lake-space-sm) 0 0; }
+.mbt-form-edittoggle { display: flex; justify-content: flex-end; padding: var(--lake-space-sm) var(--mb-page-pad) 0; }
 .mbt-form-editor { display: flex; flex-direction: column; gap: var(--lake-space-lg); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }
 .mbt-form-editor__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .mbt-form-editor__list { display: flex; flex-direction: column; gap: var(--lake-space-xs); }
@@ -966,9 +982,12 @@
 /* 行内堆叠槽（控件组竖向排列；宽度撑满 --field 行的 ctl）。 */
 .mbt-feditor__group { display: flex; flex-direction: column; gap: var(--lake-space-sm); width: 100%; min-width: 0; }
 .mbt-feditor__options { display: flex; flex-direction: column; gap: var(--lake-space-sm); flex: 1 1 100%; min-width: 0; }
+.mbt-feditor__optwrap { display: flex; flex-direction: column; gap: var(--lake-space-sm); }
 .mbt-feditor__option { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .mbt-feditor__option .mbt-form-input { flex: 1; min-width: 0; }
-.mbt-feditor__swatch { flex: 0 0 auto; width: 14px; height: 14px; border-radius: var(--lake-radius-pill); background: var(--lake-bg-sunken); }
+/* 261119（用户点单）：选项色点 = 可点按钮（点开同款 .mbt-feditor__colors 色板改 option.color）；
+   数据驱动色值的例外同进度条颜色行。 */
+.mbt-feditor__swatch { flex: 0 0 auto; width: 14px; height: 14px; padding: 0; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-bg-sunken); cursor: pointer; }
 .mbt-feditor__colors { display: flex; flex-wrap: wrap; gap: var(--lake-space-md); }
 .mbt-feditor__color {
   width: 28px;

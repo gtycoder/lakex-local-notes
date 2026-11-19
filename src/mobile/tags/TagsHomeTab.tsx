@@ -9,14 +9,15 @@
  *  · 长按 350ms 进入拖拽排序（复用既有 qn-tag-manager 拖拽态与判据）→ 松手 reorderQuickNoteTags（设备本地顺序）；
  *    拖拽过的那一次 click 被吞掉，不会误进详情。
  *  · 详情 = **独立页头**（左返回、中标题 = 标签名、右「⋯」，副标题计数），不渲染列表页头、没有「＋」；
- *    「文档」「小记」两段各带计数；小记卡 = 首页同一套富预览（限高 180px + 展开/收起），× 在右侧独立列。
+ *    「文档」「小记」两段各带计数；小记卡 = 首页同一套富预览（限高 180px + 展开/收起）；
+ *    详情条目动作（打开 / 移除标签 / 取消）= **长按条目或右键**弹动作菜单（261119 用户裁决：× 已移除，文档行与小记卡同一套语义）。
  *
  * 版面只用既有原语：mobile-scroll / mobile-settings-head（+ 必要覆盖 .mobile-page-head）/ mb-set-title /
  * mb-set-items / mb-set-item / mb-set-block / mb-btn / mb-iconbtn / mb-empty / quick-note-preview 系列。
  * 计数/聚合复用 tags/tagAggregate；文案复用 tagManageCopy。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, GripVertical, Merge, MoreVertical, Pencil, Plus, TagX, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, normalizeQuickNoteTag } from "../../core/quickNoteTags";
 import { formatRelativeTime } from "../lib/listTime";
@@ -33,6 +34,7 @@ import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
 import { createTagFromName } from "./tagCreate";
 import { useTagDragSort } from "./useTagDragSort";
+import { useTagRowMenuPress } from "./useTagRowMenuPress";
 import { TagQuickNoteCard } from "./TagQuickNoteCard";
 import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
 import { toastActionError } from "../lib/actionError";
@@ -121,10 +123,28 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   const reloadAll = useCallback(async (): Promise<void> => { await loadLinks(); await onChanged(); }, [loadLinks, onChanged]);
   // 长按拖拽排序（逻辑在 useTagDragSort：状态 + touch 监听，落库后 reloadAll）。
   const { drag, pressedId, suppressClick, longPress } = useTagDragSort({ tags, reloadAll, setBusy });
+  // 详情条目长按 / 右键 → 动作菜单（与小记卡同一套接线；只挂在详情行，列表页的长按归拖拽排序）。
+  const { pressProps: rowPressProps, swallowClick: swallowRowClick } = useTagRowMenuPress();
 
   const openRow = (row: TagAggregateRow): void => {
     if (row.kind === "doc") onOpenNote(row.id);
     else onOpenQuickNote(row.id);
+  };
+
+  // ── 详情条目动作菜单（长按 / 右键；261119 用户裁决：× 改长按菜单）────────────────
+  const [rowMenu, setRowMenu] = useState<TagAggregateRow | null>(null);
+  const rowMenuItems: MobileSheetItem[] = [
+    { id: "open", label: "打开", icon: ExternalLink },
+    { id: "remove", label: "移除标签", icon: TagX },
+    { id: "cancel", label: "取消", icon: X },
+  ];
+
+  const onRowMenuSelect = (item: MobileSheetItem): void => {
+    const row = rowMenu;
+    setRowMenu(null);
+    if (!row || item.id === "cancel") return;
+    if (item.id === "open") openRow(row);
+    else if (item.id === "remove") void removeRow(row);
   };
 
   // ── 行 ⋯ 菜单 ────────────────────────────────────────────────────────────────
@@ -232,7 +252,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     }
   };
 
-  // ── 详情行 × ：先二次确认（只删该条关联），确认后才落库 ───────────────────────
+  // ── 详情条目「移除标签」（长按菜单进）：先二次确认（只删该条关联），确认后才落库 ────
   const removeRow = async (row: TagAggregateRow): Promise<void> => {
     if (!selectedTag || busy) return;
     const ok = await confirmMobile({
@@ -285,43 +305,31 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     setSelectedTagId(tag.id);
   };
 
-  /** 文档行：标题 + 类型/日期弱化行；× 在右侧独立列（IconButton 44；stopPropagation 只走移除）。 */
+  /** 文档行：标题 + 类型/日期弱化行；动作 = 长按 / 右键弹菜单（无 ×，261119 用户裁决）。 */
   const renderDocRow = (row: TagAggregateRow) => (
-    <div key={"doc-" + row.id} className="mb-set-item">
+    <div key={"doc-" + row.id} className="mb-set-item" {...rowPressProps(() => setRowMenu(row))}>
       <div
         className="mb-set-item__main"
         role="button"
         tabIndex={0}
-        onClick={() => openRow(row)}
+        onClick={() => { if (swallowRowClick()) return; openRow(row); }}
         onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRow(row); } }}
       >
         <div className="mb-set-name">{row.title}</div>
         <div className="mb-set-item__desc">文档　{fmtTime(row.updatedAt)}</div>
       </div>
-      <div className="mb-set-item__ctl">
-        <button
-          type="button"
-          className="mb-iconbtn"
-          disabled={busy}
-          aria-label={"移除标签「" + row.title + "」"}
-          onClick={(event) => { event.stopPropagation(); void removeRow(row); }}
-        >
-          <X size={18} />
-        </button>
-      </div>
     </div>
   );
 
-  /** 小记卡：富预览（限高 + 展开/收起）+ × 右侧独立列，见 TagQuickNoteCard。 */
+  /** 小记卡：富预览（限高 + 展开/收起）；动作 = 长按 / 右键弹菜单，见 TagQuickNoteCard。 */
   const renderQuickRow = (row: TagAggregateRow) => (
     <TagQuickNoteCard
       key={"quick-" + row.id}
       noteId={row.id}
       title={row.title}
       updatedAt={row.updatedAt}
-      busy={busy}
       onOpen={() => onOpenQuickNote(row.id)}
-      onRemove={() => void removeRow(row)}
+      onOpenActions={() => setRowMenu(row)}
     />
   );
 
@@ -459,6 +467,14 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         items={menuItems}
         onClose={() => setMenuFor(null)}
         onSelect={onMenuSelect}
+      />
+
+      {/* 详情条目动作菜单（长按 / 右键 / 外接键盘 ContextMenu 键）：打开 / 移除标签 / 取消 */}
+      <MobileSheetMenu
+        open={rowMenu !== null}
+        items={rowMenuItems}
+        onClose={() => setRowMenu(null)}
+        onSelect={onRowMenuSelect}
       />
 
       {/* ＋新建 */}

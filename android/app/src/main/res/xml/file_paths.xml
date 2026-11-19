@@ -4,4 +4,12 @@
     <files-path name="note_assets" path="note-assets/" />
     <!-- 应用内更新（261109）：安装包下载完成后落在 App 私有 cache/updates/，只把该单文件暴露给系统安装器 -->
     <cache-path name="updates" path="updates/" />
+    <!-- 相机直出（261118）：CameraCapturePlugin 的 ACTION_IMAGE_CAPTURE EXTRA_OUTPUT 落盘目录（filesDir/camera/）。
+         JS 读完字节即删；缺这条则 FileProvider.getUriForFile 抛「未配置根」，拍照直接失败。 -->
+    <files-path name="camera" path="camera/" />
+    <!-- WebView <input capture>（无原生桥的回退路径）走 Capacitor 自带 capture 分支时，临时照片落在
+         external-files/Pictures（BridgeWebChromeClient.createImageFile）。**缺这条 = 「拍照变相册」根因之一**：
+         FileProvider.getUriForFile 抛「未配置根」⇒ Capacitor 判定「capture 起不来」⇒ 静默退化成普通文件选择器
+         （Android 13+ 即系统 Photo Picker/相册）。两条根因的取证见 CameraCapturePlugin 头注释。 -->
+    <external-files-path name="capture_pictures" path="Pictures/" />
 </paths>

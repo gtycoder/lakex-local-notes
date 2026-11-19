@@ -13,6 +13,11 @@
  * 取值胶囊 = .mb-chip、输入 = .mbt-form-input（多维表自有输入）、开关 = .mb-switch、
  * 底栏 = .mb-sheet__foot、页内距 = .mb-sheet__body--form（--mb-page-pad）。
  * 本文件只保留「选项行 / 色板」两个布局槽（数据驱动）。
+ *
+ * 261119 用户点单：选项左侧色点**可改色** —— 点色点在该选项下方展开本面板已有的
+ * .mbt-feditor__colors 色板（与「进度条颜色」同款），选色写 option.color；候选色 =
+ * core/colorPalette 的 COLOR_BOARD_VALUES（与桌面端字段编辑器选项色板 ColorPalette 同一数据源，
+ * **不自造色值**；optionColorHex 原样透传 hex）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isImeConfirming } from "../../core/ime";
@@ -30,6 +35,7 @@ import {
   type BitableFieldOption,
   type BitableFieldType,
 } from "../../core/bitableDoc.js";
+import { COLOR_BOARD_VALUES } from "../../core/colorPalette.js";
 import type { BitableFieldConfigPatch } from "../../core/bitableMutations";
 import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
@@ -83,6 +89,11 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
 
   const addOption = () => {
     setOptions((prev) => [...prev, { id: "opt" + Math.random().toString(36).slice(2, 12), name: "", color: BITABLE_OPTION_PALETTE[prev.length % BITABLE_OPTION_PALETTE.length] }]);
+  };
+  /** 正在改色的选项 id（色点 → 展开该选项的选色板；同一时刻只开一个）。 */
+  const [colorOptionId, setColorOptionId] = useState<string | null>(null);
+  const setOptionColor = (id: string, color: string | undefined) => {
+    setOptions((prev) => prev.map((option) => (option.id === id ? { ...option, color } : option)));
   };
   const commitOptionName = (id: string, value: string) => {
     setOptions((prev) => prev.map((option) => (option.id === id ? { ...option, name: value } : option)));
@@ -229,18 +240,35 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
               <div className="mb-set-item__ctl">
                 <div className="mbt-feditor__options">
                   {options.map((option, index) => (
-                    <div key={option.id} className="mbt-feditor__option">
-                      <span className="mbt-feditor__swatch" style={optionColorHex(option.color) ? { background: optionColorHex(option.color) } : undefined} aria-hidden="true" />
-                      <input className="mbt-form-input" value={option.name} placeholder={"选项 " + (index + 1)} aria-label={"选项 " + (index + 1)}
-                        ref={(el) => { optionInputRefs.current[index] = el; }}
-                        onChange={(event) => commitOptionName(option.id, event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && !isImeConfirming(event)) {
-                            event.preventDefault();
-                            advanceFromOption(index);
-                          }
-                        }} />
-                      <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
+                    <div key={option.id} className="mbt-feditor__optwrap">
+                      <div className="mbt-feditor__option">
+                        <button type="button" className="mbt-feditor__swatch mb-tap"
+                          style={optionColorHex(option.color) ? { background: optionColorHex(option.color) } : undefined}
+                          aria-label={"选项颜色：" + (option.name || "选项 " + (index + 1))}
+                          aria-expanded={colorOptionId === option.id}
+                          onClick={() => setColorOptionId((current) => (current === option.id ? null : option.id))} />
+                        <input className="mbt-form-input" value={option.name} placeholder={"选项 " + (index + 1)} aria-label={"选项 " + (index + 1)}
+                          ref={(el) => { optionInputRefs.current[index] = el; }}
+                          onChange={(event) => commitOptionName(option.id, event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !isImeConfirming(event)) {
+                              event.preventDefault();
+                              advanceFromOption(index);
+                            }
+                          }} />
+                        <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
+                      </div>
+                      {colorOptionId === option.id && (
+                        <div className="mbt-feditor__colors" role="group" aria-label={"选项颜色：" + (option.name || "选项 " + (index + 1))}>
+                          <button type="button" className={"mbt-feditor__color" + (!option.color ? " is-on" : "")} aria-label="默认颜色"
+                            onClick={() => setOptionColor(option.id, undefined)} />
+                          {COLOR_BOARD_VALUES.map((color) => (
+                            <button key={color} type="button" aria-label={"颜色 " + color}
+                              className={"mbt-feditor__color" + (optionColorHex(option.color)?.toLowerCase() === color.toLowerCase() ? " is-on" : "")}
+                              style={{ background: color }} onClick={() => setOptionColor(option.id, color)} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={addOption}><Plus size={16} />新建选项</button>

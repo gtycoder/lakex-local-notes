@@ -5,8 +5,10 @@
  * 工具栏，后续文档侧改了这边必须跟着变）。抽出来后任何 dock 变化（新增项 / 新面板 / 样式）**两端自动一致**，
  * 不再各写一份会漂移的接线。
  *
- * 插入通道只有一条：隐藏 `<input type=file>` → 内核 `insertFiles`（图片 / 拍照 / 附件 / 音频 / 视频，
- * 类型由 `mediaKindOfFilename` 路由成对应卡片）；表格走内核 `table` 命令（缺 rows/columns 会报错，默认 3×3）。
+ * 插入通道只有一条：**内核 `insertFiles`**（图片 / 拍照 / 附件 / 音频 / 视频，类型由 `mediaKindOfFilename`
+ * 路由成对应卡片）；文件来源两条 —— 隐藏 `<input type=file>`（图片/附件/音频/视频）与原生相机直出（拍照，
+ * `native/cameraCapture.takeCameraPhoto`，261118「拍照变相册」修复：WebView file input 的 capture 会被
+ * 系统选择器吞掉，拍照必须直调 ACTION_IMAGE_CAPTURE）；表格走内核 `table` 命令（缺 rows/columns 会报错，默认 3×3）。
  */
 import { useRef } from "react";
 import { EditorDock } from "./EditorDock";
@@ -14,6 +16,7 @@ import { editorCommandFailureMessage, execEditorCommandResult } from "./execComm
 import { showToast } from "../ui/toastBus";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { mediaKindOfFilename } from "../../core/assetNaming.js";
+import { takeCameraPhoto } from "../native/cameraCapture";
 
 export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLimits }: {
   /** 内核实例（宿主用 state 持有，就绪后必须触发一次重渲染，否则 dock 一直拿到 null）。 */
@@ -33,15 +36,33 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
     if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(command, result), { type: "error" });
   };
 
-  /** 复用隐藏 file input：`capture` 传 "environment" 时 Android 直接开相机拍照（拍完即当图片插入）。 */
-  const insertFileViaInput = (accept: string, capture?: "environment") => {
+  /** 复用隐藏 file input（图片/附件/音频/视频）。拍照不走它 —— capture 会被系统选择器吞掉，见 insertCameraPhoto。 */
+  const insertFileViaInput = (accept: string) => {
     const input = fileInputRef.current;
     if (!input) return;
     input.accept = accept;
-    if (capture) input.setAttribute("capture", capture);
-    else input.removeAttribute("capture");
     input.value = "";
     input.click();
+  };
+
+  /** 选到的文件 → 内核 insertFiles（图片/拍照/附件/音频/视频的唯一插入通道）。 */
+  const insertFile = (file: File) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    const kind = mediaKindOfFilename(file.name);
+    const opts = kind ? { category: kind, from: "ui" } : undefined;
+    const result = execEditorCommandResult(ed, "insertFiles", [file], opts);
+    if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage("insertFiles", result), { type: "error" });
+  };
+
+  /**
+   * 拍照 = 原生相机直出（261118）：ACTION_IMAGE_CAPTURE + FileProvider 落盘 → File → 与相册选图同一条
+   * insertFiles 通道。用户取消返回 null 不插入；原生失败由 takeCameraPhoto 显式提示（绝不静默开相册）；
+   * web 预览（mobile-preview）无原生桥时它内部回退既有 file input（降级行为保持现状）。
+   */
+  const insertCameraPhoto = async () => {
+    const file = await takeCameraPhoto();
+    if (file) insertFile(file);
   };
 
   return (
@@ -52,7 +73,7 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
         undoBackend={undoBackend}
         undoLimits={undoLimits}
         onInsertImage={() => insertFileViaInput("image/*")}
-        onInsertCamera={() => insertFileViaInput("image/*", "environment")}
+        onInsertCamera={() => void insertCameraPhoto()}
         onInsertAttachment={() => insertFileViaInput("")}
         onInsertAudio={() => insertFileViaInput("audio/*")}
         onInsertVideo={() => insertFileViaInput("video/*")}
@@ -67,12 +88,7 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
         style={{ display: "none" }}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          const ed = editorRef.current;
-          if (!file || !ed) return;
-          const kind = mediaKindOfFilename(file.name);
-          const opts = kind ? { category: kind, from: "ui" } : undefined;
-          const result = execEditorCommandResult(ed, "insertFiles", [file], opts);
-          if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage("insertFiles", result), { type: "error" });
+          if (file) insertFile(file);
         }}
       />
     </>

@@ -29,6 +29,12 @@ const SURFACE_MARKERS: { token: string; needsSize: boolean }[] = [
   { token: "mbt-header", needsSize: false },
   { token: "mb-sheet__head", needsSize: false },
   { token: "attachment-preview__toolbar", needsSize: false },
+  // 261119（task-5 + 跳变审计 F-G）：多维表只读行详情页顶栏（overlay，整页从屏幕顶展开）；
+  // 菜单 Sheet 整屏子菜单（overlay，下钻层 top:0 直贴状态栏的潜伏项，登记后护栏钉住）。
+  { token: "mbt-page-bar", needsSize: false },
+  { token: "mb-menusheet__submenu", needsSize: false },
+  // 261119 F-A（lead 集成补录）：文档内查找条 = 覆盖式浮条（nested —— 锚 .mobile-workspace-body 顶部，不消费安全区）。
+  { token: "mb-find", needsSize: false },
 ];
 const EDGE_VALUES = ["viewport", "overlay", "nested", "sheet"];
 const SIZE_VALUES = ["compact", "regular"];
