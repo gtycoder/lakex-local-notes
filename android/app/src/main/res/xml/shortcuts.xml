@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 长按桌面图标出现的静态快捷方式（Android App Shortcuts）。
-     「小记」= 直接进入新建小记：走 lakexlocalnotes://quick-note 深链，App 侧由 @capacitor/app 的
-     appUrlOpen / getLaunchUrl 接住（见 src/mobile/quickNoteShortcut.ts）。 -->
+<!-- 长按桌面图标出现的静态快捷方式（Android App Shortcuts），三项并列（261119）：
+     「小记」= 直接进入新建小记；「拍照小记」/「剪切板小记」= 同一条 capture 深链加 ?src=camera / ?src=clipboard
+     （模式解析见 src/mobile/native/quickNoteShortcut.ts；无 src 参数 = 现有「小记」语义零变化）。
+     App 侧由 @capacitor/app 的 appUrlOpen / getLaunchUrl 接住（见 src/mobile/native/quickNoteShortcut.ts）。
+     query 不影响 intent-filter 的 scheme+host 匹配（AndroidManifest 只声明 scheme+host、无 path）。 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:shortcutId="quick-note"
@@ -15,6 +17,36 @@
             android:targetPackage="com.lakexlocalnotes.android"
             android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"
             android:data="lakexlocalnotes://quick-note" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <!-- 拍照小记（261119）：同一条 capture 深链 + ?src=camera ⇒ 写作卡就绪即调起系统相机，
+         拍完照片入卡（initialInsert/insertFiles）；取消保留空白写作卡。 -->
+    <shortcut
+        android:shortcutId="quick-note-camera"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_camera_note_short"
+        android:shortcutLongLabel="@string/shortcut_camera_note_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.lakexlocalnotes.android"
+            android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"
+            android:data="lakexlocalnotes://quick-note?src=camera" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <!-- 剪切板小记（261119）：同一条 capture 深链 + ?src=clipboard ⇒ 读最新一条剪贴板文本预填；
+         空/非文本 = toast + 空白写作卡。 -->
+    <shortcut
+        android:shortcutId="quick-note-clipboard"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_clipboard_note_short"
+        android:shortcutLongLabel="@string/shortcut_clipboard_note_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.lakexlocalnotes.android"
+            android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"
+            android:data="lakexlocalnotes://quick-note?src=clipboard" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>

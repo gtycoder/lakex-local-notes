@@ -6,7 +6,6 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
-import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
 import type { LocalNoteSummary } from "./data/noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import { diaryEntries, diaryNotebooks } from "../core/diary.js";
@@ -25,11 +24,10 @@ const DefaultNotebookPickerSheet = lazy(() => import("./settings/DefaultNotebook
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
-import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
+import { QuickNoteComposerLazy, loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
 import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
-import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholder";
 import { subscribeHistorySettings } from "./lib/historySettingsSync";
 import { useFormFactor } from "./pad/useFormFactor";
 import { usePadShortcuts } from "./pad/usePadShortcuts";
@@ -53,11 +51,10 @@ import { Toasts } from "./ui/Toasts";
 const AttachmentPreview = lazy(() => import("../features/attachment/AttachmentPreview").then((m) => ({ default: m.AttachmentPreview })));
 const ImageLightbox = lazy(() => import("../features/editor/ImageLightbox").then((m) => ({ default: m.ImageLightbox })));
 import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
-import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
+import { subscribeQuickNoteShortcut, type QuickNoteCaptureMode } from "./native/quickNoteShortcut";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
 import { formatCrashEntries, readCrashLog } from "./lib/crashLog";
-import { checkMobileDbHealth, classifyDbOpenError, describeDbHealth } from "./data/dbHealth";
 import { ensureDb } from "./bridge/context";
 import { showToast } from "./ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
@@ -114,7 +111,7 @@ export type Route =
   | { kind: "home"; tab: HomeTab }
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
-export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
+export function MobileApp({ initialCapture = false, initialCaptureMode = null }: { initialCapture?: boolean; initialCaptureMode?: QuickNoteCaptureMode | null } = {}) {
   /** 上传超限提示由共享错误总线发出；动态加载避免把设置/体积文案模块塞进移动入口首屏。 */
   useEffect(() => {
     let cancelled = false;
@@ -199,12 +196,18 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。
    *  261022：冷启动由原生同步 hint 在首帧前给出判定 ⇒ 首帧直接进 capture，不再先画首页骨架。 */
   const [captureOpen, setCaptureOpen] = useState(initialCapture);
+  /** camera 模式拍到的照片：经 composer 的 initialInsert（与首页「拍摄」同一条 insertFiles 通道）入卡。 */
+  const [captureInsert, setCaptureInsert] = useState<{ files?: File[] } | null>(null);
   /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
   const [captureSeed, setCaptureSeed] = useState<QuickNoteSeed | null>(null);
   /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
   const [captureNonce, setCaptureNonce] = useState(0);
+  /** 剪切板模式「预填还没落定」：读完剪贴板才挂写作卡（一次成型，不空挂内核再重挂）。 */
+  const prefillPendingRef = useRef(initialCapture && initialCaptureMode === "clipboard");
   /** 分享带入是否已落成草稿：落好再挂内核（composer 只在挂载时读 initialBody）。 */
-  const [seedReady, setSeedReady] = useState(true);
+  const [seedReady, setSeedReady] = useState(!prefillPendingRef.current);
+  /** 冷启动那一次取数流只跑一次（React StrictMode 双挂载/重复 effect 不许再弹相机）。 */
+  const coldFlowRanRef = useRef(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<LocalNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
@@ -321,10 +324,13 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         });
       }
       // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
-      (window as unknown as Record<string, unknown>).__lakePerf = {
-        reset: resetAssetPerf,
-        snapshot: snapshotAssetPerf,
-      };
+      // 261119 首屏瘦身：调试全局不是首屏能力 ⇒ 动态 import（注册只晚一个微任务，CDP 时序不受影响）。
+      void import("./native/assetPerf").then((m) => {
+        (window as unknown as Record<string, unknown>).__lakePerf = {
+          reset: m.resetAssetPerf,
+          snapshot: m.snapshotAssetPerf,
+        };
+      });
       await refreshAll();
       setPhase("ready");
       // 便携包恢复提示：复用启动时已预取的编排模块（失败 = 无提示，不影响就绪）。
@@ -337,6 +343,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       bootErrorRef.current = e;
       setError(getNativeErrorMessage(e));
       // 坏库与普通启动失败分开：坏库要立刻给「从云端恢复」出口，光重试没有意义。
+      // 261119 首屏瘦身：坏库判定只在失败路径用 ⇒ 动态 import（调用口径不变）。
+      const { classifyDbOpenError } = await import("./data/dbHealth");
       if (classifyDbOpenError(e) === "corrupt") setDbUnhealthy({ reason: getNativeErrorMessage(e) });
     }
   }, [refreshAll]);
@@ -416,9 +424,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
+          // 261119 首屏瘦身：坏库自检只在延后自检/失败路径用 ⇒ 动态 import（调用口径不变）。
+          const { checkMobileDbHealth, describeDbHealth } = await import("./data/dbHealth");
           const health = await checkMobileDbHealth(await ensureDb());
           if (!cancelled && !health.ok) setDbUnhealthy({ reason: describeDbHealth(health) });
         } catch (error) {
+          const { classifyDbOpenError } = await import("./data/dbHealth");
           if (!cancelled && classifyDbOpenError(error) === "corrupt") setDbUnhealthy({ reason: getNativeErrorMessage(error) });
         }
       })();
@@ -436,22 +447,31 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 内核显示破图。这里统一接管为「图片未下载，点击下载」：点击补拉这一篇/这一条缺失的媒体（维护域，
    * 不阻塞其它操作），成功后就地把所有同 key 的图片恢复成真实地址；离线/未配置时给提示。
    */
-  useEffect(() => installMissingAssetPlaceholders(document, {
-    download: async (refs) => {
-      const noteIds = [...new Set(refs.filter((r) => r.space === "note").map((r) => r.noteId))];
-      const quickIds = [...new Set(refs.filter((r) => r.space === "quick-notes").map((r) => r.noteId))];
-      let downloaded = 0;
-      let failed = 0;
-      try {
-        if (noteIds.length > 0) { const got = await bridge.ensureNoteAssets(noteIds); downloaded += got.downloaded; failed += got.failed; }
-        if (quickIds.length > 0) { const got = await bridge.ensureQuickNoteAssets(quickIds); downloaded += got.downloaded; failed += got.failed; }
-      } catch (error) {
-        console.warn("[asset] 占位图补拉失败", error);
-      }
-      return { downloaded, failed };
-    },
-    showToast: (message, type) => showToast(message, { type: type ?? "info" }),
-  }), []);
+  useEffect(() => {
+    let uninstall: (() => void) | undefined;
+    let alive = true;
+    // 261119 首屏瘦身：占位接管不是首屏能力 ⇒ 动态 import（晚一个微任务挂上；破图点击接管不受影响）。
+    void import("./editor/missingAssetPlaceholder").then((m) => {
+      if (!alive) return;
+      uninstall = m.installMissingAssetPlaceholders(document, {
+        download: async (refs) => {
+          const noteIds = [...new Set(refs.filter((r) => r.space === "note").map((r) => r.noteId))];
+          const quickIds = [...new Set(refs.filter((r) => r.space === "quick-notes").map((r) => r.noteId))];
+          let downloaded = 0;
+          let failed = 0;
+          try {
+            if (noteIds.length > 0) { const got = await bridge.ensureNoteAssets(noteIds); downloaded += got.downloaded; failed += got.failed; }
+            if (quickIds.length > 0) { const got = await bridge.ensureQuickNoteAssets(quickIds); downloaded += got.downloaded; failed += got.failed; }
+          } catch (error) {
+            console.warn("[asset] 占位图补拉失败", error);
+          }
+          return { downloaded, failed };
+        },
+        showToast: (message, type) => showToast(message, { type: type ?? "info" }),
+      });
+    });
+    return () => { alive = false; uninstall?.(); };
+  }, []);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）。
@@ -497,18 +517,53 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   function closeCapture() {
     setCaptureOpen(false);
     setCaptureSeed(null);
+    setCaptureInsert(null);
     if (captureLaunchedRef.current) { captureLaunchedRef.current = false; exitApp(); return; }
     void refreshAll();
   }
 
-  // 长按桌面图标 →「小记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
+  /**
+   * 快捷入口取数流（261119）：camera = 写作卡就绪即懒调系统相机（成功把照片以 initialInsert/insertFiles
+   * 注入卡内，与首页「拍摄」同语义；取消留空卡、不退出、不再自动弹）；clipboard = 读最新一条剪贴板文本
+   * 预填正文（空/非文本 = 短 toast + 空白写作卡）。plain（无参「小记」）不进本函数，语义零变化。
+   * 取数/时序全在懒分包 home/captureModeFlow（相机/剪贴板链路不进 mobile-entry 静态图）；
+   * 这里只把 setter 递进去（模块不许引入口图模块，见 captureModeFlow 头注释）。
+   */
+  const startCaptureFlow = (mode: QuickNoteCaptureMode) => {
+    if (mode === "plain") return;
+    void import("./home/captureModeFlow").then((m) => m.runCaptureFlow({
+      mode,
+      whenReady: loadQuickNoteComposer,
+      setCaptureInsert,
+      setCaptureNonce,
+      setCaptureSeed,
+      setSeedReady,
+      prefill: prefillPendingRef,
+    })).catch(() => undefined);
+  };
+  // 冷启动（原生 hint）那次订阅不再回调（skipColdRead）⇒ 补跑取数流；只跑一次。
+  useEffect(() => {
+    if (initialCapture && !coldFlowRanRef.current) {
+      coldFlowRanRef.current = true;
+      startCaptureFlow(initialCaptureMode ?? "plain");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 长按桌面图标 →「小记 / 拍照小记 / 剪切板小记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
   // 直接打开**独立入口**（见下方 captureOpen 分支）——不等 bridge.init()/refreshAll()，做到最早可输入。
-  useEffect(() => subscribeQuickNoteShortcut(() => {
+  // 三模式共用「假单独模块」capture 语义（不主动同步、退出语义不变）；取数流每触发只跑一次。
+  useEffect(() => subscribeQuickNoteShortcut((mode) => {
     captureLaunchedRef.current = true;
+    prefillPendingRef.current = mode === "clipboard";
+    if (mode === "clipboard") setSeedReady(false);
     setRoute({ kind: "home", tab: "quick" });
     setCaptureSeed(null);
+    setCaptureInsert(null);
     setCaptureNonce((n) => n + 1);
     setCaptureOpen(true);
+    startCaptureFlow(mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, { skipColdRead: initialCapture }), [initialCapture]);
 
   /**
@@ -628,7 +683,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 再让内核 composer 挂载时恢复它 —— 统一成内核卡片后仍支持分享带入，且不丢图/不丢文本。
    */
   useEffect(() => {
-    if (!captureOpen || !captureSeed) { setSeedReady(true); return; }
+    // 剪切板模式的预填还没读完 ⇒ 不放开挂载（空结果由取数流收尾时放开）。
+    if (!captureOpen || !captureSeed) { if (!prefillPendingRef.current) setSeedReady(true); return; }
     let alive = true;
     setSeedReady(false);
     void (async () => {
@@ -839,10 +895,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
                 await refreshQuickNoteTags();
                 return created.id;
               }}
+              // camera 模式拍到的照片走 initialInsert（与首页「拍摄」同一 insertFiles 通道；消费即清）。
+              initialInsert={captureInsert}
               // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
               // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
               // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
-              onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); }}
+              onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); setCaptureInsert(null); }}
               onCancel={closeCapture}
             />
           ) : (

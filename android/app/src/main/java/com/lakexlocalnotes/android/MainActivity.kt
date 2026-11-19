@@ -60,6 +60,8 @@ class MainActivity : BridgeActivity() {
         // 拍照（相机直出，261118）：「拍照」入口直接拉 ACTION_IMAGE_CAPTURE（落盘回传），不再走 <input capture>
         //（其 capture 会被 WebView 文件选择器退化成相册，见 CameraCapturePlugin 头注释）。
         registerPlugin(CameraCapturePlugin::class.java)
+        // 剪切板文本读取（261119）：「剪切板小记」快捷入口读最新一条文本预填写作卡（只取文本不取图片）。
+        registerPlugin(ClipboardTextPlugin::class.java)
         registerPlugin(UpdatePlugin::class.java)
         // 便携包导入（261109）：系统文件选择 + zip 解压 + 只读读桌面库 + 文件复制 + 回滚隔离。
         registerPlugin(PortablePackagePlugin::class.java)

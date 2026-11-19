@@ -17,7 +17,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { useSwipeDownDismiss } from "../ui/useSwipeDownDismiss";
 import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
-import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
+import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/pinShortcut";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
 import { CLOUD_SYNC_ENABLE_NEED_UNCONFIGURED, cloudSyncEnableGate } from "../../core/cloudSyncGate";
 import { AppearanceSettingsSection, HistorySettingsSection, AboutSettingsSection } from "./BasicSettingsSections";

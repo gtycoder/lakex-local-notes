@@ -28,7 +28,7 @@ vi.mock("@capacitor/app", () => ({
   App: { getLaunchUrl: h.getLaunchUrl, addListener: h.addListener },
 }));
 
-import { isQuickNoteShortcutUrl, subscribeQuickNoteShortcut } from "./quickNoteShortcut";
+import { isQuickNoteShortcutUrl, quickNoteShortcutMode, subscribeQuickNoteShortcut } from "./quickNoteShortcut";
 
 describe("小记深链订阅", () => {
   beforeEach(() => {
@@ -49,6 +49,8 @@ describe("小记深链订阅", () => {
     const dispose = subscribeQuickNoteShortcut(onTrigger);
     await vi.advanceTimersByTimeAsync(0);
     expect(onTrigger).toHaveBeenCalledTimes(1);
+    // 无参深链 = plain（旧「小记」语义钉死：回调载荷就是旧模式）。
+    expect(onTrigger).toHaveBeenCalledWith("plain");
 
     // 同一次冷启动的第二条路径（appUrlOpen 几乎同时到达）⇒ 被 1.5s 窗口去重
     h.getCb()?.({ url: "lakexlocalnotes://quick-note" });
@@ -84,6 +86,51 @@ describe("小记深链订阅", () => {
     expect(isQuickNoteShortcutUrl("lakexlocalnotes://quick-notes")).toBe(true);
     expect(isQuickNoteShortcutUrl("lakexlocalnotes://other")).toBe(false);
     expect(isQuickNoteShortcutUrl(null)).toBe(false);
+  });
+
+  it("订阅回调携带模式：?src=camera 热启动触发 camera", async () => {
+    h.getLaunchUrl.mockResolvedValue({});
+    const onTrigger = vi.fn();
+    const dispose = subscribeQuickNoteShortcut(onTrigger);
+    await vi.advanceTimersByTimeAsync(0);
+    h.getCb()?.({ url: "lakexlocalnotes://quick-note?src=camera" });
+    expect(onTrigger).toHaveBeenCalledWith("camera");
+    dispose();
+  });
+});
+
+/**
+ * 快捷方式三模式解析（261119）：「小记」（无参）/「拍照小记」（?src=camera）/「剪切板小记」（?src=clipboard）。
+ * 无参旧语义必须钉死：不带 src 一律 "plain"，多余/未知参数不得劫持旧语义。
+ */
+describe("quickNoteShortcutMode 三模式解析", () => {
+  it("无参 = plain（现有「小记」语义零变化）", () => {
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note")).toBe("plain");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note/")).toBe("plain");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quicknote")).toBe("plain");
+    expect(quickNoteShortcutMode("LAKEXLOCALNOTES://QUICK-NOTE")).toBe("plain");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?foo=1")).toBe("plain");
+  });
+
+  it("?src=camera / ?src=clipboard = 新增两模式", () => {
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?src=camera")).toBe("camera");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?src=clipboard")).toBe("clipboard");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quicknote?src=clipboard")).toBe("clipboard");
+  });
+
+  it("容错：大小写 / 多余参数 / fragment 都不改判定；未知 src 按 plain", () => {
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?SRC=CAMERA")).toBe("camera");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?x=1&src=camera")).toBe("camera");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?src=camera#frag")).toBe("camera");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?src=unknown")).toBe("plain");
+    expect(quickNoteShortcutMode("lakexlocalnotes://quick-note?src=")).toBe("plain");
+  });
+
+  it("非小记深链 = null（与 isQuickNoteShortcutUrl 同边界）", () => {
+    expect(quickNoteShortcutMode(null)).toBeNull();
+    expect(quickNoteShortcutMode("")).toBeNull();
+    expect(quickNoteShortcutMode("https://example.com/?src=camera")).toBeNull();
+    expect(quickNoteShortcutMode("lakexlocalnotes://other?src=camera")).toBeNull();
   });
 });
 

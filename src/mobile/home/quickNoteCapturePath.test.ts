@@ -25,6 +25,7 @@ const MOBILE_APP = code(read("../MobileApp.tsx"));
 const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const HOME = code(read("./HomePage.tsx"));
 const COMPOSER_LAZY = code(read("./quickNoteComposerLazy.tsx"));
+const FLOW = code(read("./captureModeFlow.ts"));
 const COMPOSER_SKELETON = code(read("./QuickNoteComposerSkeleton.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
@@ -144,7 +145,8 @@ describe("capture 首帧（261022，零等待）", () => {
     expect(SHORTCUT).toContain("lakeLaunchUrl");
     expect(SHORTCUT).toContain("skipColdRead");
     expect(MAIN).toContain("readLaunchUrlHint()");
-    expect(MAIN).toContain("<MobileApp initialCapture={initialCapture} />");
+    // 261119 三模式：initialCapture 载荷带上模式（null/无参 = plain 旧语义）。
+    expect(MAIN).toContain("<MobileApp initialCapture={initialCapture} initialCaptureMode={initialCaptureMode} />");
     expect(MOBILE_APP).toContain("initialCapture");
     expect(MOBILE_APP).toContain("useState(initialCapture)");
     expect(MOBILE_APP).toMatch(/skipColdRead:\s*initialCapture/);
@@ -192,5 +194,59 @@ describe("capture 首帧（261022，零等待）", () => {
     expect(MAIN.indexOf("readLaunchUrlHint()")).toBeGreaterThan(-1);
     expect(MAIN.indexOf("readLaunchUrlHint()")).toBeLessThan(MAIN.indexOf("loadQuickNoteComposer()"));
     expect(MAIN.indexOf("loadQuickNoteComposer()")).toBeLessThan(MAIN.indexOf("ReactDOM.createRoot"));
+  });
+});
+
+/**
+ * 快捷方式三模式（261119）：「小记」（无参 plain）/「拍照小记」（?src=camera）/「剪切板小记」（?src=clipboard）。
+ * 三个模式共用「假单独模块」capture 语义（不主动同步、退出语义不变）；plain 旧路径零变化。
+ * 取数/入卡时序全部在懒分包 home/captureModeFlow（mobile-entry 预算：懒分包不许引入口图模块）。
+ */
+describe("快捷方式三模式接线（261119）", () => {
+  it("main.tsx：解析模式传给 MobileApp；initialCapture 判定仍是 isQuickNoteShortcutUrl（旧路径零变化）", () => {
+    expect(MAIN).toMatch(/const initialCapture = isQuickNoteShortcutUrl\(launchUrlHint\)/);
+    expect(MAIN).toMatch(/const initialCaptureMode = quickNoteShortcutMode\(launchUrlHint\)/);
+    expect(MAIN).toMatch(/initialCaptureMode=\{initialCaptureMode\}/);
+  });
+
+  it("camera 分支：写作卡就绪懒调相机，照片走 initialInsert/insertFiles 通道（与首页「拍摄」同语义）", () => {
+    expect(MOBILE_APP, "取数流在懒分包（不进 mobile-entry 静态图）").toMatch(/import\("\.\/home\/captureModeFlow"\)/);
+    expect(MOBILE_APP, "总入口 = runCaptureFlow（分支在懒分包里）").toMatch(/m\.runCaptureFlow\(\{/);
+    expect(MOBILE_APP, "capture 写作卡接上 initialInsert").toMatch(/initialInsert=\{captureInsert\}/);
+    expect(MOBILE_APP, "写作卡就绪 loader = 懒加载壳同一 loader").toMatch(/whenReady: loadQuickNoteComposer/);
+    expect(FLOW, "相机必须复用 takeCameraPhoto（取消返回 null 不回退）").toMatch(/takeCameraPhoto\(\)/);
+    expect(FLOW, "拍到的照片交给 initialInsert 种子（与首页「拍摄」同一 insertFiles 通道）").toMatch(/input\.setCaptureInsert\(\{ files: \[file\] \}\)/);
+    expect(FLOW, "注入时机等 composer 就绪（loader 由调用方传入）").toMatch(/input\.whenReady\(\)/);
+    // 预算护栏：懒分包不许引入口图模块（共享提升会让 modulepreload 超预算，261119 实测 12→13/14）
+    expect(FLOW, "captureModeFlow 不许 import quickNoteComposerLazy").not.toMatch(/quickNoteComposerLazy/);
+  });
+
+  it("clipboard 分支：读最新一条剪贴板文本预填；空/非文本 = 短 toast + 空白写作卡", () => {
+    expect(FLOW).toMatch(/readClipboardText\(\)/);
+    expect(FLOW, "文本走 captureSeed 草稿通道预填正文").toMatch(/input\.setCaptureSeed\(\{ text, images: \[\] \}\)/);
+    expect(FLOW, "空/非文本给可见提示").toContain("剪贴板没有可用的文本");
+    // 预填落定前不挂写作卡（空结果由取数流收尾放开）
+    expect(MOBILE_APP).toMatch(/prefillPendingRef/);
+    expect(MOBILE_APP).toMatch(/if \(!prefillPendingRef\.current\) setSeedReady\(true\)/);
+    expect(MOBILE_APP, "剪切板模式读完再挂写作卡（不空挂内核再重挂）").toMatch(/if \(mode === "clipboard"\) setSeedReady\(false\)/);
+  });
+
+  it("三模式共用「假单独模块」capture 语义（不主动同步、退出语义不变），取数流每触发只跑一次", () => {
+    expect(MOBILE_APP, "三个模式都记 capture 会话（手动退出直接退 App）").toMatch(/captureLaunchedRef\.current = true/);
+    expect(MOBILE_APP, "冷启动订阅仍按 initialCapture 跳过冷读").toMatch(/skipColdRead:\s*initialCapture/);
+    expect(MOBILE_APP, "plain 模式不进取数流（旧语义零变化）").toMatch(/if \(mode === "plain"\) return;/);
+    // 只有「快捷入口触发 / 冷启动」两处起流；保存后连记、取消都不自动再取（不再自动弹相机）
+    expect((MOBILE_APP.match(/startCaptureFlow\(/g) ?? []).length, "取数流只在触发与冷启动两处起（保存/取消不得再取）").toBe(2);
+  });
+
+  it("shortcuts.xml 三项并列：旧「小记」block 零变化，新增两项 data URI 带 query", () => {
+    expect(SHORTCUTS).toContain('android:shortcutId="quick-note"');
+    expect(SHORTCUTS).toContain('android:shortcutId="quick-note-camera"');
+    expect(SHORTCUTS).toContain('android:shortcutId="quick-note-clipboard"');
+    expect(SHORTCUTS).toContain('android:data="lakexlocalnotes://quick-note"');
+    expect(SHORTCUTS).toContain('android:data="lakexlocalnotes://quick-note?src=camera"');
+    expect(SHORTCUTS).toContain('android:data="lakexlocalnotes://quick-note?src=clipboard"');
+    // 旧「小记」深链只此一份（无 query）；query URI 不影响 intent-filter 的 scheme+host 匹配
+    expect(SHORTCUTS.split('android:data="lakexlocalnotes://quick-note"').length - 1).toBe(1);
   });
 });

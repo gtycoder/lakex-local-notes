@@ -8,9 +8,13 @@
  * 为什么要单开一个模块：深链可能在**冷启动**（插件尚未 ready，需要 getLaunchUrl 补读）也可能在
  * **热启动**（onNewIntent ⇒ appUrlOpen）；两处都要接，且必须防重复（冷启动时两条路径可能都触发一次）。
  */
-import { registerPlugin } from "@capacitor/core";
-
 const QUICK_NOTE_URL = "lakexlocalnotes://quick-note";
+
+/**
+ * 快捷入口模式（261119）：静态快捷方式三项并列 —— 「小记」（无参，语义零变化）/
+ * 「拍照小记」（?src=camera）/「剪切板小记」（?src=clipboard）。
+ */
+export type QuickNoteCaptureMode = "plain" | "camera" | "clipboard";
 
 /**
  * 本次启动是否由「小记」快捷方式拉起（冷启动 getLaunchUrl 命中）。null = 尚未判定。
@@ -50,17 +54,9 @@ export function whenQuickNoteLaunchResolved(timeoutMs = 3000): Promise<boolean> 
  * MobileApp 的启动流程里**之后**才注入的。冷启动瞬间判据为假 ⇒ 订阅被跳过、长按图标的深链永远不生效
  * （实测踩过）。这里直接看 Capacitor 平台标志，与启动顺序无关。
  */
-function isNativePlatform(): boolean {
+export function isNativePlatform(): boolean {
   return (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
 }
-
-/** 原生「固定到桌面」插件（Android：ShortcutManager.requestPinShortcut；见 PinShortcutPlugin.kt）。 */
-interface PinShortcutPluginApi {
-  isAvailable(): Promise<{ available: boolean }>;
-  isPinned(): Promise<{ pinned: boolean }>;
-  requestPin(): Promise<{ requested: boolean; reason?: string }>;
-}
-const PinShortcut = registerPlugin<PinShortcutPluginApi>("PinShortcut");
 
 /** 深链 URL 是否是「小记」（容错尾斜杠 / query / host 大小写）。 */
 export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean {
@@ -68,6 +64,19 @@ export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean 
   const normalized = url.trim().toLowerCase();
   // QUICK_NOTE_URL 是自建快捷方式的正式 URL；`quicknote` 是历史别名（老版本 shortcuts.xml 发过）
   return normalized.startsWith(QUICK_NOTE_URL) || normalized.startsWith("lakexlocalnotes://quicknote");
+}
+
+/**
+ * 解析快捷入口模式：非小记深链 = null；无 `src` 参数 = "plain"（**现有「小记」语义零变化**）；
+ * `?src=camera` = "camera" / `?src=clipboard` = "clipboard"（261119 两项新快捷方式）。
+ * 其它 `src` 值/多余参数一律按 "plain"（新参数不许劫持旧语义）。
+ */
+export function quickNoteShortcutMode(url: string | null | undefined): QuickNoteCaptureMode | null {
+  if (!isQuickNoteShortcutUrl(url)) return null;
+  const normalized = (url ?? "").trim().toLowerCase().split("#")[0];
+  const query = normalized.split("?")[1] ?? "";
+  const src = new URLSearchParams(query).get("src");
+  return src === "camera" ? "camera" : src === "clipboard" ? "clipboard" : "plain";
 }
 
 /**
@@ -86,9 +95,10 @@ export function readLaunchUrlHint(): string {
 
 /**
  * 订阅「小记」快捷方式。返回取消订阅函数。
- * `onTrigger` 可能被调用多次（冷启动补读 + appUrlOpen），调用方自行幂等。
+ * `onTrigger` 携带本次深链的模式（plain/camera/clipboard），可能被调用多次
+ * （冷启动补读 + appUrlOpen），调用方自行幂等。
  */
-export function subscribeQuickNoteShortcut(onTrigger: () => void, options: { skipColdRead?: boolean } = {}): () => void {
+export function subscribeQuickNoteShortcut(onTrigger: (mode: QuickNoteCaptureMode) => void, options: { skipColdRead?: boolean } = {}): () => void {
   if (!isNativePlatform()) return () => undefined;
   // 261022：冷启动 URL 已由原生同步 hint 在首帧前处理 ⇒ 本次不重复轮询 getLaunchUrl，
   // 否则同一次点击会被再触发一次（setCaptureNonce 重挂写作卡 = 闪一下/丢焦点）。
@@ -113,7 +123,7 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void, options: { ski
     // 再长按图标（热启动 appUrlOpen）就永远被忽略（260920 CDP 实测复现）。
     if (now - lastTriggerAt < DEDUP_MS) return;
     lastTriggerAt = now;
-    onTrigger();
+    onTrigger(quickNoteShortcutMode(url) ?? "plain");
   };
 
   // 动态 import @capacitor/app：本模块被 MobileApp **静态**引入，若这里也静态引插件，
@@ -165,32 +175,4 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void, options: { ski
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     void listener?.remove();
   };
-}
-
-/**
- * 「添加到桌面」的能力探测（对齐思源）：
- * 部分机型/launcher 不支持固定快捷方式或不展示静态快捷方式 ⇒ 需要这个兜底入口。
- * 返回 `null` 表示当前平台没有原生桥（纯浏览器/桌面）。
- */
-export async function probePinShortcut(): Promise<{ available: boolean; pinned: boolean } | null> {
-  if (!isNativePlatform()) return null;
-  try {
-    const supported = await PinShortcut.isAvailable();
-    if (!supported?.available) return { available: false, pinned: false };
-    const pinned = await PinShortcut.isPinned();
-    return { available: true, pinned: !!pinned?.pinned };
-  } catch {
-    return null;
-  }
-}
-
-/** 发起固定（系统会弹确认框）；返回是否已发起。 */
-export async function requestPinQuickNoteShortcut(): Promise<boolean> {
-  if (!isNativePlatform()) return false;
-  try {
-    const result = await PinShortcut.requestPin();
-    return !!result?.requested;
-  } catch {
-    return false;
-  }
 }

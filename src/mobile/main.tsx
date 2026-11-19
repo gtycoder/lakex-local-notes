@@ -7,7 +7,7 @@ import { clearPersistedNotebookTabs } from "./notebook/tabSessionCleanup";
 import { installSafeAreaInsets } from "./native/safeAreaInsets";
 import { installFormFactor } from "./pad/formFactor";
 import { applySystemBarTheme } from "./native/systemBars";
-import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
+import { isQuickNoteShortcutUrl, quickNoteShortcutMode, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
 import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
 // 261115 A21：老 Android WebView 没有 toSorted/toReversed/Promise.withResolvers —— 第一行先补，再跑业务。
@@ -85,7 +85,10 @@ if (import.meta.env.DEV) {
 
 // 261022：冷启动首帧路由 —— 原生同步 hint 在 React 首帧前给出 launch URL，
 // 是「长按图标新建小记」就直接进 capture 分支，不再先画首页骨架再整树切换（零等待）。
-const initialCapture = isQuickNoteShortcutUrl(readLaunchUrlHint());
+const launchUrlHint = readLaunchUrlHint();
+const initialCapture = isQuickNoteShortcutUrl(launchUrlHint);
+// 261119 快捷方式三模式：无参 = 现有「小记」（plain，零变化）；?src=camera / ?src=clipboard = 拍照/剪切板小记。
+const initialCaptureMode = quickNoteShortcutMode(launchUrlHint);
 
 // 261111（task-17）：capture 冷启动首帧前就并发预取写作卡分包（含内核 chunk 与内核样式）。
 // 为什么在这里：hint 是原生同步注入的 ⇒ main 求值阶段就能判定 capture；而写作卡自己的懒加载壳
@@ -100,7 +103,7 @@ if (initialCapture) void loadQuickNoteComposer().catch(() => undefined);
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <MobileErrorBoundary scope="app">
-      <MobileApp initialCapture={initialCapture} />
+      <MobileApp initialCapture={initialCapture} initialCaptureMode={initialCaptureMode} />
     </MobileErrorBoundary>
   </React.StrictMode>
 );
