@@ -76,7 +76,7 @@ export const NodeIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { a
           </div>
           <button
             type="button"
-            className="ln-btn ln-btn--ghost ln-tabs__action node-icon-picker__type-action"
+            className="ln-btn ln-btn--ghost ln-tabs__action"
             aria-label="移除图标"
             onClick={() => onPick(null)}
           ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>

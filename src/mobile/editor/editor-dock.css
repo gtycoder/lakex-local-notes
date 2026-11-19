@@ -214,6 +214,7 @@
 
 .med-f-card .med-f-btn { flex: 1 1 0; min-width: 0; }
 .med-f-btn {
+  position: relative;
   border: 0;
   background: transparent;
   border-radius: var(--mb-radius);
@@ -231,6 +232,9 @@
   white-space: nowrap;
 }
 .med-f-btn:active { background: var(--lake-bg-hover); }
+/* 261119 触控档收口：MOBILE-DESIGN 261015 回例承诺的「条目 40 ⇒ ::after 补到 44」此前缺实现，这里兑现
+ *（B-7 同式：只纵向扩 2px×2 到 44，横向不动）。.med-f-step 的 32px 步进钮变体同样吃这条扩区，宽度不动（防互叠）。 */
+.med-f-btn::after { content: ""; position: absolute; inset: -2px 0; }
 /* 「更多」面板里的画图占位：与插入面板的置灰同一口径 */
 .med-f-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 /* 「更多」面板的行内文字（261017 用户点单：每项要有文字说明） */
@@ -256,6 +260,7 @@
 .med-f-board-row { display: flex; align-items: center; justify-content: space-between; }
 .med-f-board-row + .med-f-board-row { margin-top: 8px; }
 .med-f-sw {
+  position: relative;
   width: 34px;
   height: 34px;
   padding: 0;
@@ -266,11 +271,14 @@
   box-shadow: inset 0 0 0 1px var(--lake-border-1);
 }
 .med-f-sw:active { transform: scale(0.92); }
+/* 261119 触控档收口：色板 34×34 ⇒ 命中区纵向扩到 44（横向不动、防相邻色块互叠）。::after 归扩区，
+ * 「无填充」格的 45° 斜线挪 ::before（同格 overflow:hidden 要裁斜线 ⇒ 该格扩区被裁，保持 34×34 一格特例）。 */
+.med-f-sw::after { content: ""; position: absolute; inset: -5px 0; }
 /* 选中态：先保持我们自己的口径（主色描边环）；移动端 UI 全量重构时再改语雀那套 */
 .med-f-sw.is-on { outline: 2px solid var(--lake-accent); outline-offset: 2px; }
 /* 首格「无填充 / 默认」：白底 + 一条 45° 斜线（与语雀同语义） */
 .med-f-sw--none { position: relative; background: var(--lake-bg-panel); overflow: hidden; }
-.med-f-sw--none::after {
+.med-f-sw--none::before {
   content: "";
   position: absolute;
   left: 50%;

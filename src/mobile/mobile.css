@@ -659,7 +659,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .bottom-bar-btn.active { color: var(--lake-fg-selected); background: var(--lake-bg-selected); font-weight: 600; }
 /* 思源 #mobileBottomBar 口径：纯图标项（label 走 aria-label/title），active = 主色 + 轻底 */
 .mobile-bottom-bar__item {
-  appearance: none; position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
+  /* 261119 触控档收口：40 只是 flex 下限、不是视觉（整宽坞里条目均分 ≈70px+）；按 MOBILE-DESIGN「该调大时
+   * 就得调大」（261113 A「dock 条目 40 → 44」同判例）把下限对齐 44 档 —— 下限从不生效 ⇒ 实机几何不变；
+   * 不做 ::after 横向扩区（条目连续排布会互叠）。 */
+  appearance: none; position: relative; flex: 1 1 0; min-width: var(--mb-tap-min); height: var(--mobile-bottom-bar-height);
   padding: 2px; overflow: hidden; border: 0; border-radius: var(--lake-radius-sm);
   background: transparent; background-clip: content-box; color: var(--lake-text-2);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -746,12 +749,15 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .toolbar--dark { background-color: var(--lake-bg-panel); }
 /* 思源原式是 20×20 + padding 10（content-box 语义）；本文件全局 border-box ⇒ 这里写成"总尺寸=图标+2×padding"，视觉等价 */
 .toolbar__icon {
+  position: relative;
   appearance: none; border: 0; background: transparent;
   height: 40px; width: 40px; padding: 10px; flex-shrink: 0; margin: 4px;
   color: var(--lake-text-2); border-radius: var(--lake-radius-sm);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* 261119 触控档收口（B-7 同式）：40 图标钮纵向扩到 44（横向不动；4px 外边距收得住扩区，不碰邻钮）。 */
+.toolbar__icon::after { content: ""; position: absolute; inset: -2px 0; }
 .toolbar__icon > svg { width: 20px; height: 20px; }
 .toolbar__icon[disabled] { opacity: .38; cursor: not-allowed; }
 .toolbar__icon--active,

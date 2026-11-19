@@ -119,6 +119,31 @@ describe("bridge.batchNotes（移动端批量：软删 + 标签 append/remove + 
     } finally { await db.close(); }
   });
 
+  it("软删判定口径 = notes.trashed_at（261119）：旧版本残留的 deleted_at 不误判、trashed_at 才算已在回收站", async () => {
+    const db = await freshDb();
+    try {
+      await insertFolder(db, "nb1", "notebook");
+      await insertNote(db, "old", "nb1"); // 旧行：更老版本只写过 deleted_at（trashed_at 空）
+      await insertNote(db, "tr", "nb1"); // 回收站行：写路径（trashSubtree/trashRepository）标的 trashed_at
+      await db.prepare("UPDATE notes SET deleted_at=? WHERE id=?").run(T, "old");
+      await db.prepare("UPDATE notes SET trashed_at=? WHERE id=?").run(T, "tr");
+
+      // ① 旧行 = 未进回收站（只认 trashed_at，不为旧数据写兼容）⇒ 正常批处理，不给 already-trashed
+      const oldRow = await runMobileBatchNotes(db, { action: "trash", ids: ["old"], space: "lake" });
+      expect(oldRow.ok).toBe(true);
+      expect(oldRow.results[0]).toMatchObject({ id: "old", ok: true });
+      const oldAfter = await db.prepare("SELECT trashed_at FROM notes WHERE id='old'").get() as { trashed_at: string | null };
+      expect(oldAfter.trashed_at).not.toBeNull();
+
+      // ② trashed_at 有值 = 已在回收站 ⇒ already-trashed（批量只作用在正常目录里的条目）
+      const trRow = await runMobileBatchNotes(db, { action: "trash", ids: ["tr"], space: "lake" });
+      expect(trRow.ok).toBe(false);
+      expect(trRow.results[0]).toMatchObject({ id: "tr", ok: false, reason: "already-trashed" });
+      const trAfter = await db.prepare("SELECT trashed_at FROM notes WHERE id='tr'").get() as { trashed_at: string | null };
+      expect(trAfter.trashed_at).toBe(T); // 未被重复软删
+    } finally { await db.close(); }
+  });
+
   it("tag-add(lake)：append 合并（保留已有顺序，不覆盖）", async () => {
     const db = await freshDb();
     try {

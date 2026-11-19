@@ -7,6 +7,13 @@
  * 于是 36 紧凑档（.mb-btn--sm / .mb-iconbtn--compact）长期裸奔、28–40px 散点漏补。本护栏双向对账：
  *   ① 视觉<44 的可点类 ⇒ 必须有扩区（类内 ::after 或使用处挂 .mb-tap），否则进 TAP_REVIEWED 登记（只减不增）；
  *   ② 有扩区的类 ⇒ 视觉必须仍 <44（不许「既调大又补足」两套并存）。
+ *
+ * 261119 收口批（登记表 20+ 同型小目标逐个收口）判据两条细化：
+ *   · **扩区证据只认「本类自己」的 ::after**（选择器末段 = 该类）：容器作用域类（.mobile-app 一族）不再误吃证据；
+ *     ::after 被装饰占用的类（kit 自绘勾选 / med-f-sw 斜线）把装饰挪到 ::before、扩区仍走 ::after —— 判据不放宽，
+ *     因为装饰性 ::before 也有负 inset（如 .nb-shelf-cover 光晕 inset:-40%），当证据会假阳性。
+ *   · **视觉 = 生效几何**：同一类只要有一条规则把宽高都定到 ≥44（如 ink 族被 inkPad.mobile.css 统一到
+ *     --mb-tap-min），就不再算「视觉<44」——small 命中的是两端共享副本（inkPad.shared.css）的桌面基线几何。
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -82,10 +89,10 @@ const rules: Rule[] = [];
 for (const f of cssFiles) parseRules(readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, ""), f, rules);
 
 /** 按类名 token 聚合：交互（cursor:pointer / :active，含 --修饰名继承基类）、视觉尺寸、扩区证据。 */
-type Tok = { interactive: boolean; small: string[]; after: boolean };
+type Tok = { interactive: boolean; small: string[]; after: boolean; big: boolean };
 const toks = new Map<string, Tok>();
 const rec = (t: string): Tok => {
-  if (!toks.has(t)) toks.set(t, { interactive: false, small: [], after: false });
+  if (!toks.has(t)) toks.set(t, { interactive: false, small: [], after: false, big: false });
   return toks.get(t)!;
 };
 for (const r of rules) {
@@ -100,13 +107,22 @@ for (const r of rules) {
     for (const m of s.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)/g)) {
       const e = rec(m[1]);
       if (ruleInteractive) e.interactive = true;
-      if (ruleAfter && pseudo) e.after = true;
+      // 扩区证据同样只认「本类自己」的伪元素（类内）：容器作用域类（.mobile-app 等）不吃证据。
+      if (ruleAfter && pseudo && last.includes("." + m[1])) e.after = true;
       // 视觉盒子尺寸：只取「本类自己」的盒子规则（非伪元素、选择器末段就是该类），排除 > svg 之类的子元素尺寸。
       if (!pseudo && last.includes("." + m[1])) {
+        const dims: Record<string, number> = {};
         for (const d of r.body.matchAll(/(min-height|height|min-width|width)\s*:\s*([^;]+)/g)) {
           const px = /^(\d+(?:\.\d+)?)px$/.exec(resolveValue(d[2]));
-          if (px && Number(px[1]) < 44) e.small.push(d[1] + ":" + px[1] + "px");
+          if (!px) continue;
+          const n = Number(px[1]);
+          dims[d[1]] = n;
+          if (n < 44) e.small.push(d[1] + ":" + px[1] + "px");
         }
+        // 生效视觉 ≥44（同一条规则把宽高都定到 44 档）⇒ 不算「视觉<44」（ink 族的移动端覆盖即此形态）。
+        const wide = Math.max(dims["width"] ?? 0, dims["min-width"] ?? 0);
+        const tall = Math.max(dims["height"] ?? 0, dims["min-height"] ?? 0);
+        if (wide >= 44 && tall >= 44) e.big = true;
       }
     }
   }
@@ -122,32 +138,10 @@ const classLists: string[][] = [...tsxText.matchAll(/className=\{?"([^"]*)"/g)].
 const hasTapUse = (t: string): boolean =>
   classLists.some((list) => list.includes(t) && list.includes("mb-tap") && !list.some((c) => c.startsWith(t + "--")));
 
-/** 视觉<44 但不补扩区的登记表（只减不增；每条写明理由）。261119 首批 = 审计两类范围外的既有小目标。 */
+/** 视觉<44 但不补扩区的登记表（只减不增；每条写明理由）。261119 收口批把 20+ 同型小目标逐个补上类内扩区后，
+ * 只剩确需例外的少数。 */
 const TAP_REVIEWED: { token: string; why: string }[] = [
-  { token: "bt-keep-native", why: "启发式误收：自绘 checkbox/radio 的 :not() 豁免标记，本身不是点按目标（15px 视觉属 input[type=checkbox] 本体，其命中区缺口登记为遗留点，见审计报告回报）" },
-  { token: "mb-segment__item", why: "B-7 同型（36 紧凑档、类内扩区缺失）——审计范围只收 .mb-btn--sm/.mb-iconbtn--compact；登记待下批一次收口" },
-  { token: "med-f-btn", why: "MOBILE-DESIGN 261015 回例声称 ::after 补足但实现缺失（40 高）；编辑 dock「Aa/更多」面板，登记待修" },
-  { token: "med-f-sw", why: "编辑 dock 色板/笔宽视觉件（34×34）；审计范围外，登记待 smallTap 走查定级" },
-  { token: "mbt-add-row__btn", why: "多维表「添加行」（36）——审计范围外，登记待走查定级" },
-  { token: "mbt-load-more", why: "多维表「加载更多」（36）——审计范围外，登记待走查定级" },
-  { token: "mbt-cell-btn", why: "多维表网格行内按钮（min-height 24）——审计范围外，登记待走查定级" },
-  { token: "mbt-stepper__btn", why: "记录页步进器按钮（34×34）——审计范围外，登记待走查定级" },
-  { token: "mobile-bottom-bar__item", why: "胶囊栏条目（min-width 40、高 56）——横向 40 档，登记待走查定级" },
-  { token: "toolbar__icon", why: "表格（Univer chrome）40px 工具条内图标（40×40 受工具条高约束）——登记待走查定级" },
-  { token: "mb-usheet-bar__cell", why: "表格底栏格（40 高）——登记待走查定级" },
-  { token: "mb-usheet-ccolor", why: "表格色板视觉件（40×40）——登记待走查定级" },
-  { token: "mb-usheet-fbtn", why: "表格公式栏按钮（40 高）——登记待走查定级" },
-  { token: "mb-usheet-icons__btn", why: "表格图标面板按钮（36×32）——登记待走查定级" },
-  { token: "mb-usheet-popcard__row", why: "表格锚定卡行（34 高）——登记待走查定级" },
-  { token: "mb-usheet-topbar__btn", why: "表格顶栏按钮（36 高）——登记待走查定级" },
-  { token: "pad-tab-add", why: "平板页签「＋」（30×30）——MOBILE-DESIGN 已登记的唯一残留小目标，登记待走查定级" },
-  { token: "ai-hint", why: "AI 页提示条（min-height 24）——审计范围外，登记待走查定级" },
-  { token: "ink-color", why: "手写板笔迹色板视觉内圆（20×20；命中盒 = 44 色板格，MOBILE-DESIGN 色板条款）——登记待走查复核" },
-  { token: "ink-image-remove", why: "手写板 v4 贴图删除（22×20）——审计范围外，登记待走查定级" },
-  { token: "ink-text-size", why: "手写板 v4 文字块字号（22×20）——审计范围外，登记待走查定级" },
-  { token: "ink-text-remove", why: "手写板 v4 文字块删除（22×20）——审计范围外，登记待走查定级" },
-  { token: "ink-page-strip__add", why: "手写板页签条新建（34×34）——审计范围外，登记待走查定级" },
-  { token: "ink-page-strip__close", why: "手写板页签条关闭（34×34）——审计范围外，登记待走查定级" },
+  { token: "pad-tab-add", why: "确需例外（261119 走查定级）：平板页签「＋」30×30 在 .pad-tabs 横滚容器内（overflow-x:auto ⇒ 另一轴同裁、padding-block 0 零余量）⇒ 伪元素扩区会被裁、无效 —— 同文件 261013 判例：页签内小 × 正因同一原因删除、关闭动作改顶栏 44 钮；抬条高又会改十四批外壳几何 ⇒ 保留 30×30（MOBILE-DESIGN 已登记的唯一残留小目标）" },
 ];
 
 /** 扩区机制自身（.mb-tap 命中盒 44×44），不参与「视觉<44」双向对账。 */
@@ -157,7 +151,8 @@ describe("44 触控档对账（261119 B-7/B-8）", () => {
   it("视觉<44 的可点类必须有扩区（类内 ::after 或使用处挂 .mb-tap），否则登记 TAP_REVIEWED（只减不增）", () => {
     const offenders: string[] = [];
     for (const [t, e] of [...toks].sort()) {
-      if (!e.interactive || e.small.length === 0) continue;
+      // 「视觉<44」= 有小尺寸且生效几何没到 44（big：同规则宽高都 ≥44，如 ink 族的移动端覆盖）。
+      if (!e.interactive || e.small.length === 0 || e.big) continue;
       if (e.after || hasTapUse(t)) continue;
       if (TAP_REVIEWED.some((x) => x.token === t)) continue;
       offenders.push(t + " [" + [...new Set(e.small)].join(", ") + "]");
@@ -178,11 +173,11 @@ describe("44 触控档对账（261119 B-7/B-8）", () => {
       if (!e.interactive) continue;
       if (!e.after) continue;
       if (EVIDENCE_EXEMPT.includes(t)) continue;
-      if (e.small.length === 0) offenders.push(t);
+      if (e.small.length === 0 || e.big) offenders.push(t);
     }
     expect(
       offenders,
-      "以下类已有扩区但视觉已 ≥44（应移除扩区或从机制里摘掉）：\n  " + offenders.join("\n  "),
+      "以下类已有扩区但生效视觉已 ≥44（应移除扩区或从机制里摘掉，不许「既调大又补足」）：\n  " + offenders.join("\n  "),
     ).toEqual([]);
   });
 
@@ -206,5 +201,12 @@ describe("44 触控档对账（261119 B-7/B-8）", () => {
     // 先例不回归。
     expect(toks.get("mb-switch")!.after).toBe(true);
     expect(toks.get("mb-chip")!.after).toBe(true);
+    // 261119 收口批自证：MOBILE-DESIGN 承诺的 med-f-btn 扩区已落地；kit 自绘 checkbox/radio（元素选择器 15px）也吃到扩区。
+    expect(toks.get("med-f-btn")!.after, "med-f-btn 必须有类内 ::after 扩区（MOBILE-DESIGN 261015 回例兑现）").toBe(true);
+    expect(toks.get("bt-keep-native")!.after, "自绘 checkbox/radio（15px）必须有扩区（::after；勾号/圆点挪 ::before）").toBe(true);
+    // ink 族移动端覆盖已统一 44 ⇒ 必须被判定为「生效视觉 ≥44」（不再算视觉<44、也不许再叠扩区）。
+    for (const t of ["ink-color", "ink-image-remove", "ink-text-size", "ink-text-remove", "ink-page-strip__add", "ink-page-strip__close"]) {
+      expect(toks.get(t)!.big, t + "（inkPad.mobile.css 统一 --mb-tap-min）必须被判定为生效视觉 ≥44").toBe(true);
+    }
   });
 });

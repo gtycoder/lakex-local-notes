@@ -72,10 +72,13 @@
 .ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 .ai-hint {
+  position: relative;
   flex: 0 0 auto; min-height: 24px; padding: 0 16px; text-align: left;
   background: transparent; border: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-nano);
 }
 .ai-hint:active { color: var(--lake-text-2); }
+/* 261119 触控档收口（B-7 同式）：24 高提示条纵向扩到 44（横向不动；上下都是留白，不吃邻件点击）。 */
+.ai-hint::after { content: ""; position: absolute; inset: -10px 0; }
 
 .ai-composer {
   flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--lake-space-sm);

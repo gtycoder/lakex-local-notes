@@ -10,6 +10,10 @@
  * - 删除语义只有一种：**移入回收站**（lake → 文档回收站；quickNotes → 小记回收站），都可恢复；
  *   没有物理删除 / 清索引 / 清对象（261106 用户硬规则：只有回收站里能彻底删除）。
  * - 笔记本一律不可批处理（core 先拦；executor.supports 再防御一次）。
+ * - 软删判定只认 `notes.trashed_at`（261119 收口；与 trashSubtree / trashRepository 的写入列、
+ *   AGENTS §3#5/#16 同口径）：`notes.deleted_at` 是更老版本的残留列、**不作判据** ——
+ *   旧行「deleted_at 有值但 trashed_at 空」= 未进回收站，不为旧数据写兼容（AGENTS §3#7）。
+ *   小记（quick_notes）自带一套回收站语义（列 `deleted_at`，与文档不同表不同列），不在本条口径内。
  */
 import {
   runBatchNotes,
@@ -77,8 +81,9 @@ async function loadLakeMeta(d: MobileDb, ids: readonly string[], parentRoot: str
   const noteDiary = (meta: LakeMeta): boolean => meta.kind === "notebook" && normalizeFolderSpace(meta.space) === DIARY_FOLDER_SPACE;
   for (const part of chunk([...new Set(ids)])) {
     if (part.length === 0) continue;
-    const notes = await d.prepare("SELECT id, parent_id, deleted_at FROM notes WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; deleted_at: string | null }>;
-    for (const row of notes) lake.set(String(row.id), { kind: "note", trashed: row.deleted_at != null, parentId: row.parent_id ?? null });
+    const notes = await d.prepare("SELECT id, parent_id, trashed_at FROM notes WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; trashed_at: string | null }>;
+    // 判据 = trashed_at（写路径标的就是这一列；deleted_at 是旧版本残留列，不作判据，见文件头）。
+    for (const row of notes) lake.set(String(row.id), { kind: "note", trashed: row.trashed_at != null, parentId: row.parent_id ?? null });
     const folders = await d.prepare("SELECT id, parent_id, node_type, trashed_at, space FROM folders WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; node_type: string; trashed_at: string | null; space: string | null }>;
     for (const row of folders) {
       lake.set(String(row.id), {
@@ -97,9 +102,9 @@ async function loadLakeMeta(d: MobileDb, ids: readonly string[], parentRoot: str
     ancestors.add(cursor);
     const known = lake.get(cursor);
     if (known) { if (noteDiary(known)) parentInDiary = true; cursor = known.parentId; continue; }
-    const note = await d.prepare("SELECT parent_id FROM notes WHERE id=?").get(cursor) as { parent_id: string | null } | undefined;
+    const note = await d.prepare("SELECT parent_id, trashed_at FROM notes WHERE id=?").get(cursor) as { parent_id: string | null; trashed_at: string | null } | undefined;
     if (note) {
-      lake.set(cursor, { kind: "note", trashed: false, parentId: note.parent_id ?? null });
+      lake.set(cursor, { kind: "note", trashed: note.trashed_at != null, parentId: note.parent_id ?? null });
       cursor = note.parent_id ?? null;
       continue;
     }

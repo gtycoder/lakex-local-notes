@@ -183,17 +183,20 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
   }, [draft, editNote]);
 
   // 输入/正文变化后 300ms 防抖落草稿（纯本地 device_state，不进 S3）。body 存原样 ⇒ 恢复不丢富格式。
+  // 261119 边缘修复：**内核未就绪不落草稿** —— 内核分包 + 实例化要 0.3–0.9s，防抖 300ms 先到点时
+  // getBody() 只能拿到 ""，写下去会把恢复出来的富正文草稿覆盖成 body:""（下次恢复只剩纯文本、富格式丢）。
+  // 改成 flush 等内核就绪（editorReady 进依赖：就绪前不排防抖，就绪后照常 300ms 落库），且空 body 一律不写。
   useEffect(() => {
-    if (!draft || !draftReady || committedRef.current) return;
+    if (!draft || !draftReady || !editorReady || committedRef.current) return;
     const timer = window.setTimeout(() => {
       if (committedRef.current) return;
       let body = "";
       try { body = stripAssetAccessToken(apiRef.current?.getBody() ?? ""); } catch { body = ""; }
-      if (!text.trim() && !body.trim()) return;
+      if (!body.trim()) return; // 空正文不写：text 有值而 body 空 = 内核没交出正文，写下去就是丢富格式
       void bridge.saveQuickNoteDraft({ id: noteId, text, body, tagIds });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [draft, draftReady, text, noteId, tagIds]);
+  }, [draft, draftReady, editorReady, text, noteId, tagIds]);
 
   /**
    * 新建小记**自动聚焦**（用户 261013 定稿：两条路都要 —— 快捷 capture 与页面「新建小记」）。

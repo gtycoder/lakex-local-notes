@@ -149,7 +149,7 @@ export default defineConfig({
               // 首屏就会挂的轻量 UI 共享块（底部 Sheet / toast / 返回栈 / 触感 / 错误上报 / 图片与附件预览控制器）。
               name: "mobile-ui-shared",
               test: (id) =>
-                /[\\/]src[\\/]mobile[\\/](ui[\\/](MobileSheet|toastBus|backStack|haptics)|hooks[\\/]gestureCore|lib[\\/]reportMobileActionError)/.test(id) ||
+                /[\\/]src[\\/]mobile[\\/](ui[\\/](MobileSheet|toastBus|toastCopy|backStack|haptics)|hooks[\\/]gestureCore|lib[\\/]reportMobileActionError)/.test(id) ||
                 /[\\/]src[\\/]lib[\\/](nativeErrors|pageScrollLock|longPressTimer|immersivePreview)/.test(id) ||
                 /[\\/]src[\\/]features[\\/](editor[\\/]imagePreview|attachment[\\/]attachmentPreviewController)/.test(id) ||
                 /[\\/]src[\\/]core[\\/](syncDecisions|errorContract)\.ts$/.test(id),

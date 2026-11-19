@@ -146,11 +146,14 @@
 /* ── 分段控件（.mb-segment；取值选择/图标型开关）────────────────────── */
 .mb-segment { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: var(--mb-radius); background: var(--lake-bg-sunken); }
 .mb-segment__item {
+  position: relative;
   min-height: var(--mb-ctl-h-sm); padding: 0 14px; border: 0; border-radius: calc(var(--mb-radius) - 3px);
   background: transparent; color: var(--lake-text-2); font-family: inherit;
   font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
+/* 261119 触控档收口（B-7 同式）：36 紧凑档只纵向扩到 44（inset 负值按 44 反推），横向不动、防相邻段互叠。 */
+.mb-segment__item::after { content: ""; position: absolute; inset: -4px 0; }
 .mb-segment__item.is-active { background: var(--lake-bg-panel); color: var(--lake-accent-text); }
 
 /* ── 选项胶囊（.mb-chip / .mb-chip-row；261030 新增，唯一来源）──────────────
@@ -384,17 +387,23 @@ button.mb-set-item__main {
 .mobile-app input[type="radio"]:not(.bt-keep-native) { border-radius: var(--lake-radius-pill); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):checked,
 .mobile-app input[type="radio"]:not(.bt-keep-native):checked { border-color: var(--lake-accent); background: var(--lake-accent); }
-.mobile-app input[type="checkbox"]:not(.bt-keep-native)::after {
+/* 勾号/圆点走 ::before（261119 触控档收口把 ::after 让给命中扩区，装饰不变）。 */
+.mobile-app input[type="checkbox"]:not(.bt-keep-native)::before {
   content: ""; position: absolute; top: 1px; left: 4px; width: 4px; height: 8px;
   border: solid var(--lake-bg-panel); border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0);
 }
-.mobile-app input[type="checkbox"]:not(.bt-keep-native):checked::after { transform: rotate(45deg) scale(1); }
-.mobile-app input[type="checkbox"]:not(.bt-keep-native):indeterminate::after { top: 3px; left: 2px; width: 7px; height: 0; border-width: 0 0 2px 0; transform: none; }
-.mobile-app input[type="radio"]:not(.bt-keep-native)::after {
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):checked::before { transform: rotate(45deg) scale(1); }
+.mobile-app input[type="checkbox"]:not(.bt-keep-native):indeterminate::before { top: 3px; left: 2px; width: 7px; height: 0; border-width: 0 0 2px 0; transform: none; }
+.mobile-app input[type="radio"]:not(.bt-keep-native)::before {
   content: ""; position: absolute; inset: 3px; border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); transform: scale(0);
 }
-.mobile-app input[type="radio"]:not(.bt-keep-native):checked::after { transform: scale(1); }
+.mobile-app input[type="radio"]:not(.bt-keep-native):checked::before { transform: scale(1); }
+/* 261119 触控档收口：自绘 checkbox/radio 视觉 15px ⇒ 命中区纵向扩到 44（B-7 同式）。元素选择器没有类内判据
+ * 可挂 ⇒ 扩区走 ::after、勾号/圆点挪 ::before（tapAreaContract 的扩区判据本就认 ::after，扫描面不用放宽）。
+ * 横向不动：只在自己那 15px 列里纵向扩，不吃相邻行与右侧文字的点击。 */
+.mobile-app input[type="checkbox"]:not(.bt-keep-native)::after,
+.mobile-app input[type="radio"]:not(.bt-keep-native)::after { content: ""; position: absolute; inset: -14.5px 0; }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):focus-visible,
 .mobile-app input[type="radio"]:not(.bt-keep-native):focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .mobile-app input[type="checkbox"]:not(.bt-keep-native):disabled,

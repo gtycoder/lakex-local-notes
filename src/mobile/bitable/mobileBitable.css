@@ -187,6 +187,7 @@
  * 单元格 = 撑满格子的透明按钮（不改表格几何，触屏热区靠 td 内距 + min-height）；
  * 记录/字段面板复用 .mb-sheet / .mb-set-item / .mb-input / .mb-btn 原语，这里只补它们没有的排版。 */
 .mbt-cell-btn {
+  position: relative;
   display: block;
   width: 100%;
   min-height: 24px;
@@ -203,11 +204,18 @@
 .mbt-cell-btn:active {
   background: var(--lake-bg-press);
 }
+/* 261119 触控档收口（B-7 同式）：±5px = td 内距上限（7px 内距 − 自身 2px 负外边距；td overflow:hidden 再往外会被裁）
+ * ⇒ 命中区吃满整格；网格行密度（单行 38）是表格几何，不为凑 44 抬行高。 */
+.mbt-cell-btn::after { content: ""; position: absolute; inset: -5px 0; }
 .mbt-grid td.mbt-add-row {
   padding: 0;
+  /* 261119 触控档收口：该格只装「添加行/加载更多」整宽钮，无省略文本 ⇒ 放开溢出裁剪，
+   * 否则钮的 ::after 扩区被 td 裁掉（data 格的 overflow:hidden 是 text-overflow 省略要的，不动）。 */
+  overflow: visible;
 }
 .mbt-add-row__btn,
 .mbt-load-more {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,6 +237,9 @@
 .mbt-load-more:active {
   background: var(--lake-bg-press);
 }
+/* 261119 触控档收口（B-7 同式）：36 紧凑档只纵向扩到 44，横向不动（两条都是整宽钮，横向无缺口）。 */
+.mbt-add-row__btn::after,
+.mbt-load-more::after { content: ""; position: absolute; inset: -4px 0; }
 /* 看板/画册分支里直接挂在 .mobile-bitable 下的「加载更多」：同样吃页面内距（td 内的同名按钮不动）。 */
 .mobile-bitable > .mbt-load-more {
   width: auto;
@@ -623,7 +634,9 @@
 .mbt-page-foot { display: flex; align-items: center; gap: var(--lake-space-md); padding: 0 var(--mb-page-pad) var(--lake-space-xxl); }
 .mbt-page-note { flex: 1; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.5; }
 .mbt-stepper { display: flex; align-items: center; gap: 2px; padding: 2px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); }
-.mbt-stepper .mbt-stepper__btn { width: 34px; height: 34px; }
+.mbt-stepper .mbt-stepper__btn { position: relative; width: 34px; height: 34px; }
+/* 261119 触控档收口（B-7 同式）：34×34 步进钮纵向扩到 44（横向不动，两钮并排防互叠）。 */
+.mbt-stepper__btn::after { content: ""; position: absolute; inset: -5px 0; }
 .mbt-stepper__idx { min-width: 42px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); text-align: center; font-variant-numeric: tabular-nums; }
 
 /* ── 视图配置面板 ───────────────────────────────────────────── */

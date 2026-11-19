@@ -36,6 +36,7 @@
   text-align: left;
 }
 .mb-usheet-popcard__row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -51,6 +52,8 @@
 .mb-usheet-popcard__row:active { background: var(--lake-bg-hover); }
 .mb-usheet-popcard__row.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .mb-usheet-popcard__row.is-danger { color: var(--lake-status-error); }
+/* 261119 触控档收口（B-7 同式）：34 高菜单行纵向扩到 44（横向不动；行首尾的扩区被 __scroll 边缘裁掉是滚动列固有）。 */
+.mb-usheet-popcard__row::after { content: ""; position: absolute; inset: -5px 0; }
 .mb-usheet-popcard__label {
   flex: 1 1 auto;
   min-width: 0;
@@ -90,6 +93,7 @@
 }
 .mb-usheet-icons__btn {
   appearance: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -102,6 +106,8 @@
 }
 .mb-usheet-icons__btn:active { background: var(--lake-bg-hover); }
 .mb-usheet-icons__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+/* 261119 触控档收口（B-7 同式）：32 高图标钮纵向扩到 44（±6px 正好吃满 .mb-usheet-icons 行内距，不进邻行）。 */
+.mb-usheet-icons__btn::after { content: ""; position: absolute; inset: -6px 0; }
 
 /* ⋯ 卡：语雀七行图标网格（+ 我们自己的第八行）。 */
 .mb-usheet-readingbar {
@@ -179,6 +185,7 @@
 .mb-usheet-topbar__actions { display: flex; align-items: center; flex: none; padding: 0 2px; }
 .mb-usheet-topbar__btn {
   appearance: none;
+  position: relative;
   flex: none;
   height: 36px;
   min-width: 36px;
@@ -195,6 +202,8 @@
 }
 .mb-usheet-topbar__btn:active { background: var(--lake-bg-hover); }
 .mb-usheet-topbar__btn.is-active { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
+/* 261119 触控档收口（B-7 同式）：36 高顶栏钮只纵向扩到 44，横向不动（同排钮相邻防互叠）。 */
+.mb-usheet-topbar__btn::after { content: ""; position: absolute; inset: -4px 0; }
 .mb-usheet-topbar__zoom { min-width: 48px; font-size: var(--lake-font-size-micro); }
 
 /* 261025：内核原生公式栏接管编辑输入面（自绘输入条已删除），按截图收口：
@@ -452,15 +461,19 @@
 .mb-usheet-tile.is-disabled { opacity: var(--lake-disabled-opacity, .45); }
 
 /* 视图比例：浅灰 chip 组（对齐钉钉的数据/排序控件） */
+/* 261119 触控档收口：40 高底栏格靠 ::after 纵向扩到 44 —— 原 overflow:hidden（替圆角裁格子底色）会把扩区
+ * 一起裁掉 ⇒ 圆角改由首/末格自带（渲染逐像素不变），裁切退场、扩区不再被裁。 */
 .mb-usheet-bar {
   display: flex;
   background: var(--lake-bg-block);
   border-radius: var(--mb-radius-sm);
-  overflow: hidden;
   margin-bottom: 8px;
 }
+.mb-usheet-bar__cell:first-child { border-top-left-radius: var(--mb-radius-sm); border-bottom-left-radius: var(--mb-radius-sm); }
+.mb-usheet-bar__cell:last-child { border-top-right-radius: var(--mb-radius-sm); border-bottom-right-radius: var(--mb-radius-sm); }
 .mb-usheet-bar__cell {
   appearance: none;
+  position: relative;
   flex: 1 1 0;
   height: 40px;
   border: 0;
@@ -474,6 +487,10 @@
 .mb-usheet-bar__cell + .mb-usheet-bar__cell { border-left: .5px solid var(--lake-border-1); }
 .mb-usheet-bar__cell.is-active { background: var(--lake-accent-tint); color: var(--lake-accent-text); font-weight: 600; }
 .mb-usheet-bar__cell:active { background: var(--lake-bg-hover); }
+/* 261119 触控档收口（B-7 同式）：40 档三件（底栏格 / 色板方块 / 公式栏钮）只纵向扩 2px×2 到 44，横向不动。 */
+.mb-usheet-bar__cell::after,
+.mb-usheet-ccolor::after,
+.mb-usheet-fbtn::after { content: ""; position: absolute; inset: -2px 0; }
 
 
 /* ---------- T 面板（261024 对齐钉钉：12px 分组标题 + 浅灰 chip + 40 方块色板） ---------- */
@@ -498,6 +515,7 @@
 .mb-usheet-fcard .mb-usheet-fbtn { flex: 1 1 0; min-width: 0; }
 .mb-usheet-fbtn {
   appearance: none;
+  position: relative;
   border: 0;
   background: transparent;
   border-radius: var(--lake-radius-2xs);
@@ -541,6 +559,7 @@
 .mb-usheet-ccolors__row { display: flex; align-items: center; gap: 8px; }
 .mb-usheet-ccolor {
   appearance: none;
+  position: relative;
   width: 40px;
   height: 40px;
   flex: none;
