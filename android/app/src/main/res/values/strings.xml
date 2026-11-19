@@ -7,7 +7,7 @@
     <string name="shortcut_quick_note_short">新建小记</string>
     <string name="shortcut_quick_note_long">新建小记</string>
     <string name="shortcut_camera_note_short">拍照小记</string>
-    <string name="shortcut_camera_note_long">拍照记一条小记</string>
+    <string name="shortcut_camera_note_long">拍照小记</string>
     <string name="shortcut_clipboard_note_short">剪切板小记</string>
-    <string name="shortcut_clipboard_note_long">剪切板内容记一条小记</string>
+    <string name="shortcut_clipboard_note_long">剪切板小记</string>
 </resources>

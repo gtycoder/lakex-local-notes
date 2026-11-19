@@ -196,14 +196,16 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。
    *  261022：冷启动由原生同步 hint 在首帧前给出判定 ⇒ 首帧直接进 capture，不再先画首页骨架。 */
   const [captureOpen, setCaptureOpen] = useState(initialCapture);
-  /** camera 模式拍到的照片：经 composer 的 initialInsert（与首页「拍摄」同一条 insertFiles 通道）入卡。 */
-  const [captureInsert, setCaptureInsert] = useState<{ files?: File[] } | null>(null);
-  /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
+  /**
+   * 系统分享 / 快捷入口（camera/clipboard）带入的初始内容（文本 + 图片字节）；null = 空白/恢复草稿。
+   * 261119 用户裁决「都做成替换」：camera（text 空 + images=[拍照图]）与 clipboard（text=文本）同走这一条
+   * captureSeed 草稿通道 —— 种子落草稿即**整份替换**未提交旧草稿（不再 initialInsert/insertFiles 并入）。
+   */
   const [captureSeed, setCaptureSeed] = useState<QuickNoteSeed | null>(null);
   /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
   const [captureNonce, setCaptureNonce] = useState(0);
-  /** 剪切板模式「预填还没落定」：读完剪贴板才挂写作卡（一次成型，不空挂内核再重挂）。 */
-  const prefillPendingRef = useRef(initialCapture && initialCaptureMode === "clipboard");
+  /** camera/clipboard「取数还没落定」：落定才挂写作卡（一次成型，不空挂内核再重挂）。 */
+  const prefillPendingRef = useRef(initialCapture && initialCaptureMode != null && initialCaptureMode !== "plain");
   /** 分享带入是否已落成草稿：落好再挂内核（composer 只在挂载时读 initialBody）。 */
   const [seedReady, setSeedReady] = useState(!prefillPendingRef.current);
   /** 冷启动那一次取数流只跑一次（React StrictMode 双挂载/重复 effect 不许再弹相机）。 */
@@ -509,6 +511,8 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
    *  ② 这次会话**不主动发起同步**（见 `useAutoSync` 的 capture 会话判定：入口 / 回前台 / 进后台三处都跳过）。
    */
   const captureLaunchedRef = useRef(initialCapture);
+  /** 快捷入口取数流代际：新触发/手动关闭都 +1，作废未落定的旧流（迟到的相机/剪贴板结果不许落进新会话）。 */
+  const captureFlowGenRef = useRef(0);
 
   /**
    * 手动退出 capture（系统返回键 / 「取消」按钮）：关界面 + 按需刷新小记列表；
@@ -517,25 +521,29 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   function closeCapture() {
     setCaptureOpen(false);
     setCaptureSeed(null);
-    setCaptureInsert(null);
+    captureFlowGenRef.current += 1; // 未落定的取数流一并作废：关闭后迟到的相机/剪贴板结果不许落种子
     if (captureLaunchedRef.current) { captureLaunchedRef.current = false; exitApp(); return; }
     void refreshAll();
   }
 
   /**
-   * 快捷入口取数流（261119）：camera = 写作卡就绪即懒调系统相机（成功把照片以 initialInsert/insertFiles
-   * 注入卡内，与首页「拍摄」同语义；取消留空卡、不退出、不再自动弹）；clipboard = 读最新一条剪贴板文本
-   * 预填正文（空/非文本 = 短 toast + 空白写作卡）。plain（无参「小记」）不进本函数，语义零变化。
+   * 快捷入口取数流（261119）：**camera 与 clipboard 同走 captureSeed 草稿通道（用户裁决「都做成替换」）** ——
+   * camera = 拍完落「text 空 + images=[拍照图]」种子、clipboard = 落「剪贴板文本」种子；种子由下方 effect
+   * 落成草稿（写入即整份**替换**未提交旧草稿），写作卡再从草稿恢复（卡里只有这张图/这段文本）。
+   * camera 取消 = 不落任何种子 ⇒ 旧草稿一动不动，卡仍走草稿恢复态（什么都没发生）。
+   * plain（无参「小记」）不进本函数，语义零变化。
    * 取数/时序全在懒分包 home/captureModeFlow（相机/剪贴板链路不进 mobile-entry 静态图）；
    * 这里只把 setter 递进去（模块不许引入口图模块，见 captureModeFlow 头注释）。
+   * isCurrent = 代际判定（captureFlowGenRef）：被新触发/关闭顶掉后，迟到的结果不许落进新会话。
    */
   const startCaptureFlow = (mode: QuickNoteCaptureMode) => {
+    // 任何新触发都顶掉未落定的旧取数流（plain 也一样：旧 camera/clipboard 的迟到结果不得落进本次）。
+    const gen = (captureFlowGenRef.current += 1);
     if (mode === "plain") return;
     void import("./home/captureModeFlow").then((m) => m.runCaptureFlow({
       mode,
       whenReady: loadQuickNoteComposer,
-      setCaptureInsert,
-      setCaptureNonce,
+      isCurrent: () => captureFlowGenRef.current === gen,
       setCaptureSeed,
       setSeedReady,
       prefill: prefillPendingRef,
@@ -555,11 +563,12 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   // 三模式共用「假单独模块」capture 语义（不主动同步、退出语义不变）；取数流每触发只跑一次。
   useEffect(() => subscribeQuickNoteShortcut((mode) => {
     captureLaunchedRef.current = true;
-    prefillPendingRef.current = mode === "clipboard";
-    if (mode === "clipboard") setSeedReady(false);
+    // camera/clipboard = 取数落定前不挂写作卡（camera 等相机、clipboard 等剪贴板），一次成型；
+    // plain 立即挂（旧语义零变化；setSeedReady(true) 顺带纠正可能被上一轮预填卡住的状态）。
+    prefillPendingRef.current = mode !== "plain";
+    setSeedReady(mode === "plain");
     setRoute({ kind: "home", tab: "quick" });
     setCaptureSeed(null);
-    setCaptureInsert(null);
     setCaptureNonce((n) => n + 1);
     setCaptureOpen(true);
     startCaptureFlow(mode);
@@ -679,11 +688,13 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   useEffect(() => subscribeSharedContent((content) => { handleSharedContent(content); }), [handleSharedContent]);
 
   /**
-   * 系统分享带入：先把 seed 落成一份**草稿**（图片落盘 + 正文由无内核写入通道合成），
-   * 再让内核 composer 挂载时恢复它 —— 统一成内核卡片后仍支持分享带入，且不丢图/不丢文本。
+   * seed 落草稿（系统分享 + 快捷入口 camera/clipboard 共用，261119「都做成替换」）：先把 seed 落成一份
+   * **草稿**（图片落盘 + 正文由无内核写入通道合成），再让内核 composer 挂载时恢复它 ——
+   * 写入即**整份替换**未提交旧草稿（草稿槽只有一个，writeQuickNoteDraft 换 id 时清旧稿），
+   * 不丢图/不丢文本；camera 拍完卡里只有这张图，取消则根本不进本 effect（旧草稿不动）。
    */
   useEffect(() => {
-    // 剪切板模式的预填还没读完 ⇒ 不放开挂载（空结果由取数流收尾时放开）。
+    // camera/clipboard 的取数还没落定 ⇒ 不放开挂载（取消/空结果由取数流收尾时放开）。
     if (!captureOpen || !captureSeed) { if (!prefillPendingRef.current) setSeedReady(true); return; }
     let alive = true;
     setSeedReady(false);
@@ -895,12 +906,10 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
                 await refreshQuickNoteTags();
                 return created.id;
               }}
-              // camera 模式拍到的照片走 initialInsert（与首页「拍摄」同一 insertFiles 通道；消费即清）。
-              initialInsert={captureInsert}
               // 「假单独模块」（用户 261013 定稿，模仿思源的闪念速记）：**提交后不进入小记列表** ——
               // 重挂一条全新的空小记、停在写作界面，可以连着记好几条；退出只有当面的「返回键 / 取消」= 手动退出（直接回桌面）。
               // 列表刷新留到"手动退出且不退 App"时才做（不退 App 的情况列表才可见；退 App 时下次进来自然是最新的）。
-              onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); setCaptureInsert(null); }}
+              onSaved={async () => { setCaptureNonce((n) => n + 1); setCaptureSeed(null); }}
               onCancel={closeCapture}
             />
           ) : (

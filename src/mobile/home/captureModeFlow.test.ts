@@ -1,7 +1,9 @@
 /**
- * 快捷入口取数流护栏（261119 拍照小记 / 剪切板小记）：
- *  · camera：写作卡就绪（同一 loader）→ 相机 → 成功交回 File / 取消与过期会话不回调（空卡、不自动再弹）；
- *  · clipboard：文本交回预填 / 空结果 500ms 复读一次再定论（Android 10+ 焦点时序）→ 空则 onEmpty。
+ * 快捷入口取数流护栏（261119 拍照小记 / 剪切板小记；用户裁决「都做成替换」）：
+ *  · camera：写作卡分包就绪（同一 loader）→ 相机 → 成功产出 **captureSeed 图片项**（text 空 + images=[拍照图]），
+ *    与 clipboard **同一条** captureSeed 草稿通道（落草稿即整份替换未提交旧草稿），不再 insertFiles 并入；
+ *    取消/失败 = **不落任何种子**（旧草稿一动不动，卡走草稿恢复态，不自动再弹）；过期会话结果一律不注入。
+ *  · clipboard：文本交回预填（text=文本 + images 空，同通道）/ 空结果 500ms 复读一次再定论（Android 10+ 焦点时序）→ 空则 onEmpty。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,49 +11,110 @@ const h = vi.hoisted(() => ({
   loadQuickNoteComposer: vi.fn(),
   takeCameraPhoto: vi.fn(),
   readClipboardText: vi.fn(),
+  showToast: vi.fn(),
 }));
 
 vi.mock("../native/cameraCapture", () => ({ takeCameraPhoto: h.takeCameraPhoto }));
 vi.mock("../native/clipboardText", () => ({ readClipboardText: h.readClipboardText }));
+vi.mock("../ui/toastBus", () => ({ showToast: h.showToast }));
 
-import { runCameraCapture, runClipboardPrefill } from "./captureModeFlow";
+import { runCameraCapture, runCaptureFlow, runClipboardPrefill } from "./captureModeFlow";
 
 const always = () => true;
+const photoFile = () => new File([new Uint8Array([1, 2, 3])], "camera_1.jpg", { type: "image/jpeg" });
+const seedImage = { filename: "camera_1.jpg", mimeType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) };
 
 beforeEach(() => {
   vi.useFakeTimers();
   h.loadQuickNoteComposer.mockReset().mockResolvedValue(undefined);
   h.takeCameraPhoto.mockReset();
   h.readClipboardText.mockReset();
+  h.showToast.mockReset();
 });
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("runCameraCapture", () => {
-  it("写作卡就绪后调相机；成功交回 File（入卡由调用方走 insertFiles）", async () => {
-    const file = new File([new Uint8Array([1])], "camera_1.jpg", { type: "image/jpeg" });
-    h.takeCameraPhoto.mockResolvedValue(file);
+  it("写作卡分包就绪后调相机；成功交回 captureSeed 图片项（filename/mimeType/bytes）", async () => {
+    h.takeCameraPhoto.mockResolvedValue(photoFile());
     const onPhoto = vi.fn();
-    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: always, onPhoto });
+    const onCancel = vi.fn();
+    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: always, onPhoto, onCancel });
     expect(h.loadQuickNoteComposer).toHaveBeenCalled();
     expect(h.takeCameraPhoto).toHaveBeenCalledTimes(1);
-    expect(onPhoto).toHaveBeenCalledWith(file);
+    expect(onPhoto).toHaveBeenCalledWith(seedImage);
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it("用户取消/失败（null）⇒ 不回调（保留空白写作卡，不再自动弹）", async () => {
+  it("用户取消/失败（null）⇒ 只 onCancel（不落任何种子 ⇒ 旧草稿不动），不再自动弹", async () => {
     h.takeCameraPhoto.mockResolvedValue(null);
     const onPhoto = vi.fn();
-    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: always, onPhoto });
+    const onCancel = vi.fn();
+    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: always, onPhoto, onCancel });
     expect(onPhoto).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("会话已换代（新的快捷入口触发）⇒ 迟到结果不注入", async () => {
-    const file = new File([new Uint8Array([1])], "camera_1.jpg", { type: "image/jpeg" });
-    h.takeCameraPhoto.mockResolvedValue(file);
+  it("会话已换代（新的快捷入口触发）⇒ 迟到结果不注入（photo / cancel 都不回调）", async () => {
+    h.takeCameraPhoto.mockResolvedValue(photoFile());
     const onPhoto = vi.fn();
-    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: () => false, onPhoto });
+    const onCancel = vi.fn();
+    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: () => false, onPhoto, onCancel });
     expect(onPhoto).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("runCaptureFlow（camera 与 clipboard 同走 captureSeed 草稿通道 —— 「都做成替换」）", () => {
+  const flowInput = () => ({
+    whenReady: h.loadQuickNoteComposer,
+    isCurrent: always,
+    setCaptureSeed: vi.fn(),
+    setSeedReady: vi.fn(),
+    prefill: { current: true },
+  });
+
+  it("camera 成功 = text 空 + images=[拍照图] 的种子（落草稿替换旧草稿；不走 insertFiles 并入）", async () => {
+    h.takeCameraPhoto.mockResolvedValue(photoFile());
+    const input = flowInput();
+    await runCaptureFlow({ mode: "camera", ...input });
+    expect(input.setCaptureSeed).toHaveBeenCalledWith({ text: "", images: [seedImage] });
+    // 落定前不挂写作卡（种子落成草稿后由 MobileApp 的 seed effect 放开）
+    expect(input.setSeedReady).toHaveBeenCalledWith(false);
+    expect(input.setSeedReady).not.toHaveBeenCalledWith(true);
+    expect(input.prefill.current).toBe(false);
+  });
+
+  it("camera 取消 = 不落任何种子（旧草稿一动不动）：setCaptureSeed 不被调用，只放开挂载走草稿恢复态", async () => {
+    h.takeCameraPhoto.mockResolvedValue(null);
+    const input = flowInput();
+    await runCaptureFlow({ mode: "camera", ...input });
+    expect(input.setCaptureSeed).not.toHaveBeenCalled();
+    expect(input.setSeedReady).toHaveBeenCalledTimes(1);
+    expect(input.setSeedReady).toHaveBeenCalledWith(true);
+    expect(input.prefill.current).toBe(false);
+  });
+
+  it("clipboard 成功 = text=剪贴板文本 + images 空 的种子（与 camera 同一条 captureSeed 通道）", async () => {
+    h.readClipboardText.mockResolvedValue("一段文本");
+    const input = flowInput();
+    await runCaptureFlow({ mode: "clipboard", ...input });
+    expect(input.setCaptureSeed).toHaveBeenCalledWith({ text: "一段文本", images: [] });
+    expect(input.setSeedReady).toHaveBeenCalledWith(false);
+    expect(input.prefill.current).toBe(false);
+  });
+
+  it("clipboard 空 = 不落种子（旧草稿不动）+ 可见提示，放开挂载", async () => {
+    h.readClipboardText.mockResolvedValue("");
+    const input = flowInput();
+    const pending = runCaptureFlow({ mode: "clipboard", ...input });
+    await vi.advanceTimersByTimeAsync(500);
+    await pending;
+    expect(input.setCaptureSeed).not.toHaveBeenCalled();
+    expect(h.showToast).toHaveBeenCalledWith("剪贴板没有可用的文本");
+    expect(input.setSeedReady).toHaveBeenCalledWith(true);
+    expect(input.prefill.current).toBe(false);
   });
 });
 

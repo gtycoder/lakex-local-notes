@@ -209,26 +209,34 @@ describe("快捷方式三模式接线（261119）", () => {
     expect(MAIN).toMatch(/initialCaptureMode=\{initialCaptureMode\}/);
   });
 
-  it("camera 分支：写作卡就绪懒调相机，照片走 initialInsert/insertFiles 通道（与首页「拍摄」同语义）", () => {
+  it("camera 分支：照片走 captureSeed 草稿通道**替换**旧草稿（261119 用户裁决「都做成替换」，不再 insertFiles 并入）", () => {
     expect(MOBILE_APP, "取数流在懒分包（不进 mobile-entry 静态图）").toMatch(/import\("\.\/home\/captureModeFlow"\)/);
     expect(MOBILE_APP, "总入口 = runCaptureFlow（分支在懒分包里）").toMatch(/m\.runCaptureFlow\(\{/);
-    expect(MOBILE_APP, "capture 写作卡接上 initialInsert").toMatch(/initialInsert=\{captureInsert\}/);
     expect(MOBILE_APP, "写作卡就绪 loader = 懒加载壳同一 loader").toMatch(/whenReady: loadQuickNoteComposer/);
     expect(FLOW, "相机必须复用 takeCameraPhoto（取消返回 null 不回退）").toMatch(/takeCameraPhoto\(\)/);
-    expect(FLOW, "拍到的照片交给 initialInsert 种子（与首页「拍摄」同一 insertFiles 通道）").toMatch(/input\.setCaptureInsert\(\{ files: \[file\] \}\)/);
-    expect(FLOW, "注入时机等 composer 就绪（loader 由调用方传入）").toMatch(/input\.whenReady\(\)/);
+    // 「替换」语义：camera = text 空 + images=[拍照图] 的 captureSeed 种子 —— 与 clipboard 同一条草稿通道
+    expect(FLOW, "camera 与 clipboard 同走 captureSeed 草稿通道").toMatch(/input\.setCaptureSeed\(\{ text: "", images: \[image\] \}\)/);
+    expect(FLOW, "不再走 initialInsert/insertFiles 的「并入草稿」语义").not.toMatch(/setCaptureInsert|insertFiles/);
+    expect(MOBILE_APP, "capture 写作卡不再接 initialInsert（并入通道只剩首页「拍摄」在用）").not.toContain("initialInsert");
+    // 取消 = 不落任何种子（旧草稿不动）：只放开挂载走草稿恢复态
+    expect(FLOW, "取消/失败不落种子，只放开挂载").toMatch(/onCancel: \(\) => \{[\s\S]{0,200}setSeedReady\(true\)/);
+    // 过期会话不注入：isCurrent 由 MobileApp 按代际给出
+    expect(FLOW, "取数流要按 isCurrent 代际丢弃迟到结果").toMatch(/isCurrent\?: \(\) => boolean/);
+    expect(MOBILE_APP, "MobileApp 给出代际判定").toMatch(/isCurrent: \(\) => captureFlowGenRef\.current === gen/);
+    expect(FLOW, "注入时机等 composer 分包就绪（loader 由调用方传入）").toMatch(/input\.whenReady\(\)/);
     // 预算护栏：懒分包不许引入口图模块（共享提升会让 modulepreload 超预算，261119 实测 12→13/14）
     expect(FLOW, "captureModeFlow 不许 import quickNoteComposerLazy").not.toMatch(/quickNoteComposerLazy/);
   });
 
-  it("clipboard 分支：读最新一条剪贴板文本预填；空/非文本 = 短 toast + 空白写作卡", () => {
+  it("clipboard 分支：读最新一条剪贴板文本预填；空/非文本 = 短 toast + 草稿恢复态写作卡", () => {
     expect(FLOW).toMatch(/readClipboardText\(\)/);
-    expect(FLOW, "文本走 captureSeed 草稿通道预填正文").toMatch(/input\.setCaptureSeed\(\{ text, images: \[\] \}\)/);
+    expect(FLOW, "文本走 captureSeed 草稿通道预填正文（与 camera 同通道）").toMatch(/input\.setCaptureSeed\(\{ text, images: \[\] \}\)/);
     expect(FLOW, "空/非文本给可见提示").toContain("剪贴板没有可用的文本");
-    // 预填落定前不挂写作卡（空结果由取数流收尾放开）
+    // 取数落定前不挂写作卡（空结果/取消由取数流收尾放开）
     expect(MOBILE_APP).toMatch(/prefillPendingRef/);
     expect(MOBILE_APP).toMatch(/if \(!prefillPendingRef\.current\) setSeedReady\(true\)/);
-    expect(MOBILE_APP, "剪切板模式读完再挂写作卡（不空挂内核再重挂）").toMatch(/if \(mode === "clipboard"\) setSeedReady\(false\)/);
+    expect(MOBILE_APP, "camera/clipboard 取数落定前不挂写作卡（不空挂内核再重挂）").toMatch(/prefillPendingRef\.current = mode !== "plain"/);
+    expect(MOBILE_APP).toMatch(/setSeedReady\(mode === "plain"\)/);
   });
 
   it("三模式共用「假单独模块」capture 语义（不主动同步、退出语义不变），取数流每触发只跑一次", () => {
@@ -239,7 +247,15 @@ describe("快捷方式三模式接线（261119）", () => {
     expect((MOBILE_APP.match(/startCaptureFlow\(/g) ?? []).length, "取数流只在触发与冷启动两处起（保存/取消不得再取）").toBe(2);
   });
 
-  it("shortcuts.xml 三项并列：旧「小记」block 零变化，新增两项 data URI 带 query", () => {
+  it("shortcuts.xml 三块从上到下 = 拍照小记 / 剪切板小记 / 新建小记（旧块逐字不动只挪位），data URI 带 query", () => {
+    // <shortcut> 块顺序即显示顺序（261119 顺序定稿）
+    const order = [
+      SHORTCUTS.indexOf('android:shortcutId="quick-note-camera"'),
+      SHORTCUTS.indexOf('android:shortcutId="quick-note-clipboard"'),
+      SHORTCUTS.indexOf('android:shortcutId="quick-note"'),
+    ];
+    expect(order.every((idx) => idx > -1), "三项都在").toBe(true);
+    expect(order, "顺序 = camera / clipboard / quick-note").toEqual([...order].sort((a, b) => a - b));
     expect(SHORTCUTS).toContain('android:shortcutId="quick-note"');
     expect(SHORTCUTS).toContain('android:shortcutId="quick-note-camera"');
     expect(SHORTCUTS).toContain('android:shortcutId="quick-note-clipboard"');

@@ -8,9 +8,10 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * 长按桌面图标静态快捷方式（res/xml/shortcuts.xml）回归钉（261119 三模式）：
- *  ① 三项并列：quick-note（旧「小记」，无参 = plain 零变化）/ quick-note-camera（?src=camera）/
- *     quick-note-clipboard（?src=clipboard）；旧项的 id/深链/文案必须原样（无 query）。
+ * 长按桌面图标静态快捷方式（res/xml/shortcuts.xml）回归钉（261119 三模式，顺序/文案定稿）：
+ *  ① 三项从上到下 = quick-note-camera（拍照小记）/ quick-note-clipboard（剪切板小记）/
+ *     quick-note（新建小记，无参 = plain 零变化）—— <shortcut> 块顺序即显示顺序；
+ *     旧项的 id/深链/文案必须原样（无 query），文案三短语 = 拍照小记 / 剪切板小记 / 新建小记（short/long 同值）。
  *  ② 每项的深链走 QuickNoteAlias + android:data URI（query 不影响 intent-filter 匹配，见 ③）。
  *  ③ AndroidManifest 的 quick-note intent-filter 只声明 scheme+host、**没有 path** ——
  *     data URI 带 ?query 才仍能匹配；谁给 filter 加 path，带 query 的两项就再也进不了 App。
@@ -49,7 +50,13 @@ class ShortcutsConfigTest {
     fun threeShortcutsWithExpectedDeepLinks() {
         val root = parse(sourceFile("src/main/res/xml/shortcuts.xml"))
         val shortcuts = childrenByTag(root, "shortcut")
-        assertEquals("shortcuts.xml 应恰有三项（小记 / 拍照小记 / 剪切板小记）", 3, shortcuts.size)
+        assertEquals("shortcuts.xml 应恰有三项（拍照小记 / 剪切板小记 / 新建小记）", 3, shortcuts.size)
+        // <shortcut> 块顺序即显示顺序（261119 顺序定稿）：从上到下 = 拍照小记 / 剪切板小记 / 新建小记。
+        assertEquals(
+            "shortcuts.xml 顺序应为 quick-note-camera / quick-note-clipboard / quick-note",
+            listOf("quick-note-camera", "quick-note-clipboard", "quick-note"),
+            shortcuts.map { it.getAttribute("android:shortcutId") },
+        )
         val byId = shortcuts.associateBy { it.getAttribute("android:shortcutId") }
         val expected = mapOf(
             "quick-note" to "lakexlocalnotes://quick-note",
@@ -96,6 +103,11 @@ class ShortcutsConfigTest {
                 assertTrue("strings.xml 缺 $ref（快捷方式文案未定义）", !value.isNullOrEmpty())
             }
         }
+        // 文案三短语钉死（261119 顺序与文案定稿）：short/long 同值。
+        assertEquals("拍照小记", strings["shortcut_camera_note_short"])
+        assertEquals("拍照小记", strings["shortcut_camera_note_long"])
+        assertEquals("剪切板小记", strings["shortcut_clipboard_note_short"])
+        assertEquals("剪切板小记", strings["shortcut_clipboard_note_long"])
         // 旧「小记」文案零变化。
         assertEquals("新建小记", strings["shortcut_quick_note_short"])
         assertEquals("新建小记", strings["shortcut_quick_note_long"])
