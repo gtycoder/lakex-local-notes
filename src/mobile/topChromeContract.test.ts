@@ -35,6 +35,8 @@ const SURFACE_MARKERS: { token: string; needsSize: boolean }[] = [
   { token: "mb-menusheet__submenu", needsSize: false },
   // 261119 F-A（lead 集成补录）：文档内查找条 = 覆盖式浮条（nested —— 锚 .mobile-workspace-body 顶部，不消费安全区）。
   { token: "mb-find", needsSize: false },
+  // 261119 F-E（lead 集成补录）：重依赖正文同构骨架的头部槽位（nested —— 与真实 .mbt-header / .mb-usheet-topbar 同口径，不消费安全区）。
+  { token: "mb-pane-skel__head", needsSize: false },
 ];
 const EDGE_VALUES = ["viewport", "overlay", "nested", "sheet"];
 const SIZE_VALUES = ["compact", "regular"];

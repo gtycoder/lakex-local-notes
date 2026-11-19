@@ -672,6 +672,26 @@ describe("详情 / 新建 / 空态 / 降级", () => {
     expect(onOpenNote).toHaveBeenCalledWith("n2");
   });
 
+  it("「按钮上不起手」：touchStart 落在卡内按钮上 ⇒ 不开长按菜单，后续 click 不被吞", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    await setCardScrollHeight(400);
+    const toggle = expandToggle();
+    expect(toggle).toBeTruthy();
+
+    // 起手点在「展开」按钮上按住超过长按阈值：不算长按起手，动作菜单不许开（按钮交给自己）。
+    await longPressRow(toggle!);
+    expect(byText("移除标签"), "按钮上长按不得打开动作菜单").toBeUndefined();
+
+    // 松手补发的 click 不被吞：按钮自己的动作照常（展开）。
+    await click(toggle);
+    expect(expandToggle()!.textContent?.trim()).toBe("收起");
+
+    // click 流没被污染：随后点条目主区仍能打开小记（不被误吞）。
+    await click(detailRow("想法一").querySelector(".mb-set-item__main"));
+    expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
+  });
+
   it("「＋新建」：弹输入 → 落库 → 刷新（同名再建就地报错、不调桥）", async () => {
     await renderTab();
     await click(byAria("新建标签"));

@@ -29,6 +29,7 @@ import {
   BITABLE_NUMBER_FORMAT_OPTIONS,
   BITABLE_OPTION_PALETTE,
   BITABLE_PROGRESS_MAX,
+  BITABLE_PROGRESS_QUICK_COLORS,
   BITABLE_RATING_MAX,
   fieldSupportsFormat,
   optionColorHex,
@@ -323,7 +324,7 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
                       <span className="mb-form__desc">进度条颜色</span>
                       <div className="mbt-feditor__colors">
                         <button type="button" className={"mbt-feditor__color" + (!progressColor ? " is-on" : "")} aria-label="默认颜色" onClick={() => setProgressColor(undefined)} />
-                        {BITABLE_OPTION_PALETTE.slice(0, 8).map((color) => (
+                        {BITABLE_PROGRESS_QUICK_COLORS.map((color) => (
                           <button key={color} type="button" aria-label={"颜色 " + color}
                             className={"mbt-feditor__color" + (progressColor === color ? " is-on" : "")}
                             style={{ background: optionColorHex(color) ?? color }} onClick={() => setProgressColor(color)} />

@@ -11,7 +11,7 @@
  *
  * web 预览（mobile-preview）无原生桥：**回退既有 file input 方案**（行为与修复前一致，保持现状）。
  *
- * 用法（入口两处：文档/小记 dock 的「拍照」、AI 助手的「拍照」）：
+ * 用法（入口四处：文档/小记 dock 的「拍照」、首页「拍摄」、AI 助手的「拍照」、快捷菜单「拍照小记」）：
  *   const file = await takeCameraPhoto();   // 用户取消/失败 ⇒ null（提示已由本模块给出）
  *   if (file) insertFiles([file]);          // 与相册选出的 File 完全同形
  */

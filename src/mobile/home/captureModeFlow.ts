@@ -50,6 +50,8 @@ export async function runCaptureFlow(input: {
       onCancel: () => {
         // 取消 = **不落任何种子**（等价表达）⇒ 旧草稿一动不动（什么都没发生），写作卡照常挂载并走
         // 草稿恢复态。原生失败同口径（可见提示已由 takeCameraPhoto 给出）。
+        // 挂载时序微差（HANDOFF §1 批注「已注释」条目补注）：camera 取消后写作卡才挂载、才弹键盘
+        //（原为卡先挂、相机盖在上面）；数据语义不变。
         input.prefill.current = false;
         input.setSeedReady(true);
       },
@@ -92,7 +94,17 @@ export async function runCameraCapture(input: {
   const file = await takeCameraPhoto();
   if (!isCurrent()) return;
   if (!file) { input.onCancel(); return; }
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch {
+    // 读照片字节失败（文件被回收/读取异常）= 语义等价的失败回传：与原生失败同口径走 onCancel
+    //（不落任何种子、清 pending、放行挂载）+ 可见提示 —— 不许静默留空壳写作卡（P2-2）。
+    if (!isCurrent()) return;
+    showToast("速记内容准备失败", { type: "error" });
+    input.onCancel();
+    return;
+  }
   if (!isCurrent()) return;
   input.onPhoto({ filename: file.name, mimeType: file.type || "image/jpeg", bytes });
 }

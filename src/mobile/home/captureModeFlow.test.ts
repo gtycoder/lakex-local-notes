@@ -64,6 +64,39 @@ describe("runCameraCapture", () => {
     expect(onPhoto).not.toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  it("照片字节读取失败（arrayBuffer 抛错）⇒ 语义等价失败回传：onCancel 收尾 + 可见提示，不向调用方抛", async () => {
+    const bad = {
+      name: "camera_1.jpg",
+      type: "image/jpeg",
+      arrayBuffer: () => Promise.reject(new Error("read fail")),
+    } as unknown as File;
+    h.takeCameraPhoto.mockResolvedValue(bad);
+    const onPhoto = vi.fn();
+    const onCancel = vi.fn();
+    await expect(runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent: always, onPhoto, onCancel })).resolves.toBeUndefined();
+    expect(onPhoto).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(h.showToast).toHaveBeenCalledWith("速记内容准备失败", { type: "error" });
+  });
+
+  it("字节读取失败但会话已换代 ⇒ 迟到失败不回传（不回调、不提示）", async () => {
+    const bad = {
+      name: "camera_1.jpg",
+      type: "image/jpeg",
+      arrayBuffer: () => Promise.reject(new Error("read fail")),
+    } as unknown as File;
+    h.takeCameraPhoto.mockResolvedValue(bad);
+    // 前两次 isCurrent（whenReady 后 / takeCameraPhoto 后）为真、失败回传那次已换代。
+    let calls = 0;
+    const isCurrent = () => { calls += 1; return calls <= 2; };
+    const onPhoto = vi.fn();
+    const onCancel = vi.fn();
+    await runCameraCapture({ whenReady: h.loadQuickNoteComposer, isCurrent, onPhoto, onCancel });
+    expect(onPhoto).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
 });
 
 describe("runCaptureFlow（camera 与 clipboard 同走 captureSeed 草稿通道 —— 「都做成替换」）", () => {
@@ -94,6 +127,21 @@ describe("runCaptureFlow（camera 与 clipboard 同走 captureSeed 草稿通道 
     expect(input.setSeedReady).toHaveBeenCalledTimes(1);
     expect(input.setSeedReady).toHaveBeenCalledWith(true);
     expect(input.prefill.current).toBe(false);
+  });
+
+  it("camera 取数失败（字节读取抛错）= 与取消同口径收尾：不落种子、放行挂载、清 pending + 可见提示（不静默留空壳）", async () => {
+    const bad = {
+      name: "camera_1.jpg",
+      type: "image/jpeg",
+      arrayBuffer: () => Promise.reject(new Error("read fail")),
+    } as unknown as File;
+    h.takeCameraPhoto.mockResolvedValue(bad);
+    const input = flowInput();
+    await runCaptureFlow({ mode: "camera", ...input });
+    expect(input.setCaptureSeed).not.toHaveBeenCalled();
+    expect(input.setSeedReady).toHaveBeenCalledWith(true);
+    expect(input.prefill.current).toBe(false);
+    expect(h.showToast).toHaveBeenCalledWith("速记内容准备失败", { type: "error" });
   });
 
   it("clipboard 成功 = text=剪贴板文本 + images 空 的种子（与 camera 同一条 captureSeed 通道）", async () => {

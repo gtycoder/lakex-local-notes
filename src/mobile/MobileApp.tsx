@@ -547,7 +547,15 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
       setCaptureSeed,
       setSeedReady,
       prefill: prefillPendingRef,
-    })).catch(() => undefined);
+    })).catch(() => {
+      // 失败收尾（261119 发版前修补 P2-2）：分包加载失败 / 取数抛错此前被静默吞掉 ⇒ prefillPendingRef 卡 true、
+      // seedReady 卡 false，只剩空壳写作卡（.mobile-qn-composer）且无提示。与 onCancel 等价收尾（清 pending /
+      // 放行挂载）+ 短提示；代际已换（新触发顶掉）时不动新会话的状态（同 isCurrent 口径）。
+      if (captureFlowGenRef.current !== gen) return;
+      prefillPendingRef.current = false;
+      setSeedReady(true);
+      showToast("速记内容准备失败", { type: "error" });
+    });
   };
   // 冷启动（原生 hint）那次订阅不再回调（skipColdRead）⇒ 补跑取数流；只跑一次。
   useEffect(() => {

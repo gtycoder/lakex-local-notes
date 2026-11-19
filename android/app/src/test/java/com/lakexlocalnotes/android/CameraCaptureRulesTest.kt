@@ -2,8 +2,10 @@ package com.lakexlocalnotes.android
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** 相机直出纯规则测试（261118）：命名 / 相对路径 / 可用照片判定。 */
 class CameraCaptureRulesTest {
@@ -26,5 +28,23 @@ class CameraCaptureRulesTest {
         assertFalse(CameraCaptureRules.isUsablePhoto(true, 0))
         // 用户取消：文件再大也不算（半成品绝不回传）。
         assertFalse(CameraCaptureRules.isUsablePhoto(false, 4096))
+    }
+
+    /** 单飞（261119 P2-3）：在途拍摄期间第二次 claim 必须失败（调用方 reject("busy")），防双击互相覆盖/泄漏临时照片。 */
+    @Test
+    fun photoSlotIsSingleFlight() {
+        val slot = CameraCaptureRules.PhotoSlot()
+        val first = File("camera/camera_1_0001.jpg")
+        val second = File("camera/camera_2_0002.jpg")
+        assertTrue(slot.claim(first))
+        assertTrue(slot.busy)
+        // 双击第二次拍摄：占位失败 ⇒ reject("busy")，不覆盖在途照片。
+        assertFalse(slot.claim(second))
+        // 完成 / 取消 / 失败都走 release：交回在途照片、释放槽位；重复释放幂等。
+        assertEquals(first, slot.release())
+        assertFalse(slot.busy)
+        assertNull(slot.release())
+        // 释放后可再次拍摄。
+        assertTrue(slot.claim(second))
     }
 }

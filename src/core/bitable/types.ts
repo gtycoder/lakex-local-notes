@@ -5,7 +5,7 @@
  * 对外 API 仍由 ../bitableDoc.ts 门面 re-export；本文件只被同目录模块与门面 import。
  */
 import { randomUuid } from "../randomId.js";
-import { DEFAULT_LIGHT_COLORS } from "../colorPalette.js";
+import { DEFAULT_LIGHT_COLORS, OPTION_COLOR_BOARD_GROUPS } from "../colorPalette.js";
 import type { AiChatMessage } from "../aiProviders.js";
 
 export const BITABLE_DOC_KIND = "bitable" as const;
@@ -407,11 +407,19 @@ export const BITABLE_RATING_MAX = 5;
 
 export const BITABLE_PROGRESS_MAX = 100;
 
-/** 新建选项/进度默认取的浅色档；选择器本身用全量内核实色卡。 */
-export const BITABLE_OPTION_PALETTE = DEFAULT_LIGHT_COLORS;
+/**
+ * 新建选项默认轮转池 = **选项色板浅中档行**（OPTION_COLOR_BOARD_GROUPS[0]）：保持默认浅底观感，
+ * 且落盘值必须能在取色面板选出（「落盘值 ∈ 取色面」红线）——选择器色板 = OPTION_COLOR_BOARD_GROUPS
+ * 2 行 20 色（FieldEditorModal / 移动端字段编辑表同一数据源，见 core/colorPalette.ts），本池 ⊆ 其拍平值。
+ * （261119：此前 = DEFAULT_LIGHT_COLORS = 内核最浅档行，色板里选不中当前色。）
+ */
+export const BITABLE_OPTION_PALETTE = OPTION_COLOR_BOARD_GROUPS[0];
 
 /** 兼容别名（旧命名色键与 hex 通用；新代码用 BITABLE_OPTION_PALETTE）。 */
 export const BITABLE_OPTION_COLORS = BITABLE_OPTION_PALETTE;
+
+/** 进度条快捷 8 色 = 内核最浅档前 8——**与选项轮转池拆分**（261119 用户口径「进度色板候选不变」）。 */
+export const BITABLE_PROGRESS_QUICK_COLORS = DEFAULT_LIGHT_COLORS.slice(0, 8);
 
 /** 选项/进度条无颜色时的默认灰（组件与填充规则共用；此前 BitableEditor 复制了字面量）。 */
 export const BITABLE_DEFAULT_OPTION_COLOR = "#e8e8e8";

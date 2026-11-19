@@ -36,8 +36,12 @@ import java.io.File
  */
 @CapacitorPlugin(name = "CameraCapture")
 class CameraCapturePlugin : Plugin() {
-    /** 单飞：相机交互同一时刻只会有一个在途（JS 侧入口都是用户手势触发）。 */
-    private var pendingPhoto: File? = null
+    /**
+     * 单飞：相机交互同一时刻只会有一个在途（JS 侧入口都是用户手势触发）。
+     * 261119 P2-3：双击拍照曾互相覆盖 pendingPhoto（第一次的照片泄漏 filesDir/camera/、两次回调串照片）
+     * ⇒ 起相机前先 claim 占位，已有在途直接 reject("busy")（最简口径，不排队）。
+     */
+    private val pendingPhoto = CameraCaptureRules.PhotoSlot()
 
     @PluginMethod
     fun takePhoto(call: PluginCall) {
@@ -62,16 +66,20 @@ class CameraCapturePlugin : Plugin() {
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         // 部分 OEM 相机（MIUI 等）只认 ClipData 传播的 URI 权限、不看 flags ⇒ 两边都带上。
         intent.clipData = ClipData.newRawUri("camera", uri)
-        pendingPhoto = photo
+        // 单飞（P2-3）：已有在途拍摄 ⇒ 显式 reject("busy")，绝不覆盖在途照片/回调。
+        if (!pendingPhoto.claim(photo)) {
+            call.reject("busy")
+            return
+        }
         try {
             startActivityForResult(call, intent, "takePhotoResult")
         } catch (e: ActivityNotFoundException) {
             // 没有相机应用（模拟器无相机 / 精简 ROM）：显式报错，JS 提示改用「图片」，绝不静默开相册。
-            pendingPhoto = null
+            pendingPhoto.release()
             photo.delete()
             call.reject("camera unavailable")
         } catch (e: Exception) {
-            pendingPhoto = null
+            pendingPhoto.release()
             photo.delete()
             call.reject("camera launch failed: " + e.message)
         }
@@ -79,9 +87,12 @@ class CameraCapturePlugin : Plugin() {
 
     @ActivityCallback
     private fun takePhotoResult(call: PluginCall?, result: ActivityResult) {
-        if (call == null) return
-        val photo = pendingPhoto
-        pendingPhoto = null
+        val photo = pendingPhoto.release()
+        if (call == null) {
+            // 无主回调（Bridge 找不回 call）：临时照片必须删，否则泄漏 filesDir/camera/（P2-3 泄漏面清理）。
+            photo?.delete()
+            return
+        }
         if (photo == null) {
             call.resolve(cancelled())
             return

@@ -23,7 +23,9 @@ import { USHEET_BORDER_COLOR } from "./usheetBorders";
  * 基线快照：Univer 桌面色卡 45 预设（5 行 × 9）。
  * 来源：`node_modules/@univerjs/design/lib/index.js:3433`（`colorPresets`）——
  * 字体色 / 背景填充 / 边框色三面同一 ColorPicker（sheets-ui TextColorSelector / BackgroundColorSelector / BorderPanel）。
- * 升级 @univerjs/* 后若「基线自检」红 = 快照漂移：按新 colorPresets 重录本常量并复核 SHEET_* 映射。
+ * ⚠️ 如实口径：本常量是**硬编码快照**，升级 @univerjs/* **不会**让「基线自检」自动变红 ——
+ * 升级后必须人工对照 node_modules/@univerjs/design 的 colorPresets 重录本常量、核对 45 预设，
+ * 并复核 SHEET_* 映射（步骤见 docs/USHEET-UPGRADE.md §3 playbook 2b）。
  */
 const UNIVER_COLOR_PRESETS_45: readonly string[] = [
   "#FFFFFF", "#E1EFFE", "#FDE8E8", "#FEECDC", "#FFF4B9", "#DEF7EC", "#D5F5F6", "#EDEBFE", "#FCE8F3",
@@ -36,7 +38,8 @@ const UNIVER_COLOR_PRESETS_45: readonly string[] = [
 /**
  * 基线快照：内核（Lakex 富文本）固定色卡 70 色阶（7 行 × 10）。
  * 来源：`vendor/lakex-doc-react/src/components/lakex/lakex.js:122960`（调色板常量 `Zc`，`Zd.getColors()` 数据源）。
- * 内核升级 / 重转后若「基线自检」红 = 色阶漂移，先复核再谈任何取色面改动。
+ * ⚠️ 如实口径：本常量同样是**硬编码快照**，内核升级 / 重转**不会**让「基线自检」自动变红 ——
+ * 需人工对照 lakex.js 的色阶常量重录本常量并核对 70 色阶后，再谈任何取色面改动。
  */
 const KERNEL_COLOR_SCALE_70: readonly string[] = [
   "#000000", "#262626", "#595959", "#8C8C8C", "#BFBFBF", "#D9D9D9", "#E9E9E9", "#F5F5F5", "#FAFAFA", "#FFFFFF",

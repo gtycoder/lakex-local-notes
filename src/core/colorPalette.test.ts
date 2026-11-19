@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BITABLE_OPTION_PALETTE } from "./bitable/types.js";
 import {
   COLOR_BOARD_GROUPS,
   COLOR_BOARD_VALUE_SET,
@@ -83,5 +84,15 @@ describe("多维表选项色板 OPTION_COLOR_BOARD_*（261119 用户点单：70 
     expect(COLOR_BOARD_GROUPS.every((row) => row.length === 10)).toBe(true);
     expect(COLOR_BOARD_VALUES).toHaveLength(70);
     expect(DEFAULT_LIGHT_COLORS).toBe(COLOR_BOARD_GROUPS[2]);
+  });
+
+  it("④ 多维表新建选项轮转池 ⊆ OPTION_COLOR_BOARD_VALUES（落盘值能在取色面选出，261119）", () => {
+    // BITABLE_OPTION_PALETTE（core/bitable/types.ts）= 新建选项/进度的默认轮转池；
+    // 落盘值必须能在选项色板里点选回来（色板选不中当前色 = 违反「落盘值 ∈ 取色面」）。
+    const optionValueSet = new Set(OPTION_COLOR_BOARD_VALUES);
+    expect(BITABLE_OPTION_PALETTE.length).toBeGreaterThan(0);
+    expect(BITABLE_OPTION_PALETTE.every((hex) => optionValueSet.has(hex))).toBe(true);
+    // 轮转池 = 选项色板浅中档行（保持默认浅底观感）
+    expect([...BITABLE_OPTION_PALETTE]).toEqual([...OPTION_COLOR_BOARD_GROUPS[0]]);
   });
 });

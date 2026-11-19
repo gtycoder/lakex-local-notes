@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileBitableFieldEditorSheet } from "./MobileBitableFieldEditorSheet";
-import { createBitableField, BITABLE_OPTION_PALETTE } from "../../core/bitableDoc";
-import { COLOR_BOARD_VALUES, OPTION_COLOR_BOARD_GROUPS, OPTION_COLOR_BOARD_VALUES } from "../../core/colorPalette";
+import { createBitableField, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_QUICK_COLORS } from "../../core/bitableDoc";
+import { COLOR_BOARD_VALUES, DEFAULT_LIGHT_COLORS, OPTION_COLOR_BOARD_GROUPS, OPTION_COLOR_BOARD_VALUES } from "../../core/colorPalette";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -181,9 +183,19 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     expect(palette).toBeTruthy();
     const candidates = [...palette!.querySelectorAll<HTMLButtonElement>('button[aria-label^="颜色 "]')]
       .map((b) => b.getAttribute("aria-label")!.slice("颜色 ".length));
-    // 进度条颜色仍取 BITABLE_OPTION_PALETTE 前 8 色（非选项色板、非全量 70 之外的任何收窄）
-    expect(candidates).toEqual(BITABLE_OPTION_PALETTE.slice(0, 8).slice());
+    // 进度条快捷 8 色 = BITABLE_PROGRESS_QUICK_COLORS（最浅档前 8；261119 拆常量，锁「进度色板候选不变」不被选项轮转池带走）
+    expect(candidates).toEqual(BITABLE_PROGRESS_QUICK_COLORS.slice());
+    expect(BITABLE_PROGRESS_QUICK_COLORS).toEqual(DEFAULT_LIGHT_COLORS.slice(0, 8));
     expect(palette!.querySelector('button[aria-label="默认颜色"]')).toBeTruthy();
+  });
+
+  it("新建选项默认色分配 = 单源 BITABLE_OPTION_PALETTE（移动端与 core/bitable/body.ts 同一常量，261119）", () => {
+    const src = readFileSync(path.resolve(process.cwd(), "src/mobile/bitable/MobileBitableFieldEditorSheet.tsx"), "utf8");
+    // 新建选项的默认色必须走共享轮转池常量（⊆ OPTION_COLOR_BOARD_VALUES，见 colorPalette.test.ts ④），
+    // 不许在移动端另起一套分配点/色值。
+    expect(src).toContain("color: BITABLE_OPTION_PALETTE[prev.length % BITABLE_OPTION_PALETTE.length]");
+    expect(src).not.toContain("DEFAULT_LIGHT_COLORS");
+    expect([...BITABLE_OPTION_PALETTE].every((hex) => OPTION_COLOR_BOARD_VALUES.includes(hex))).toBe(true);
   });
 
   it("选项色点：旧命名色经 optionColorHex 回显；「默认颜色」清掉 option.color", () => {
