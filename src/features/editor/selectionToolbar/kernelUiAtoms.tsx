@@ -109,6 +109,18 @@ export function KIcon({ type, size }: { type: string; size?: number }) {
 }
 
 /**
+ * 内核按钮（FrameworkUiLib.Button = antd Button，DOM = `button.ant-btn`）—— 卡工具条家族弹层里的
+ * 行内提交按钮，与内核链接弹层「确定」（KLinkEditor）同款。
+ * 261119 用户终裁：「视频宽度弹窗还是使用内核风格吧，就和图片的风格保持一致就行了」⇒ 该表面
+ * **不引入 ln-btn**（卡工具条内核家族表面，例外于 ln-* 单一来源，见 VideoSizeMenu.tsx 头注释）。
+ */
+export function KButton({ onClick, children }: { onClick?: () => void; children?: ReactNode }) {
+  const B = uiLib().Button;
+  if (!B) return null;
+  return createElement(B, { onClick }, children);
+}
+
+/**
  * 内核「嵌入图标」（FrameworkUiLib.EmbedIcon）：固定工具栏颜色按钮用的动态图标，
  * 传 type=`t-font-color`/`t-bg-color` + fill=当前色 ⇒ 图标下划线随当前色变化。
  * 浮动颜色按钮必须用它，才能和固定栏一样显示「上次使用色 / 默认色」。

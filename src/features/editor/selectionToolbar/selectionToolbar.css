@@ -117,7 +117,17 @@
 .selection-toolbar__checkrow { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
 .selection-toolbar__switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); }
 .selection-toolbar__scale { align-self: flex-start; }
-.selection-toolbar__video-note { max-width: 300px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.45; }
+/* 视频「宽度」弹层（261119 用户终裁：「视频宽度弹窗还是使用内核风格吧，就和图片的风格保持一致就行了」）：
+   **卡工具条内核家族表面，例外于 ln-* 单一来源** —— 表面/菜单行/对勾/选中态全复用内核 CardMenu /
+   CardMenuItem（.ne-card-toolbar-select-menu*，cardMenu.tsx 家族单一来源），输入行走图片弹窗同型
+   .selection-toolbar__inputrow > .ne-card-toolbar-input（30px 高 / 1px 边），「应用」= 内核按钮
+   （KButton / button.ant-btn，链接弹层「确定」同款，不引入 ln-btn）。本处只留业务排版，零表面视觉：
+   ① __videorow 输入行的内距对齐菜单项内容列（内核项 padding 10px 20px 10px 30px，见 lakex-doc.css
+   .ne-card-toolbar-select-menu-item —— 对勾槽 30px 在左、标签列起点 30px）；
+   ② 说明文案 = 12px 菜单脚注（同列对齐；max-width 让它在窄菜单里自然折行）。
+   百分比数字的 tabular-nums 由内核 antd base 的 body 规则（font-variant: tabular-nums + tnum）自带，不另写。 */
+.selection-toolbar__videorow { padding: 10px 20px 10px 30px; }
+.selection-toolbar__video-note { max-width: 240px; padding: 0 20px 10px 30px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.45; }
 /* 链接编辑弹层：只负责浮层定位；表面（背景/边框/阴影/圆角/内距/宽度）全部由内核
    .ne-link-editor 提供 ⇒ 与固定栏链接弹窗一致，不再自造。 */
 .selection-toolbar__popover {

@@ -41,7 +41,9 @@ import {
 } from "./colorMemory";
 import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, lineBoxRects, parseAssetRef, TOOLBAR_MARGIN, type SelectionRect } from "./selectionToolbarModel";
 import { collectSelectionImageRefs, imageCardAssetRef } from "./selectionImages";
-import { readVideoLayout, VIDEO_WIDTH_PRESETS, writeVideoLayout, type VideoAlignment } from "../videoCardOps";
+import { readVideoLayout, writeVideoLayout, type VideoAlignment } from "../videoCardOps";
+import { CardMenu, CardMenuItem } from "./cardMenu";
+import { VideoSizeMenu } from "./VideoSizeMenu";
 import type { AiAssetRef } from "../../../core/aiProviders";
 import { firstRangeRect, useSelectionToolbar, type ImageTarget, type VideoTarget } from "./useSelectionToolbar";
 import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
@@ -163,27 +165,6 @@ function CardItem({ tip, className, selected, disabled, onClick, children }: {
       </div>
       {tipNode}
     </>
-  );
-}
-
-/** 图片浮栏：内核卡片工具栏下拉菜单（云端同款 `.ne-card-toolbar-select-menu`）。 */
-function CardMenu({ menu, style, surfaceRef, children }: { menu: string; style?: CSSProperties; surfaceRef?: (el: HTMLElement | null) => void; children: ReactNode }) {
-  return (
-    <div ref={surfaceRef} style={style} className="selection-toolbar__kmenu" data-menu={menu}>
-      <ul className="ant-dropdown-menu ant-dropdown-menu-root ant-dropdown-menu-vertical ant-dropdown-menu-light ne-card-toolbar-select-menu" role="menu">{children}</ul>
-    </div>
-  );
-}
-
-function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?: string; selected?: boolean; onClick?: () => void }) {
-  return (
-    <li role="menuitem" className={"ant-dropdown-menu-item ne-card-toolbar-select-menu-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
-      <div className="ne-card-toolbar-check-icon"><KIcon type="check" /></div>
-      <div className="ne-card-toolbar-select-item-content">
-        {icon ? <div className="ne-card-toolbar-select-item-icon"><KIcon type={icon} /></div> : null}
-        <div className="ne-card-toolbar-select-item-label">{label}</div>
-      </div>
-    </li>
   );
 }
 
@@ -1022,42 +1003,20 @@ export function SelectionToolbar({ editor, container }: {
           </CardItem>
         </div>
 
+        {/* 宽度弹层（261119 用户终裁：「视频宽度弹窗还是使用内核风格吧，就和图片的风格保持一致就行了」）：
+            与图片二级菜单同族 —— CardMenu 表面 + CardMenuItem 预设行 + .ne-card-toolbar-input 输入 +
+            内核按钮 KButton 提交（卡工具条家族内核表面，例外于 ln-* 单一来源，见 VideoSizeMenu 头注释）。
+            定位/开关沿用本组件的 placePopoverPosition + clampToEditorArea 实测坐标。 */}
         {menu === "videosize" && (
-          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="videosize">
-            <div className="selection-toolbar__inputrow">
-              <span className="ne-card-toolbar-input-title">宽度</span>
-              <input
-                className="ne-card-toolbar-input"
-                type="number"
-                min="10"
-                max="100"
-                step="1"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !isImeConfirming(e)) {
-                    e.preventDefault();
-                    applyWidth();
-                  }
-                }}
-              />
-              <span className="ne-card-toolbar-input-title">%</span>
-              <button type="button" className="ln-btn ln-btn--primary" onClick={applyWidth}>应用</button>
-            </div>
-            <span className="selection-toolbar__video-note">100% 表示铺满正文栏，不是视频原始像素尺寸；也可直接拖动视频左右边缘。</span>
-            <div className="ln-segment selection-toolbar__scale">
-              {VIDEO_WIDTH_PRESETS.map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  className={"ln-segment__item" + (meta.widthPercent === pct ? " is-active" : "")}
-                  onClick={() => apply({ widthPercent: pct })}
-                >
-                  {pct}%
-                </button>
-              ))}
-            </div>
-          </div>
+          <VideoSizeMenu
+            widthPercent={meta.widthPercent}
+            draft={draft}
+            onDraftChange={setDraft}
+            onApplyWidth={applyWidth}
+            onApplyPreset={(pct) => apply({ widthPercent: pct })}
+            style={popoverStyle ?? OFFSCREEN}
+            surfaceRef={setPopoverRef}
+          />
         )}
 
         {menu === "videoalign" && (
