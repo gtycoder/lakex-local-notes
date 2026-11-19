@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
  * 位置清单来自 modern-web-guidance 的 `ime-safe-enter-submit` analyzer（33 处）
  * + 本轮人工补漏 2 处（SearchPanel 搜索框、内核链接编辑弹层），扣除记录面板已删除的内联选项输入
  * ＝ 34 处 / 27 文件；261119 视频「宽度」弹层拆出 VideoSizeMenu（Enter 提交同款判据）⇒ 35 处 / 28 文件。
+ * 261119 第三轮改判（视频弹窗逐像素照抄图片 imgsize 面板）：两面板共用 MediaSizePop、Enter 判据收口一处
+ * ⇒ 33 处 / 28 文件（SelectionToolbar 3→1 只剩 imglink、VideoSizeMenu 1→0 撤销、MediaSizePop +1）。
  *
  * 为什么不写「全仓 key === "Enter" 都必须有 guard」：行/卡片的 Enter 激活、
  * Meta+Enter 保存、方向键式 move 都不是文本提交语义（会误报）。
@@ -26,8 +28,8 @@ const SITES: Record<string, number> = {
   "src/features/bitable/BitableKanbanView.tsx": 1,
   "src/features/editor/AssetRenameDialog.tsx": 1,
   "src/features/editor/lockedTextCard.tsx": 2,
-  "src/features/editor/selectionToolbar/SelectionToolbar.tsx": 3,
-  "src/features/editor/selectionToolbar/VideoSizeMenu.tsx": 1,
+  "src/features/editor/selectionToolbar/MediaSizePop.tsx": 1,
+  "src/features/editor/selectionToolbar/SelectionToolbar.tsx": 1,
   "src/features/editor/selectionToolbar/kernelUiAtoms.tsx": 1,
   "src/features/ink/InkPageTabForm.tsx": 1,
   "src/features/quickNotes/QuickNotesWorkspace.tsx": 1,
@@ -48,9 +50,9 @@ const SITES: Record<string, number> = {
 const read = (rel: string): string => readFileSync(new URL("../../../" + rel, import.meta.url), "utf8");
 
 describe("A01 Enter 提交的 IME 判据（静态契约）", () => {
-  it("35 处入口全部经过 isImeConfirming", () => {
+  it("33 处入口全部经过 isImeConfirming", () => {
     const total = Object.values(SITES).reduce((a, b) => a + b, 0);
-    expect(total).toBe(35);
+    expect(total).toBe(33);
     const missing: string[] = [];
     for (const [file, expected] of Object.entries(SITES)) {
       const source = read(file);

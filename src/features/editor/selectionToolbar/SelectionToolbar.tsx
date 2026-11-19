@@ -43,6 +43,7 @@ import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, lineBoxRects
 import { collectSelectionImageRefs, imageCardAssetRef } from "./selectionImages";
 import { readVideoLayout, writeVideoLayout, type VideoAlignment } from "../videoCardOps";
 import { CardMenu, CardMenuItem } from "./cardMenu";
+import { MediaSizePop } from "./MediaSizePop";
 import { VideoSizeMenu } from "./VideoSizeMenu";
 import type { AiAssetRef } from "../../../core/aiProviders";
 import { firstRangeRect, useSelectionToolbar, type ImageTarget, type VideoTarget } from "./useSelectionToolbar";
@@ -914,21 +915,21 @@ export function SelectionToolbar({ editor, container }: {
         <CardItem tip="AI" className="ne-card-toolbar-item" disabled={!asset} onClick={() => openAiForImage(t)}><AiTagIcon size={18} /></CardItem>
       </div>
 
-        {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容） */}
+        {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容）。**样板本体 = MediaSizePop**（共享组件：
+            表面/输入/预设档几何与提交语义都只此一份；视频 videosize 是它的宽度单列变体，见 VideoSizeMenu）。 */}
         {menu === "imgsize" && (
-          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imgsize">
-            <div className="selection-toolbar__inputrow">
-              <span className="ne-card-toolbar-input-title">宽</span>
-              <input className="ne-card-toolbar-input" type="number" min="16" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) { e.preventDefault(); applyWidth(); } }} />
-              <span className="ne-card-toolbar-input-title">高</span>
-              <input className="ne-card-toolbar-input" type="number" min="16" value={draftH} onChange={(e) => setDraftH(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) { e.preventDefault(); applyHeight(); } }} />
-            </div>
-            <div className="ln-segment selection-toolbar__scale">
-              {[25, 50, 75, 100].map((p) => (
-                <button key={p} type="button" className={"ln-segment__item" + (scalePct === p ? " is-active" : "")} onClick={() => apply({ width: Math.max(16, Math.round((meta.originalWidth * p) / 100)) })}>{p}%</button>
-              ))}
-            </div>
-          </div>
+          <MediaSizePop
+            menu="imgsize"
+            style={popoverStyle ?? OFFSCREEN}
+            surfaceRef={setPopoverRef}
+            fields={[
+              { label: "宽", value: draft, onChange: setDraft, onSubmit: applyWidth, min: 16 },
+              { label: "高", value: draftH, onChange: setDraftH, onSubmit: applyHeight, min: 16 },
+            ]}
+            presets={[25, 50, 75, 100]}
+            scalePct={scalePct}
+            onScale={(p) => apply({ width: Math.max(16, Math.round((meta.originalWidth * p) / 100)) })}
+          />
         )}
         {/* 链接：网址输入 + 「在当前页面打开」 */}
         {menu === "imglink" && (
@@ -1003,9 +1004,9 @@ export function SelectionToolbar({ editor, container }: {
           </CardItem>
         </div>
 
-        {/* 宽度弹层（261119 用户终裁：「视频宽度弹窗还是使用内核风格吧，就和图片的风格保持一致就行了」）：
-            与图片二级菜单同族 —— CardMenu 表面 + CardMenuItem 预设行 + .ne-card-toolbar-input 输入 +
-            内核按钮 KButton 提交（卡工具条家族内核表面，例外于 ln-* 单一来源，见 VideoSizeMenu 头注释）。
+        {/* 宽度弹层（261119 用户第三轮点单：逐像素照抄图片「宽高」弹窗）= 图片 imgsize 面板的宽度单列变体：
+            共享样板组件 MediaSizePop（cardpop 白面板 + 输入行 + ln-segment 预设档），内容「宽 [值] %」一行 +
+            25/50/75/100 预设条；无「应用」按钮/可见脚注（语义提示在输入框 title，见 VideoSizeMenu 头注释）。
             定位/开关沿用本组件的 placePopoverPosition + clampToEditorArea 实测坐标。 */}
         {menu === "videosize" && (
           <VideoSizeMenu
