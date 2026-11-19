@@ -125,6 +125,10 @@ function ensureBox(cardEl: HTMLElement): HTMLElement {
     box.className = `${BOX_CLASS} ${BOX_CLASS}--${mediaKind(cardEl) ?? "image"}`;
     box.setAttribute("aria-hidden", "true");
     cardEl.appendChild(box);
+  } else {
+    // 未变才写（AGENTS I2）：复用现有盒时同值 className 不重写，静置扫描零 DOM 写。
+    const wantClass = `${BOX_CLASS} ${BOX_CLASS}--${mediaKind(cardEl) ?? "image"}`;
+    if (box.className !== wantClass) box.className = wantClass;
   }
   return box;
 }
@@ -181,11 +185,18 @@ function ensureHandles(cardEl: HTMLElement, kind: MediaKind, state: ResizeState)
     box.removeAttribute("style");
   }
   for (const handle of box.querySelectorAll<HTMLElement>(HANDLE_SELECTOR)) {
-    handle.setAttribute("aria-valuenow", String(Math.round(state.value)));
-    handle.setAttribute("aria-valuemin", String(state.min));
-    handle.setAttribute("aria-valuemax", String(state.max));
-    handle.setAttribute("aria-valuetext", formatValue(kind, state.value));
-    handle.dataset.value = formatValue(kind, state.value);
+    // 未变才写（AGENTS I2）：扫描重放同一状态时不写属性，静置场景 DOM 写次数 = 0。
+    const valueText = formatValue(kind, state.value);
+    const attrs: Array<[string, string]> = [
+      ["aria-valuenow", String(Math.round(state.value))],
+      ["aria-valuemin", String(state.min)],
+      ["aria-valuemax", String(state.max)],
+      ["aria-valuetext", valueText],
+    ];
+    for (const [name, value] of attrs) {
+      if (handle.getAttribute(name) !== value) handle.setAttribute(name, value);
+    }
+    if (handle.dataset.value !== valueText) handle.dataset.value = valueText;
   }
 }
 

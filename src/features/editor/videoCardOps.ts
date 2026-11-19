@@ -130,9 +130,13 @@ export function applyVideoLayout(cardEl: HTMLElement, layout: VideoLayout): Vide
     alignment: normalizeVideoAlignment(layout.alignment),
   };
   if (isVideoLayoutLocked(cardEl)) return readVideoLayout(cardEl);
-  cardEl.setAttribute("data-video-width", String(normalized.widthPercent));
-  cardEl.setAttribute("data-video-align", normalized.alignment);
-  cardEl.style.setProperty("--lake-video-max-width", `${normalized.widthPercent}%`);
+  // 未变才写（AGENTS I2）：目标值与现值一致时不写 DOM，避免扫描环里的无谓 attr/style 变更
+  // （每次写入都可能触发内核观察器与样式重算；261119 闪烁排查的写次数断言口径）。
+  const widthAttr = String(normalized.widthPercent);
+  const maxVar = `${normalized.widthPercent}%`;
+  if (cardEl.getAttribute("data-video-width") !== widthAttr) cardEl.setAttribute("data-video-width", widthAttr);
+  if (cardEl.getAttribute("data-video-align") !== normalized.alignment) cardEl.setAttribute("data-video-align", normalized.alignment);
+  if (cardEl.style.getPropertyValue("--lake-video-max-width") !== maxVar) cardEl.style.setProperty("--lake-video-max-width", maxVar);
   return normalized;
 }
 

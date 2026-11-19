@@ -18,6 +18,7 @@ import { LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT, injectKatexScriptsInOrder } from
 import { setupAudioCardRetry } from "./lakeAudioCardRetry";
 import { mountMediaCardResize } from "./mediaCardResize";
 import { mountVideoCardLayoutSync } from "./videoCardOps";
+import { installBookmarkCoverFallbackGuard } from "./bookmarkCoverFallbackGuard";
 import { setupTocScrollFollow } from "./lakeTocScrollFollow";
 import { subscribeDocInitPerf } from "./lakePerfSubscription";
 import { setupViewerTocClickAssist } from "./lakeTileRender";
@@ -531,6 +532,9 @@ export function createLakeDocument(
   // （最长 ~20s）直到播放器出现；DT-07：重试计时器与清理都收进 lakeAudioCardRetry.ts。
   appendDisposeExtras(editor, setupAudioCardRetry(mount));
   // 视频卡尺寸/对齐是卡片值的一部分；虚拟渲染替换 DOM 时持续把值投影为布局属性（桌面/移动端/阅读态共用）。
+  // 书签卡封面「未变才写」防环（261119 文档卡片闪烁）：内核 onError 兜底同值重写 src 会形成
+  // error→重拉→error 的网络节奏闪烁环；挂元素级 src 守卫后同值写直接跳过（详见模块头注释）。
+  appendDisposeExtras(editor, installBookmarkCoverFallbackGuard(mount));
   appendDisposeExtras(editor, mountVideoCardLayoutSync(mount, editor, { interactive: mode === "editor" }));
   appendDisposeExtras(editor, mountMediaCardResize(mount, mode === "editor"));
   // 261114 二批：点失败图卡（ne-image-error）→ 立刻重试本篇所有可重试的失败图；

@@ -2272,3 +2272,13 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **病灶（原实现为什么什么都筛不出）**：Fuse 评分 = `errors/len + |命中位置 − location(0)|/distance(12)`，且 Fuse 自身 `threshold` 0.6 先行判 `isMatch` ⇒ 命中位置离开词条开头就丢分、**超过 ~0.7 字符整条 0 命中**；中文关键词全在词条尾部 ⇒「火」0 命中；英文也只有词条首词能过 `score <= 0.1` 滤网（fire ✓ / apple ✗）。字段长度归一（最终 score = bitap^norm）另把长词条的满分抬过 0.1 ⇒ 表现 =「什么都筛选不出来」（浏览/分类/空查询不受影响）。
 - **补丁口径（`vendor/lakex-doc-react/LOCAL-CHANGES.md` #34）**：`getSearchItems` 的 Fuse options 加 **`ignoreLocation: !0` + `ignoreFieldNorm: !0`**（位置/字段长度不计分；`score <= 0.1` 保留 = 「≤10% 错字」紧口径）。**实测口径**（从 bundle 抽 Fuse+ePW 跑，护栏 `src/features/editor/emojiPanelSearch.test.ts` 可复跑）：火→9 条（🔥/🌋/🧯/🚀/❤️‍🔥…）、苹果→🍎🍏、house→🏠 等 7 条、fire→13 条、空查询→1467 全量、house/fire 不出 🍎。**数据无需补中文别名**：ePW 已含中文关键词，不用桥接 `src/lib/emojiSearch.ts`（那是「目录选表情」面板的数据层，两套面板两套数据，勿混勿并）。
 - **扩展点结论**：`unicodeEmoji` 插件 option 只能注入 `emojiMap`/`emojiGroups` **数据**，救不了评分语义（除非把 1467 条数据整份搬到宿主重建成逐 token 短词条）⇒ 搜索函数本身无扩展点，走 LOCAL-CHANGES 最小补丁（同 #32 例外）。重转内核后 `emojiPanelSearch.test.ts` 会红提醒重放；`doc.umd.js` 有同一函数但不在构建链路、未打补丁。
+
+### 5.61 书签卡封面「闪烁环」真身与「未变才写」守卫（261119 录屏取证 + 隔离实例复现；已核实行为）
+
+> 用户报「文档里卡片的闪烁问题」（录屏 `Screenrecorder-2026-11-19-18-48-16-295.mp4`，Lake 文档阅读态，书签卡在视野内）。
+
+- **真身 = 书签卡封面 img 的 onError 兜底同值重写环（不是布局回写扫描）**：内核 `_getCoverElement`（`lakex.js` 两处：块卡/h5 卡）的 `onError` **无条件** `coverRef.current.src = 兜底图`（`gw.alipayobjects.com/…A*MfA2QIGNXcE…`，构建期被 `lakexLocalize` 本地化为 `/vendor/lakex/alipay/A_MfA2…`）。封面 URL 失败（CSP/断网/防盗链）且兜底图也拉不到时：error → **同值**重写 src → 浏览器**重新拉取**（实测 `img.src = img.src` 会重新走一次加载）→ 再 error → 再同值重写……**网络往返节奏（实测 ~0.4–0.8s/圈、无上限）的加载/破图闪烁环**；封面盒在「loading 空盒 ↔ 破图盒」交替 = 用户看到的卡片闪烁。
+- **复现（隔离实例，dev 数据含录屏同款文档 `01--IO基础` + mmbiz 封面）**：断网态下 15s 窗口实测 **28 次 img-error + 27 次同值 src 重写**（写次数对齐网络节奏）；修复后同窗口 **2 error + 2 写（mmbiz→兜底各一）后静止**。
+- **修法 = AGENTS I2「未变才写」，应用层运行期 DOM 补丁**（`src/features/editor/bookmarkCoverFallbackGuard.ts`，挂在 `createLakeDocument` 的 mount，桌面/移动/预览共用）：给封面 img 挂**元素级 src 访问器**，赋值与 attribute 现值一致时直接跳过（不触发浏览器重拉）；内核 onError 语义不变——首次失败照常写兜底（值不同），兜底再失败时同值写被吞、环终止，封面稳定停在破图/兜底态；真实换图仍正常写。**不动内核产物**（LOCAL-CHANGES §二.1 应用层优先）。
+- **录屏取证修正（证伪「0.8s 布局回写环」假设）**：录屏 24.35fps/200帧，逐帧差分的「每 24 帧周期尖峰」= **H.264 GOP 关键帧再量化伪影**（全帧 ±1–2 luma、幅度在第 4 位小数抖动、静止段逐位相同、>8 luma 的变化像素只集中在 ~3150px 的封面盒）⇒ **不是整页重排、不是应用侧定时器**；真实 DOM 变化全部在书签卡封面盒（`tblend` 全帧差分 >8 luma 阈值与封面盒逐帧统计一致）。扫描器家族（`mountVideoCardLayoutSync` / `mediaCardResize`）已同步补「未变才写」（`applyVideoLayout` 与把手属性同值不写，护栏 `layoutWriteOnce.test.ts`：静置扫描 N 次 = 0 DOM 写、真实变化正常写）。
+- **护栏**：`src/features/editor/bookmarkCoverFallbackGuard.test.ts`（写次数断言：无守卫环 20 error = 20 写、有守卫 = 1 写；内核 onError 前提 pin——重转内核后提醒复核）+ `layoutWriteOnce.test.ts`。
