@@ -35,7 +35,7 @@ beforeEach(() => {
     getActiveRange: () => range,
   };
   range = {
-    getCellStyleData: () => ({ bl: 1, it: 1, ul: { s: 1 }, st: { s: 1 }, cl: { rgb: "#E5484D" }, bg: { rgb: "rgb(229, 72, 77)" } }),
+    getCellStyleData: () => ({ bl: 1, it: 1, ul: { s: 1 }, st: { s: 1 }, cl: { rgb: "#F05252" }, bg: { rgb: "rgb(240, 82, 82)" } }),
     getHorizontalAlignment: () => "center",
     getVerticalAlignment: () => "middle",
     getFontSize: () => 16,
@@ -67,7 +67,7 @@ describe("useSheetChromeState", () => {
       bold: true, italic: true, underline: true, strike: true,
       align: "center", valign: "middle", size: 16, numfmt: "0.00",
       address: "B3", value: "季度预算",
-      fontColor: "#E5484D", bgColor: "rgb(229, 72, 77)",
+      fontColor: "#F05252", bgColor: "rgb(240, 82, 82)",
     });
     expect(api.sheets).toEqual([
       { id: "s1", name: "工作表 1" },

@@ -5,7 +5,9 @@
  * - `type` 来自 `BorderType` 枚举（**字符串值**：top/bottom/left/right/all/outside/inside/none…）；
  * - `style` 来自 `BorderStyleTypes`（数字枚举，THIN = 1；运行时从 `univerAPI.Enum` 取，不写死数字）；
  * - `color` 是**文档数据里的颜色**（随正文保存，不是 UI 令牌）⇒ 这里的常量属于"内容色"，
- *   口径与 `usheetChromeModel` 的 COLOR_NAMES 相同（颜色字面量只出现在移动端数据模块，不进 CSS）。
+ *   口径与 `usheetChromeModel` 的 SHEET_* 色板相同（颜色字面量只出现在移动端数据模块，不进 CSS），
+ *   且必须是 **Univer 桌面色卡 45 预设的精确值**（`@univerjs/design` colorPresets；桌面边框色板
+ *   与字体色/背景填充同一 ColorPicker）——否则落盘的边框色桌面端选不出（桌面可选集合规，261119 审计案 1）。
  */
 export interface UsheetBorderOption {
   id: string;
@@ -28,8 +30,9 @@ export const USHEET_BORDER_OPTIONS: readonly UsheetBorderOption[] = [
 
 export const USHEET_BORDER_IDS: ReadonlySet<string> = new Set(USHEET_BORDER_OPTIONS.map((option) => option.id));
 
-/** 文档里的边框颜色（随正文落盘；改这里等于改用户文档的默认边框观感）。 */
-export const USHEET_BORDER_COLOR = "#c8ccd2";
+/** 文档里的边框颜色（随正文落盘；改这里等于改用户文档的默认边框观感）。
+ *  桌面可选集合规（261119 审计案 1）：Univer 桌面色卡 45 预设精确值（`@univerjs/design` colorPresets）。 */
+export const USHEET_BORDER_COLOR = "#CDD0D8";
 
 /** 组件传入的选区：只要 setBorder 的写入口（缺失 = 运行时没装表格内核）。 */
 export interface UsheetBorderRange {

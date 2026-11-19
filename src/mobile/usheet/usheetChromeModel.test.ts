@@ -74,13 +74,14 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
   });
 
   it("颜色归一化：hex 大小写 / rgb() / 空值都能比较（T 面板反显口径）", () => {
-    expect(normalizeSheetColor("#E5484D")).toBe("#e5484d");
-    expect(normalizeSheetColor("rgb(229, 72, 77)")).toBe("#e5484d");
+    // 示例值用色板现值（#F05252 = Univer 桌面色卡预设，261119 审计案 1 后的 font-red/fill-red）。
+    expect(normalizeSheetColor("#F05252")).toBe("#f05252");
+    expect(normalizeSheetColor("rgb(240, 82, 82)")).toBe("#f05252");
     expect(normalizeSheetColor("  ")).toBe("");
     expect(normalizeSheetColor("#abc")).toBe("#aabbcc");
-    expect(sheetColorEquals("rgb(229, 72, 77)", "#e5484d")).toBe(true);
+    expect(sheetColorEquals("rgb(240, 82, 82)", "#F05252")).toBe(true);
     expect(sheetColorEquals("", "")).toBe(true);
-    expect(sheetColorEquals("#e5484d", "")).toBe(false);
+    expect(sheetColorEquals("#F05252", "")).toBe(false);
   });
 
   it("面板下限高度放得下最高的常驻面板（更多 6 行 = 254；T = 300 仍是最高）", () => {

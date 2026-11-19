@@ -102,37 +102,47 @@ export const SHEET_ALIGN_V: ReadonlyArray<{ id: "top" | "middle" | "bottom"; lab
   { id: "bottom", label: "下" },
 ];
 
-/** 字体颜色（一条白条：A × 8）。 */
+/**
+ * 字体颜色（一条白条：A × 8）。
+ *
+ * 桌面可选集合规（261119 审计案 1）：值全部是 **Univer 桌面色卡 45 预设的精确值**
+ * （`@univerjs/design` colorPresets，字体色/背景填充/边框同一 ColorPicker）⇒ 移动端写进正文的
+ * 颜色在桌面 Univer 工具栏色板里逐值选得出。排布/文案不变；不要填色卡外的近似值（ΔE 近似不算）。
+ */
 export const SHEET_FONT_COLORS: ReadonlyArray<{ id: string; label: string; value: string }> = [
   { id: "font-default", label: "默认", value: "" },
-  { id: "font-gray", label: "灰色", value: "#8b8d98" },
-  { id: "font-red", label: "红色", value: "#e5484d" },
-  { id: "font-orange", label: "橙色", value: "#f76b15" },
-  { id: "font-yellow", label: "黄色", value: "#ffb224" },
-  { id: "font-green", label: "绿色", value: "#30a46c" },
-  { id: "font-blue", label: "蓝色", value: "#0091ff" },
-  { id: "font-purple", label: "紫色", value: "#8e4ec6" },
+  { id: "font-gray", label: "灰色", value: "#979DAC" },
+  { id: "font-red", label: "红色", value: "#F05252" },
+  { id: "font-orange", label: "橙色", value: "#FF5A1F" },
+  { id: "font-yellow", label: "黄色", value: "#FAC815" },
+  { id: "font-green", label: "绿色", value: "#0DA471" },
+  { id: "font-blue", label: "蓝色", value: "#3F83F8" },
+  { id: "font-purple", label: "紫色", value: "#9061F9" },
 ];
 
-/** 背景填充：两行（无 + 浅色 / 强色），同文档 T 面板。 */
+/**
+ * 背景填充：两行（无 + 浅色 / 强色），同文档 T 面板。
+ * 桌面可选集合规（261119 审计案 1）：与 SHEET_FONT_COLORS 同口径 —— 值 = Univer 桌面色卡
+ * 45 预设精确值（`@univerjs/design` colorPresets），同色相与字色行保持同值（红/橙/绿/蓝/紫）。
+ */
 export const SHEET_FILL_LIGHT: ReadonlyArray<{ id: string; label: string; value: string }> = [
   { id: "fill-none", label: "无填充", value: "" },
-  { id: "fill-pink", label: "浅粉", value: "#fde2e2" },
-  { id: "fill-peach", label: "浅橙", value: "#fde8d7" },
-  { id: "fill-cream", label: "浅黄", value: "#fdf3cf" },
-  { id: "fill-mint", label: "浅绿", value: "#e3f5e3" },
-  { id: "fill-sky", label: "浅蓝", value: "#e0ecfb" },
-  { id: "fill-lilac", label: "浅紫", value: "#f0e6fb" },
+  { id: "fill-pink", label: "浅粉", value: "#FDE8E8" },
+  { id: "fill-peach", label: "浅橙", value: "#FEECDC" },
+  { id: "fill-cream", label: "浅黄", value: "#FFF4B9" },
+  { id: "fill-mint", label: "浅绿", value: "#DEF7EC" },
+  { id: "fill-sky", label: "浅蓝", value: "#E1EFFE" },
+  { id: "fill-lilac", label: "浅紫", value: "#EDEBFE" },
 ];
 
 export const SHEET_FILL_STRONG: ReadonlyArray<{ id: string; label: string; value: string }> = [
-  { id: "fill-gray", label: "深灰", value: "#d9d9d9" },
-  { id: "fill-red", label: "红", value: "#e5484d" },
-  { id: "fill-orange", label: "橙", value: "#f76b15" },
-  { id: "fill-yellow", label: "黄", value: "#d9a300" },
-  { id: "fill-green", label: "绿", value: "#30a46c" },
-  { id: "fill-blue", label: "蓝", value: "#0091ff" },
-  { id: "fill-purple", label: "紫", value: "#8e4ec6" },
+  { id: "fill-gray", label: "深灰", value: "#CDD0D8" },
+  { id: "fill-red", label: "红", value: "#F05252" },
+  { id: "fill-orange", label: "橙", value: "#FF5A1F" },
+  { id: "fill-yellow", label: "黄", value: "#D49D0F" },
+  { id: "fill-green", label: "绿", value: "#0DA471" },
+  { id: "fill-blue", label: "蓝", value: "#3F83F8" },
+  { id: "fill-purple", label: "紫", value: "#9061F9" },
 ];
 
 /** 字号固定档（照文档 T 面板：8 档）。 */
@@ -231,7 +241,7 @@ export function numfmtLabelOf(pattern: string): string {
 }
 
 /**
- * 颜色归一化：内核可能回 `#E5484D` / `rgb(229, 72, 77)` / 空串，面板反显比较必须走这一处。
+ * 颜色归一化：内核可能回 `#F05252` / `rgb(240, 82, 82)` / 空串，面板反显比较必须走这一处。
  * 输出统一为小写 `#rrggbb`（认不出的值原样小写返回，仍可做相等比较）。
  */
 export function normalizeSheetColor(value: string | null | undefined): string {

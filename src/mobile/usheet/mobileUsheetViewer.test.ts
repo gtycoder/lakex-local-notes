@@ -306,7 +306,8 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     // 默认格：无填充应处于选中态
     expect(panel.querySelector<HTMLButtonElement>('button[aria-label="背景填充 无填充"]')!.className).toContain("is-on");
     const original = range.getCellStyleData;
-    range.getCellStyleData = () => ({ bl: 1, bg: { rgb: "rgb(229, 72, 77)" }, cl: { rgb: "#E5484D" } });
+    // 红格现值 = #F05252（Univer 桌面色卡预设，261119 审计案 1）；bg 用同色 rgb() 形式验归一化。
+    range.getCellStyleData = () => ({ bl: 1, bg: { rgb: "rgb(240, 82, 82)" }, cl: { rgb: "#F05252" } });
     try {
       await act(async () => { calls.commandHandler?.({ id: "sheet.command.set-style" }); });
     } finally {
