@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · 两点改判（快捷菜单顺序/替换语义 + 视频宽高弹窗照抄图片样板）（未发版）
+
+- **快捷菜单**（用户裁决）：① 顺序与文案 = **拍照小记 / 剪切板小记 / 新建小记**（shortcuts.xml 块序即显示序；三短语 short/long 对齐；旧「新建小记」块内部逐字未动只挪第三位，ShortcutsConfigTest 补块序断言）；② **都做成替换**：camera 改走 captureSeed 草稿通道（text 空 + 图片种子），与 clipboard 同为整份替换未提交旧草稿；删 setCaptureInsert/insertFiles 并入通道（首页新建面板 initialInsert 通道保留、有其他消费者）；取消/失败不落种子、旧草稿不动；取数流接 isCurrent 代际（captureFlowGenRef，触发/关闭 +1）堵「迟到相机结果污染新会话」。行为微差（已注释）：camera 取消后写作卡才挂载弹键盘（原为卡先挂相机盖上），数据语义不变。
+- **视频宽高弹窗第三轮终裁**：样板 = 图片 imgsize「宽高」弹窗本体（此前两轮 ln-menu/内核 CardMenu 形态均被判不对）⇒ 新增 `MediaSizePop.tsx` **共享组件单一来源**（cardpop 表面 + inputrow 字段行 + ln-segment 预设档），imgsize（宽+高两列）与 videosize（宽单列「宽 [值] %」+ 25/50/75/100）同渲染、类栈逐字相等测试钉死**永不再漂**；无应用按钮/无可见脚注（「100% = 铺满正文栏」提示挂输入框 title → .ln-tip）；Enter/IME 提交语义组件内唯一收口（imgsize 实测只有 Enter 提交 ⇒ 同款）。撤 KButton、删 __videorow/__video-note（cssLayers 164→158）；`__videoWidth` 10–100 与 ←/→/Home/End 零变化。cardMenu.tsx（图片二级菜单共用件）保留不动——其 focusable/ariaPressed 已无调用方、注释过期，登记下批清理。
+- **门禁（两批合验，重建产物后）**：tsc 0；全量 vitest **1055 文件 / 6694 例 0 failed**；ui-metrics 0；check:arch 双端 PASS（mobile 347,955/350,000、desktop 601,525/602,000）；check:bundle mobile-entry 50,959/51,440；git diff --check 干净；android testDebugUnitTest 绿（ShortcutsConfigTest 3/3）。
+
 ### 261119 · 长按图标快捷菜单：拍照小记 / 剪切板小记（点单交付，未发版）
 
 - **三快捷方式**（res/xml/shortcuts.xml，同 QuickNoteAlias + ic_launcher）：旧「小记」block 逐字未动（无 query 深链全文件仅一条、文案钉死 ⇒ 零变化）；新增「拍照小记」`?src=camera`、「剪切板小记」`?src=clipboard`。深链解析 `quickNoteShortcutMode()` → plain|camera|clipboard|null（未知 src 不劫持旧语义）；manifest intent-filter 未动（query 不影响 scheme+host 匹配，已 resolve-activity 实证）。
@@ -510,7 +516,7 @@
 **261119 · 修复批基线（未发版；v1.4.0 之后）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
-- 全量 vitest：**文件 1055（passed / 13 skipped）/ 用例 6684（passed / 14 skipped）/ 0 failed**（含 261119 快捷菜单批新增 21 例）。
+- 全量 vitest：**文件 1055（passed / 13 skipped）/ 用例 6694（passed / 14 skipped）/ 0 failed**（含 261119 快捷菜单批 + 两点改判批新增）。imeEnterWiring 33 处（MediaSizePop 收口后）；selectionToolbar.css 基线 158。
 - `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0）；`cssLayers`/`mobileLayers` 棘轮按实测登记：selectionToolbar.css **164**、mobile-find.css **20**、mobileBitable.css **1109**、notePaneSkeleton.css **23**（新）、quick-notes.css **277**、floating.css **316**、mobile.css **1487**、kit.css 659。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:arch` 0 违规（desktop 首屏 599,783/600,000）；`check:bundle` PASS（mobile entry **51,359/51,440**（261119 用户批准登记上调，理由入脚本注释）、移动 CSS 140,465/141,312、preload 12/12）。
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
@@ -628,14 +634,13 @@
 **261119 批待办**
 
 - **快捷菜单剩余点收（261119 深链两路径已在模拟器实测通过）**：已验 = camera 深链直出相机（焦点 `com.android.camera2/CaptureActivity`）+ 取消留卡不再弹；clipboard 深链预填（可信按键造剪贴板 → 清空卡 → 触发深链文本完整回归）+ 空剪贴板不预填分支。待用户点收 = **长按桌面图标三项并列**（launcher UI 无法自动化）与真机（小米）链路。
-- **快捷菜单语义差待用户裁决（261119 登记）**：剪切板预填**替换**未提交旧草稿（与系统分享同语义）vs camera **并入**恢复草稿（insertFiles）；如需统一再定。camera 取消返回后键盘可能未弹（点正文即起，口径未动）。
+- **cardMenu.tsx 收尾清理（261119 登记）**：CardMenuItem 的 focusable/ariaPressed 已无调用方（上轮为视频弹窗加的）、头注释仍提「与视频宽度弹层共用」——下批清掉。
 - **QuickNotePreview slot 代码出桌面图（261119 登记瘦身方向）**：组件拆分使 slotFrame/展开过渡不进桌面首屏（check-arch.mjs 注释同步登记）。
 - **QuickNoteComposer 草稿防抖边缘（261119 观察）**：内核就绪前 300ms 到点会写 body:""、下次恢复丢富格式（只影响「打完字立刻杀进程」）。
 - **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
 - **视频宽度弹窗桌面实机目视**（261119）：机制与其它卡工具条菜单同款，低风险。
 - **真机（小米）拍照复核**（261119）：模拟器已验直出相机；MIUI OEM 行为按 task-2 报告步骤（取消/EXTRA_OUTPUT 兜底）。
 - **guide 3 张截图重拍**（261119）：android-home-quicknotes / android-home-library / android-settings-editor 仍是旧界面（文字已加「以界面为准」兜底）。
-- **图片「宽高」弹窗（imgsize）家族化**（261119 登记，未点单）：仍为 cardpop 白面板 + ln-segment；可复用 VideoSizeMenu 的 CardMenu 改法。
 - **标签详情小记卡两态切换**（F-H 同型，261119 登记）：纯文本占位 → 富预览仍两态；quickNotes 侧已用 slotFrame 收口，标签卡未接。
 - **预览层退场过渡**（261119 登记）：需 MobileApp/SettingsDrawer 挂载点配合；按「返回可直切」先例可接受。
 - **useKeyboard.measure 与 softKeyboardVisible 判据收口**（261119 登记）：同一键盘可见性判据两处实现，建议 measure 委托收口单一来源。
