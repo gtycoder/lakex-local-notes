@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · v1.5.0 后三修复批（目录表情样式 / 内核表情中文筛选 / 表格默认字号 11）（未发版）
+
+- **目录选表情面板样式恢复**（用户点单「挤 + 样式丢失」）：根因两步事故 = 99829213 把页签类名 `node-icon-picker__tab` 改成 `__type-tab` 但 CSS 三条规则留在原名（孤儿）→ 09f41ba1 把孤儿当死类删除并迁 kit ln-tabs（挤成一团）。恢复 `.node-icon-picker__tab` 一族（九格等分 ≈43px、27px 行高档位、hover/选中/焦点三态，全令牌）；补**样式类不离散双向护栏**（CSS↔TSX 对账，反向钉死改名失联型事故）；nodeIcon.css 基线 78→97（恢复被误删既有视觉，逐条写因）。
+- **内核文内表情中文筛选**（用户点单「什么都筛不出来」）：根因 = 面板 getSearchItems 的 Fuse.js 评分（位置惩罚 distance + 字段长度归一 + score≤0.1）把**尾部中文关键词全杀光**（数据 ePW 1467 条含中文，「火」在 🔥 关键词尾部却 0 命中；英文也只有词条首词能过）。最小补丁 = Fuse options 加 `ignoreLocation:!0, ignoreFieldNorm:!0`（lakex.js 1 行 + dist 重建；火→9 条/苹果→🍎/house→🏠/空→全量）。登记 LOCAL-CHANGES.md **#34**（重转内核重放锚点 = `keys:['keywords']` options 字面量）+ LAKEX-CONTRACT **§5.60**（面板搜索机制/未文档化注入面 unicodeEmoji option 备用）+ emojiPanelSearch.test 4 例（含 bundle 级真 Fuse+真数据验收）。
+- **表格默认字号 = 11（Excel 11pt）**（用户点单）：落点 = `core/usheetDoc` 单一来源 `USHEET_DEFAULT_FONT_SIZE=11`，normalize 写 workbook+worksheet `defaultStyle.fs`（Univer 1.0.3 实测：**真渲染底 = 工作表级 defaultStyle**，workbook 级仅序列化面；内核 DEFAULT_STYLES.fs=11 只是同值巧合 ⇒ 漂移哨兵钉升级）；两端宿主同一 normalize 天然同源；存量显式字号零变化、打开不标脏；移动字号步进未设式样回退 14→11 对齐渲染底。
+- **门禁**：tsc 0；全量 vitest **1060 文件 / 6729 例 0 failed**（inkPerf/s3v3 perf 计时护栏满载假红、单跑绿——既有口径）；ui-metrics / check:core / check:mobileui / check:arch / check:bundle / git diff --check 全过。**三项实机复验待用户**：目录面板观感对拍、文内搜「火」、表格默认 11 渲染。
+
 ### 261119 · 配色合规批（全类型审计 + 选项色收窄 + 表格越界修复）（未发版）
 
 - **全类型文档配色审计**（`design-plans/color-palette-audit-261119.md`，只读、脚本核对集合关系）：判据 = 移动端可选值逐 hex 精确 ∈ 该面桌面取色卡。结论：**文档（Lakex 字色/背景 14 值精确 ∈ 内核 70 色阶）、小记（同 dock 复用）、手写板、画板、多维表（选项/进度/填色同源）全部合规**；越界 16 个去重 hex **全部在表格（Univer）面**（字体 7 / 填充 13 / 边框 1）。ΔE 近似只在设计期（对语雀采样换算），运行时写入色阶精确值。
@@ -651,6 +658,8 @@
 - **QuickNotePreview slot 代码出桌面图（261119 登记瘦身方向）**：组件拆分使 slotFrame/展开过渡不进桌面首屏（check-arch.mjs 注释同步登记）。
 - **QuickNoteComposer 草稿防抖边缘（261119 观察）**：内核就绪前 300ms 到点会写 body:""、下次恢复丢富格式（只影响「打完字立刻杀进程」）。
 - **速记失败提示文案双写（261119 登记）**：「速记内容准备失败」在 MobileApp catch 与 captureModeFlow 字节失败两处各一份（懒分包边界不共享常量）；要单一来源挪 toastBus。
+- **nodeIcon 小清理（261119 登记）**：`.node-icon-picker__type-action` 与 kit `.ln-tabs__action` 重复（可再降 1）；页签选中态 text-1+600 是「原样式」本体，若要与 kit 墨线统一可一行切。
+- **unicodeEmoji 数据注入面（261119 登记备用）**：内核 option `unicodeEmoji:{emojiGroups,emojiMap}`（未文档化，LAKEX-CONTRACT §5.60）——未来若要把目录面板的 emojiSearch 中文别名接进内核面板可走该面，当前补丁已够用不接。
 - **发版前设备快照矩阵未跑（261119）**：mobilesnap 基线因色板/卡片几何变化待重烤（已在上方登记）；本次发版门禁 = 静态全量 + packaged smoke（CI 内联）+ 用户真机点收。
 - **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
 - **视频宽度弹窗桌面实机目视**（261119）：机制与其它卡工具条菜单同款，低风险。
