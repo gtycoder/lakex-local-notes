@@ -2255,3 +2255,10 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **移动桥**：`assertResourceBytes(bytes, filename)` 对直接走 `bridge.uploadResource` 的多维表/表格/画板/手写板入口同样生效；错误先发全局提示，再按原路径返回失败。
 - **实测**：开发版当前上限 50 MiB，插入 50 MiB+1 B 的 PDF 时提示“文件大小 50 MiB（比上限多 1 B），当前附件上限 50 MiB”，桌面通知含「打开设置」并确实打开常规设置；测试文件未落盘（首轮误放行的测试资产已清理）。
 - **护栏**：`attachmentLimit.test.ts`、`resourceUpload.limit.test.ts`、`attachmentLimitWiring.test.ts`、移动 `attachmentLimit.test.ts`、PDF 导入与跨端资源行为契约。
+
+### 5.59 卡工具条弹层家族几何与提交语义（261119 读码 + 实测；已核实行为）
+
+- **CardMenu 内核家族几何**（`.ne-card-toolbar-select-menu` 下拉菜单；样式源 = vendored `lakex-doc.css` `.ne-card-toolbar-select-menu*` 规则 + `antd.css` `.ant-dropdown-menu`，非自造）：**5px 圆角**（`lakex-doc.css:842`，压 antd 基础的 2px）/ **无 hairline**（`antd.css` `.ant-dropdown-menu` 只有白底 + 三层 box-shadow、无 border，`lakex-doc.css` 也不补边）/ **30px 行**（菜单项 `line-height: 30px`、`padding: 10px 20px 10px 30px`，`lakex-doc.css:845-851`）/ **14px 字**（`.ne-card-toolbar-select-item-label` `font-size: 14px; line-height: 22px`，`lakex-doc.css:885-889`）/ **30px 对勾槽**（`.ne-card-toolbar-check-icon` 常驻 `width: 30px`、`left: 2px` 绝对定位、`opacity: 0→1` 由选中态翻转，几何不动，`lakex-doc.css:860-875`）。出处：`src/features/editor/selectionToolbar/cardMenu.tsx` 头注释 + 云端图片工具栏逐字同构实测。
+- **图片 imgsize「宽高」弹层提交语义**（`MediaSizePop.tsx:3-12` 实测）：**Enter 提交**（`isImeConfirming` 判据统一收口）；**IME 组字期不提交**；**无应用按钮、无可见脚注**（语义提示走输入框 `title` → 全局 `.ln-tip` 悬停气泡，样板没有可见说明脚注）。25/50/75/100 预设档点选即应用，收起由调用方应用语义负责。
+- **内核 antd KButton 可作卡弹层按钮 + 输入行可复用**：`FrameworkUiLib.Button`（= 内核 antd Button，`er4`）可直接作卡弹层按钮——实例 = 链接编辑弹层「确定」（`kernelUiAtoms.tsx:125,158`）；`.ne-card-toolbar-input` + `.ne-card-toolbar-input-title` 输入行是内核同一条共享规则，可在卡弹层复用（实例 = `MediaSizePop` 输入行，`MediaSizePop.tsx:7`）。
+- **护栏**：`videoSizeMenu.render.test.tsx` / `cardContextMenu.test.ts`（同家族表面）。

@@ -32,6 +32,7 @@ const VIDEO_SRC = readFileSync(path.resolve(ROOT, "src/features/editor/selection
 const TOOLBAR_SRC = readFileSync(path.resolve(ROOT, "src/features/editor/selectionToolbar/SelectionToolbar.tsx"), "utf8");
 const HOOK_SRC = readFileSync(path.resolve(ROOT, "src/features/editor/selectionToolbar/useSelectionToolbar.ts"), "utf8");
 const ATOMS_SRC = readFileSync(path.resolve(ROOT, "src/features/editor/selectionToolbar/kernelUiAtoms.tsx"), "utf8");
+const VOPS_SRC = readFileSync(path.resolve(ROOT, "src/features/editor/videoCardOps.ts"), "utf8");
 
 /** 极简规则扫描：先剥注释（注释里出现大括号会切碎规则），再取叶子规则的 { selector, body }（@media 外壳自然跳过）。 */
 function rulesOf(css: string): { selector: string; body: string }[] {
@@ -184,7 +185,7 @@ describe("视频宽度弹窗 = 图片 imgsize 面板的宽度单列变体（2611
     const popBody = exactBodies(CSS, ".selection-toolbar__cardpop").join("\n");
     expect(popBody).toContain("padding: 12px");
     expect(popBody).toContain("gap: 10px");
-    expect(popBody).toContain("border: 1px solid var(--lake-border-2)");
+    expect(popBody).toContain("border: 1px solid var(--lake-border-2)");   // 1px = 内核 antd 同款，例外于 0.5px 红线（卡工具条内核家族，用户裁决）
     expect(popBody).toContain("border-radius: var(--lake-radius-md)");
     expect(popBody).toContain("background: var(--lake-bg-raised)");
     expect(popBody).toContain("box-shadow: var(--lake-shadow-popover)");
@@ -193,7 +194,7 @@ describe("视频宽度弹窗 = 图片 imgsize 面板的宽度单列变体（2611
     expect(inputBody).toContain("width: 96px");
     expect(inputBody).toContain("height: 30px");
     expect(inputBody).toContain("padding: 0 8px");
-    expect(inputBody).toContain("border: 1px solid var(--lake-border-2)");
+    expect(inputBody).toContain("border: 1px solid var(--lake-border-2)");   // 1px = 内核 antd 同款，例外于 0.5px 红线（卡工具条内核家族，用户裁决）
     expect(inputBody).toContain("border-radius: var(--lake-radius-sm)");
     expect(inputBody).toContain("font-size: var(--lake-font-size-small)");
     expect(exactBodies(CSS, ".selection-toolbar__scale").join("\n")).toContain("align-self: flex-start");
@@ -341,5 +342,29 @@ describe("防漂：imgsize 与 videosize 共用 MediaSizePop", () => {
     expect(body).toMatch(/font-variant:\s*tabular-nums/);
     expect(body).toMatch(/font-feature-settings:\s*["']tnum["']/);
     expect(rulesOf(CSS).map((r) => r.body).filter((b) => b.includes("font-variant"))).toEqual([]);
+  });
+});
+
+// ─────────── ⑤ 源码断言：真身链路钳制不被绕过 / imgsize 样板分支配置 ───────────
+describe("源码断言（真身 SelectionToolbar 链路与 imgsize 配置）", () => {
+  it("真身链路 SelectionToolbar.applyWidth → writeVideoLayout 钳制不被绕过（onApplyWidth 落到 normalizeVideoWidth）", () => {
+    // renderVideo 提交链：onApplyWidth={applyWidth} → apply({ widthPercent: value }) → writeVideoLayout(t.cardEl, patch)
+    const renderVideo = TOOLBAR_SRC.slice(TOOLBAR_SRC.indexOf("const renderVideo"));
+    expect(renderVideo).toContain("onApplyWidth={applyWidth}");
+    expect(renderVideo).toMatch(/const applyWidth = \(\) => \{[\s\S]{0,200}?apply\(\{ widthPercent: value \}\)/);
+    expect(renderVideo).toContain("writeVideoLayout(t.cardEl, patch)");
+    // 钳制收口 = videoCardOps.writeVideoLayout：__videoWidth 必须经 normalizeVideoWidth（10–100）落盘
+    expect(VOPS_SRC).toMatch(/__videoWidth: normalizeVideoWidth\(patch\.widthPercent \?\? current\.__videoWidth\)/);
+    expect(VOPS_SRC).toContain("export function normalizeVideoWidth");
+    // 真身链路不许绕过收口直接写 __videoWidth（绕过 = 钳制失效）
+    expect(renderVideo).not.toContain("__videoWidth");
+  });
+
+  it("imgsize 分支配置源码断言：min: 16 + onScale = originalWidth × p%（下限 16px）", () => {
+    // 样板本体（renderImage 的 imgsize MediaSizePop）字段配置：宽/高两列都 min: 16
+    expect(TOOLBAR_SRC).toMatch(/\{ label: "宽", value: draft, onChange: setDraft, onSubmit: applyWidth, min: 16 \}/);
+    expect(TOOLBAR_SRC).toMatch(/\{ label: "高", value: draftH, onChange: setDraftH, onSubmit: applyHeight, min: 16 \}/);
+    // 预设档缩放 = 原图宽 × p%，仍夹 16px 下限
+    expect(TOOLBAR_SRC).toContain("onScale={(p) => apply({ width: Math.max(16, Math.round((meta.originalWidth * p) / 100)) })}");
   });
 });

@@ -92,10 +92,13 @@ export interface DesktopWorkspaceMenuProps {
 
 /** 合一菜单条目（空间 ⊕ 工作空间）；由 DesktopOverlays 的 top-menu 渲染。 */
 export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace, onOpenSettings }: DesktopWorkspaceMenuProps) {
-  // 261114：设置里关闭的日记 / AI 写作空间从菜单隐藏（⌘3/⌘4 同步失效；知识库/小记/标签恒显示）。
+  // 261114：设置里关闭的日记 / AI 写作空间从菜单隐藏（隐藏后其快捷键一并失效 = ⌘4 AI 写作 / ⌘5 日记；
+  // 知识库/小记/标签恒显示，⌘3 = 标签、不可关闭）。快捷键映射单一来源 = useDesktopLifecycle.ts
+  // （⌘1 知识库 / ⌘2 小记 / ⌘3 标签 / ⌘4 AI 写作 / ⌘5 日记），本菜单只负责把提示显示出来。
   const { isVisible: isSpaceShown } = useHiddenDesktopSpaces();
-  // 用户 261006：上半「空间」只剩文档/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
-  // 与偏好设置并列、且**都不再给快捷键**（⌘3 的绑定与提示一并去掉）。
+  // 用户 261006：回收站与资源下沉到「工作空间」，与偏好设置并列、且**都不再给快捷键**
+  // （当年去掉的是 ⌘3 回收站的绑定与提示；261114 起 ⌘3 = 标签）。上半「空间」= 五个一级空间
+  // （知识库/小记/标签/AI 写作/日记，带 ⌘1–⌘5，映射见 useDesktopLifecycle.ts）。
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
     { id: "library", label: "知识库", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },

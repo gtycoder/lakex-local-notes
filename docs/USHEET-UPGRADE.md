@@ -67,6 +67,11 @@ npm install                     # 用 lockfile 语义安装，不要 npm update
 npx patch-package --patch-dir patches
 # 2) 静态护栏：版本一致性 + 触点符号存在性
 npx tsc --noEmit && npm test
+# 2b) 配色快照人工对照（升级后必须做）：usheetColorCompliance 的 45 预设是**硬编码快照**，
+#     升级不会让「基线自检」自动变红 ⇒ 打开 node_modules/@univerjs/design 的 colorPresets
+#     （lib/index.js）与 src/mobile/usheet/usheetColorCompliance.test.ts 的 UNIVER_COLOR_PRESETS_45
+#     逐值对照，有漂移就重录快照、核对 45 预设并复核 SHEET_* 映射（内核 70 色阶同理）。
+npx vitest run src/mobile/usheet/usheetColorCompliance.test.ts
 # 3) 运行时探针（真实 Electron + CDP；先 build，探针只读 dist）
 npx vite build
 node scripts/usheet-kernel-probes.mjs          # 退出码 0 = 致命项全过

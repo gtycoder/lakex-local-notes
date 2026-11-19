@@ -1,5 +1,6 @@
 # 颜色取色面合规审计 261119 —— 移动端可选色 ⊆ 桌面端色卡（只读审计）
 
+> **已闭环**：16 越界 hex 已按 §3 案 1 修复（f0311ea8，护栏 usheetColorCompliance.test.ts）
 > 范围：全部文档类型的全部「用户取色面」，两端对照。判据 = **移动端可选值必须逐个精确出现在该面桌面取色 UI 的固定色卡里**（hex 逐字节相等；ΔE 近似不算）。
 > 方法：源码/依赖实测取值（hex + file:line），集合包含关系用脚本核对（非目测）。本文件为唯一产出，产品代码零改动。
 > 环境：Node 24（nvm v24.18.0）。内核检索顺序按 AGENTS：vendor 源码 → docs/lakexEditor-developer-docs → LAKEX-CONTRACT。

@@ -112,7 +112,7 @@
 
 ### 边界与已知行为（实测登记，261117）
 
-- **小记 text_cache = 保存即建（261118 收口；此前搜索时惰性建）**：`persistQuickNoteContent` 落库后即建索引行（text_cache 与 FTS 解耦、无条件写）⇒ 新小记缺正文即有「可重建纯文本」兜底；**旧版本遗留的无索引行**仍会判「没有可用备份」、不出现「重建纯文本」（演练第一轮实测，证据 `.css-audit/resilience-drill-261117/`）。演练脚本因此在删正文前先跑一次 `searchNotes` 触发索引；潜在改进「保存即建 text_cache」超出本次范围，留用户/lead 裁决。
+- **小记 text_cache = 保存即建（261118 收口；此前搜索时惰性建）**：`persistQuickNoteContent` 落库后即建索引行（text_cache 与 FTS 解耦、无条件写）⇒ 新小记缺正文即有「可重建纯文本」兜底；**旧版本遗留无索引行仍需先跑一次 `searchNotes` 触发索引补建**（`searchQuickNotes → reconcileQuickNotesIndex` 惰性补建），在补建之前缺正文仍判「没有可用备份」、不出现「重建纯文本」（演练第一轮实测，证据 `.css-audit/resilience-drill-261117/`）。
 - 云端恢复入口只在 **已配置 S3 且本机有同步基线**（hasSyncBase）时出现；本机未配置时三条路里的云端这条不可达（关云同步 = 完全没配置，AGENTS §3#20）。
 - 小记「重建纯文本」产出**本机新版本**（is_dirty），下次同步会上传、可能覆盖云端 —— 二次确认已明示（产品既有文案口径）。
 
