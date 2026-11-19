@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · 配色合规批（全类型审计 + 选项色收窄 + 表格越界修复）（未发版）
+
+- **全类型文档配色审计**（`design-plans/color-palette-audit-261119.md`，只读、脚本核对集合关系）：判据 = 移动端可选值逐 hex 精确 ∈ 该面桌面取色卡。结论：**文档（Lakex 字色/背景 14 值精确 ∈ 内核 70 色阶）、小记（同 dock 复用）、手写板、画板、多维表（选项/进度/填色同源）全部合规**；越界 16 个去重 hex **全部在表格（Univer）面**（字体 7 / 填充 13 / 边框 1）。ΔE 近似只在设计期（对语雀采样换算），运行时写入色阶精确值。
+- **表格越界修复（审计 P0 案 1）**：usheetChromeModel 字体/填充 + usheetBorders 边框色 16 越界 hex → **Univer 45 预设精确值**（colorPresets 逐值映射，如 #c8ccd2→#CDD0D8；映射表见流回报/测试注释）；旧文档已落盘旧值仍正常显示（normalizeSheetColor 认任意 hex），只是新写入不再产生桌面选不出的颜色。**P1 护栏** `usheetColorCompliance.test.ts`：SHEET_*+边框 ⊆ Univer 45（逐字节）、MOBILE_BOARD_*/QUICK_TEXT/INK/COLOR_BOARD_GROUPS ⊆ 内核 70（防回归，零改动）。案 2（core/colorPalette 单一来源 + COLOR_PICKER_COMPONENT 重注册）登记不做；**patch 额度 4 处已满，禁新增**。
+- **多维表选项色收窄 70→2×10**（用户点单）：`core/colorPalette.ts` 新增 `OPTION_COLOR_BOARD_GROUPS/VALUES`（单一来源，桌面 FieldEditorModal 与移动 .mbt-feditor__colors 同取；共享件 ColorPalette.tsx 只加可选 groups 参数，缺省仍 70 全量——背景/文字/进度色板一律不动）。**档位 = [3] 浅中档 + [4] 鲜艳中档**（261119 用户红框原图选定；上浅下深、列=同色相 0–9 对应；交付流原做 [2]+[5]，lead 按原图校正为 [3]+[4]）。「默认颜色」清空项保留首位；mobileBitable.css 色板槽改 10 列自适应网格（零净增声明）。
+- **门禁**：tsc 0；全量 vitest **1058 文件 / 6704 例 0 failed**；ui-metrics / check:core / check:mobileui / check:arch（mobile 347,950/350,000、desktop 601,531/602,000）/ check:bundle（entry 50,955/51,440）/ git diff --check 全过（重建产物后测）。
+
 ### 261119 · 两点改判（快捷菜单顺序/替换语义 + 视频宽高弹窗照抄图片样板）（未发版）
 
 - **快捷菜单**（用户裁决）：① 顺序与文案 = **拍照小记 / 剪切板小记 / 新建小记**（shortcuts.xml 块序即显示序；三短语 short/long 对齐；旧「新建小记」块内部逐字未动只挪第三位，ShortcutsConfigTest 补块序断言）；② **都做成替换**：camera 改走 captureSeed 草稿通道（text 空 + 图片种子），与 clipboard 同为整份替换未提交旧草稿；删 setCaptureInsert/insertFiles 并入通道（首页新建面板 initialInsert 通道保留、有其他消费者）；取消/失败不落种子、旧草稿不动；取数流接 isCurrent 代际（captureFlowGenRef，触发/关闭 +1）堵「迟到相机结果污染新会话」。行为微差（已注释）：camera 取消后写作卡才挂载弹键盘（原为卡先挂相机盖上），数据语义不变。
@@ -516,7 +523,7 @@
 **261119 · 修复批基线（未发版；v1.4.0 之后）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
-- 全量 vitest：**文件 1055（passed / 13 skipped）/ 用例 6694（passed / 14 skipped）/ 0 failed**（含 261119 快捷菜单批 + 两点改判批新增）。imeEnterWiring 33 处（MediaSizePop 收口后）；selectionToolbar.css 基线 158。
+- 全量 vitest：**文件 1058（passed / 13 skipped）/ 用例 6704（passed / 14 skipped）/ 0 failed**（含 261119 各批新增）。imeEnterWiring 33 处（MediaSizePop 收口后）；selectionToolbar.css 基线 158。
 - `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0）；`cssLayers`/`mobileLayers` 棘轮按实测登记：selectionToolbar.css **164**、mobile-find.css **20**、mobileBitable.css **1109**、notePaneSkeleton.css **23**（新）、quick-notes.css **277**、floating.css **316**、mobile.css **1487**、kit.css 659。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:arch` 0 违规（desktop 首屏 599,783/600,000）；`check:bundle` PASS（mobile entry **51,359/51,440**（261119 用户批准登记上调，理由入脚本注释）、移动 CSS 140,465/141,312、preload 12/12）。
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
@@ -635,6 +642,10 @@
 
 - **快捷菜单剩余点收（261119 深链两路径已在模拟器实测通过）**：已验 = camera 深链直出相机（焦点 `com.android.camera2/CaptureActivity`）+ 取消留卡不再弹；clipboard 深链预填（可信按键造剪贴板 → 清空卡 → 触发深链文本完整回归）+ 空剪贴板不预填分支。待用户点收 = **长按桌面图标三项并列**（launcher UI 无法自动化）与真机（小米）链路。
 - **cardMenu.tsx 收尾清理（261119 登记）**：CardMenuItem 的 focusable/ariaPressed 已无调用方（上轮为视频弹窗加的）、头注释仍提「与视频宽度弹层共用」——下批清掉。
+- **表格色板案 2（261119 登记）**：core/colorPalette 单一来源 + ComponentManager 重注册 COLOR_PICKER_COMPONENT（须等选项 20 色定稿后落值、过 univerContract + usheet-kernel-probes、禁新增 patch）。
+- **mobilesnap 基线待重烤（261119）**：选项色板网格化改了修改字段面板几何，装包后 `check:mobilesnap` 相关态基线需按 §5.3 重烤。
+- **休眠色板登记（审计 §2.M）**：SheetMenuBody 圆点色板（无构建方）与「工作表标签更改颜色」（未实现）——动它们前先过配色审计口径。
+- **inkPerf.test 墙钟断言满载 flaky（261119）**：35ms 预算满载跑出 40ms、单跑 3/3 过——与 perf.integration 同类口径（低负载为准）。
 - **QuickNotePreview slot 代码出桌面图（261119 登记瘦身方向）**：组件拆分使 slotFrame/展开过渡不进桌面首屏（check-arch.mjs 注释同步登记）。
 - **QuickNoteComposer 草稿防抖边缘（261119 观察）**：内核就绪前 300ms 到点会写 body:""、下次恢复丢富格式（只影响「打完字立刻杀进程」）。
 - **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
