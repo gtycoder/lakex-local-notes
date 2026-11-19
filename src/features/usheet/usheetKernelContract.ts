@@ -101,6 +101,15 @@ export const UNIVER_FEATURE_NAMES = [
   "FindReplaceService",
   "IFindReplaceService",
   "SheetsFindReplaceController",
+  /** 默认字号机制（用户 261119）：工作表级 `defaultStyle` 是**实际被消费**的渲染底
+   *  （Worksheet.getDefaultCellStyleInternal → getComposedCellStyle 底层；我们由
+   *  normalizeUsheetWorkbook 统一写 USHEET_DEFAULT_FONT_SIZE=11）。
+   *  失效表现 = 升级后未设式样单元格的字号不再由正文 defaultStyle 决定，回到内核兜底/漂移值。 */
+  "getDefaultCellStyleInternal",
+  /** 内核兜底默认样式常量（DEFAULT_STYLES.fs；1.0.3 = 11，恰好同值）。
+   *  **不是我们的落点**（内核内部常量、升级可漂移），只作升级漂移哨兵；
+   *  失效表现 = 升级后 usheetDefaults.test 的漂移哨兵报红，提醒复核默认字号链路。 */
+  "DEFAULT_STYLES",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。
@@ -147,6 +156,24 @@ export const USHEET_FOOTER_CONFIG = {
     defaultColumnCount: USHEET_DEFAULT_COLUMNS,
   },
 } as const;
+
+/**
+ * 表格**默认字号 = 11**（Excel 口径 11pt，用户 261119）：新建/工作表「＋」的未设式样单元格与
+ * 默认样式按 11 号渲染；旧文档已有显式 `fs` 的单元格零变化（只改默认，不改存量显式值）。
+ *
+ * **值的单一来源** = `src/core/usheetDoc.ts` 的 `USHEET_DEFAULT_FONT_SIZE`（本文件只登记内核侧决定点）：
+ * - **渲染底（真正落点）** = 每张工作表的 `defaultStyle.fs`（`IWorksheetData.defaultStyle`，
+ *   消费处 `Worksheet.getDefaultCellStyleInternal` → `getComposedCellStyle` 底层）——
+ *   Univer 1.0.3 实测**只有工作表级 defaultStyle 被内核消费**；workbook 级 `defaultStyle`
+ *   （`IWorkbookData.defaultStyle`）只是类型面（随快照往返、不参与渲染），两者都由
+ *   `normalizeUsheetWorkbook` 统一写 11 ⇒ 桌面 UniverSheetEditor / 移动 MobileUsheetViewer 同一落点。
+ * - **内核兜底** `DEFAULT_STYLES.fs`（`@univerjs/core` 常量）1.0.3 恰好也是 11，但升级可漂移
+ *   ⇒ 不作为落点，只由 univerContract / usheetDefaults 的哨兵盯住。
+ *
+ * 失效表现：未设式样单元格字号不再是 11（新表/旧文档空白格一起漂）；工具栏字号框与移动端
+ * 「字号步进」的取值同源漂移。升级时若 `getDefaultCellStyleInternal` / defaultStyle 消费链变了，
+ * 这里是第一核对点。
+ */
 
 /**
  * 我们对内核打的补丁（`patches/@univerjs+ui+1.0.3.patch`）——**改行为的最小改动**，不是依赖侧清理。

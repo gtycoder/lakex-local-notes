@@ -68,7 +68,7 @@ export interface SheetCellFormatLite {
   numfmt: string;
   /** 垂直对齐（261023 新增；general/undefined = 默认 middle）。 */
   valign?: "top" | "middle" | "bottom" | "general";
-  /** 字号（px，来自 SetFontSize 命令；空 = 默认 14）。 */
+  /** 字号（px，来自 SetFontSize 命令；空 = 默认 USHEET_DEFAULT_FONT_SIZE=11，与渲染底一致）。 */
   size?: number;
   /** 字体颜色（内核 style.cl.rgb；空 = 默认色）。 */
   fontColor?: string;

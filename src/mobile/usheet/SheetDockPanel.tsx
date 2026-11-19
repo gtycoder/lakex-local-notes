@@ -12,6 +12,7 @@
  *
  * 纯展示：所有动作经 props 抛给 MobileUsheetViewer（命令分派仍在 useSheetCommandActions）。
  */
+import { USHEET_DEFAULT_FONT_SIZE } from "../../core/usheetDoc";
 import {
   AlignCenter,
   AlignLeft,
@@ -173,9 +174,9 @@ const ALIGN_V_ICONS = {
   bottom: AlignVerticalJustifyEnd,
 } as const;
 
-/** 字号步进：− 当前 +（钉钉同款；档位仍用 SHEET_FONT_SIZES，显示真实字号）。 */
+/** 字号步进：− 当前 +（钉钉同款；档位仍用 SHEET_FONT_SIZES，显示真实字号；未设式样回退 = USHEET_DEFAULT_FONT_SIZE 与渲染底一致）。 */
 function FontSizeStepper({ size, onFontSize }: { size?: number; onFontSize: (size: number) => void }) {
-  const current = size || 14;
+  const current = size || USHEET_DEFAULT_FONT_SIZE;
   let index = SHEET_FONT_SIZES.findIndex((value) => value >= current);
   if (index < 0) index = SHEET_FONT_SIZES.length - 1;
   const prev = SHEET_FONT_SIZES[Math.max(0, index - 1)];

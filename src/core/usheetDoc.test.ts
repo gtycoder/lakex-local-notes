@@ -109,6 +109,42 @@ describe("正文规范化（打开表格不再误标脏 / 触发同步；CORE-04
     expect(JSON.stringify(wb)).toBe(snapshot);
   });
 
+  it("默认字号 11（261119）：workbook + 每张工作表的 defaultStyle.fs 一律 11（缺失也补、默认收敛），幂等", () => {
+    const wb: any = {
+      id: "wb",
+      defaultStyle: { fs: 10 },
+      sheets: { s1: { id: "s1", cellData: {} }, s2: { id: "s2", defaultStyle: { fs: 14, bl: 1 } } },
+    };
+    normalizeUsheetWorkbook(wb);
+    expect(wb.defaultStyle.fs).toBe(11);
+    expect(wb.sheets.s1.defaultStyle.fs).toBe(11);
+    expect(wb.sheets.s2.defaultStyle.fs).toBe(11); // 「默认」一律收敛 11（只改默认）
+    expect(wb.sheets.s2.defaultStyle.bl).toBe(1); // defaultStyle 其它键不动
+    const snapshot = JSON.stringify(wb);
+    normalizeUsheetWorkbook(wb);
+    expect(JSON.stringify(wb)).toBe(snapshot);
+  });
+
+  it("存量显式字号零变化：命名 styles 与单元格的 fs 原样不动（只改默认）", () => {
+    const wb: any = {
+      id: "wb",
+      styles: { big: { fs: 14, ff: "'X'" } },
+      sheets: { s1: { id: "s1", cellData: { "0": { "0": { v: "a", s: { fs: 9 } }, "1": { v: "b", si: "big" } } } } },
+    };
+    normalizeUsheetWorkbook(wb);
+    expect(wb.styles.big.fs).toBe(14);
+    expect(wb.sheets.s1.cellData["0"]["0"].s.fs).toBe(9);
+    expect(wb.sheets.s1.cellData["0"]["1"].si).toBe("big");
+    expect(wb.sheets.s1.defaultStyle.fs).toBe(11);
+  });
+
+  it("新建空表正文 = normalize 输出逐字节相同（新建/打开零规范化改写）", () => {
+    const wb = emptyUsheetWorkbook();
+    const before = usheetToBody(wb);
+    normalizeUsheetWorkbook(wb);
+    expect(usheetToBody(wb)).toBe(before);
+  });
+
   it("跨端两种输入（dev 单引号 / 打包双引号 + 空 resource）归一后逐字节相同", () => {
     const desktop: any = {
       id: "wb",

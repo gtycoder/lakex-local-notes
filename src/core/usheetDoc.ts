@@ -18,6 +18,16 @@ export const USHEET_DOC_VERSION = 1 as const;
 export const USHEET_DEFAULT_ROWS = 35;
 export const USHEET_DEFAULT_COLUMNS = 16;
 
+/** 表格默认字号 = 11（Excel 口径的磅值 11pt，用户 261119）。
+ *  ⚠️ **单一来源**：默认样式（defaultStyle）的 `fs` 一律由这个常量写入 ——
+ *  空表（emptyUsheetWorkbook）与正文规范化（normalizeUsheetWorkbook）都引用它，别各写一份。
+ *  **只管「默认」**：单元格 / 命名 styles 里的显式 `fs` 一律不动（存量显式值零变化）。
+ *  内核侧决定点（Univer 1.0.3 实测）：真正被消费的渲染底是**每张工作表**的 `defaultStyle`
+ *  （Worksheet.getDefaultCellStyleInternal → getComposedCellStyle 底层）；workbook 级
+ *  `defaultStyle` 只是类型面/序列化面（内核不读，随快照往返）。内核兜底 `DEFAULT_STYLES.fs`
+ *  在 1.0.3 恰好也是 11，但那是内核内部常量、升级可漂移 ⇒ **不作为我们的落点**。 */
+export const USHEET_DEFAULT_FONT_SIZE = 11;
+
 /** Univer 单元格（只声明搜索/校验要读的字段；样式等其余字段原样透传）。 */
 export interface UsheetCell {
   /** 原始值 */
@@ -65,13 +75,27 @@ export const USHEET_CANONICAL_FONT_FAMILY = '"MiSans", -apple-system, BlinkMacSy
  *    首次 flush 都判为"有差异"→ onChange → 待保存 → 自动同步上传（用户 261023 报「一打开就黄色待保存」）。
  * 2) 字体族 canonical 化（CORE-04，用户 261027 裁决）：`defaultStyle` 与所有命名 styles 的 `ff`
  *    **一律写成 `USHEET_CANONICAL_FONT_FAMILY`**（缺失也补）⇒ 同内容同字节，跨端/跨构建打开不再改写正文。
+ * 3) 默认字号 11（用户 261119）：workbook 与**每张工作表**的 `defaultStyle.fs` 一律
+ *    `USHEET_DEFAULT_FONT_SIZE`（缺失也补）。只写默认 —— 命名 styles / 单元格 / 富文本里的
+ *    显式 `fs` 零变化（存量显式值不动）。工作表级 defaultStyle 是 Univer 1.0.3 实际消费的
+ *    渲染底（见 USHEET_DEFAULT_FONT_SIZE 注释）⇒ 未设式样单元格按 11 号渲染，两端同一落点。
  * 幂等；就地修改传入 workbook（编辑器在序列化前调用）。
  */
 export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
-  const wb = workbook as unknown as { defaultStyle?: unknown; styles?: unknown; resources?: unknown };
+  const wb = workbook as unknown as { defaultStyle?: unknown; styles?: unknown; resources?: unknown; sheets?: unknown };
   const base = isRecord(wb.defaultStyle) ? wb.defaultStyle : {};
   base.ff = USHEET_CANONICAL_FONT_FAMILY;
+  base.fs = USHEET_DEFAULT_FONT_SIZE;
   wb.defaultStyle = base;
+  if (isRecord(wb.sheets)) {
+    for (const sheet of Object.values(wb.sheets)) {
+      if (!isRecord(sheet)) continue;
+      // 工作表级 defaultStyle = 内核 getComposedCellStyle 的渲染底（workbook 级内核不读）。
+      const sheetBase = isRecord(sheet.defaultStyle) ? sheet.defaultStyle : {};
+      sheetBase.fs = USHEET_DEFAULT_FONT_SIZE;
+      sheet.defaultStyle = sheetBase;
+    }
+  }
   if (isRecord(wb.styles)) {
     for (const style of Object.values(wb.styles)) {
       if (isRecord(style)) style.ff = USHEET_CANONICAL_FONT_FAMILY;
@@ -94,12 +118,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 新建空表：一行一表、USHEET_DEFAULT_ROWS × USHEET_DEFAULT_COLUMNS（默认 35×16）。 */
+/** 新建空表：一行一表、USHEET_DEFAULT_ROWS × USHEET_DEFAULT_COLUMNS（默认 35×16）、默认字号 11。
+ *  ⚠️ defaultStyle 与 normalizeUsheetWorkbook 的输出**同形**（ff/fs 同键序）⇒ 新建正文零规范化改写。 */
 export function emptyUsheetWorkbook(): UsheetWorkbook {
   return {
     id: "workbook",
     name: "表格",
     sheetOrder: ["s1"],
+    defaultStyle: { ff: USHEET_CANONICAL_FONT_FAMILY, fs: USHEET_DEFAULT_FONT_SIZE },
     sheets: {
       s1: {
         id: "s1",
@@ -108,6 +134,7 @@ export function emptyUsheetWorkbook(): UsheetWorkbook {
         columnCount: USHEET_DEFAULT_COLUMNS,
         defaultColumnWidth: 88,
         defaultRowHeight: 24,
+        defaultStyle: { fs: USHEET_DEFAULT_FONT_SIZE },
         cellData: {},
       },
     },
