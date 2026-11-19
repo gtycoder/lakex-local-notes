@@ -69,7 +69,11 @@ const MOBILE_ENTRY_PRELOAD_BUDGET = 12;
 // CreateNotebookSheet / DefaultNotebookPickerSheet）+ 非首 tab 的标签页与知识库网格（TagsHomeTab /
 // NotebookGrid）改成 lazy；实测入口 61,006 → **48,759B gz**（首屏 353,397 → 341,652）⇒ 按目标收口到
 // 50KB，留 2,441B 余量（preload 10 / 预算 12；入口 CSS 139,210 / 138KB 上限不变）。
-const MOBILE_ENTRY_JS_GZIP_BUDGET = 50 * 1024;
+// 261119（用户批准登记上调）：50KB → 51,440B。本批用户点单功能的真实入口增量：QuickNotePreview 恒定槽位
+// （F-B/C/H 防跳变，占位与富预览同槽）+ capture 返回判据（softKeyboardVisible 双通道）+ 首屏预热接线；
+// 同批已做瘦身：拍照 takeCameraPhoto 改动态 import（-255B，HomePage/MobileAiPage 两处）。
+// 实测 51,359B ⇒ 预算留 81B 余量。**再涨必须重新论证**，不得回退到「冻结现状值」口径。
+const MOBILE_ENTRY_JS_GZIP_BUDGET = 51_440;
 // 入口 CSS 不在本轮目标内（首屏 ≤360KB 由 check-arch 守）；维持 261103 的现状冻结值。
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 
