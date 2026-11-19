@@ -15,7 +15,7 @@ DocListSheet · OutlineSheet（底部形态；右侧抽屉变体不套原语）�
 
 | # | 文件 | 表面类名 | 为什么不是「结构等价」 | 返回栈 |
 |---|---|---|---|---|
-| 1 | `src/mobile/ai/AiCorpusSheet.tsx` | `.mb-sheet.ai-sheet` | 头部右侧是**文字动作按钮**（「取消」，`mb-btn--ghost--sm`）而不是 ×；无 `.mb-sheet__grab`；搜索条 + `.ai-sheet__foot` 是 `.mb-sheet__body` 的兄弟节点（固定底栏）。`MobileSheet` 固定渲染 grab + 标题 + ×，并只有一个 body/footer 槽 ⇒ 迁移会改头部与 DOM | 自带 |
+| 1 | `src/mobile/ai/AiCorpusSheet.tsx` | `.mb-sheet.ai-sheet` | 头部右侧是**文字动作按钮**（「取消」，`mb-btn--ghost--sm`）而不是 ×；无 `.mb-sheet__grab`；搜索条 + `.mb-sheet__foot` 是 `.mb-sheet__body` 的兄弟节点（固定底栏；261119 B-6 并账后底栏几何直接复用 `.mb-sheet__foot`，不再另立 `.ai-sheet__foot`）。`MobileSheet` 固定渲染 grab + 标题 + ×，并只有一个 body/footer 槽 ⇒ 迁移会改头部与 DOM | 自带 |
 | 2 | `src/mobile/ai/AiImageSheet.tsx` | `.mb-sheet.ai-sheet` | 同 1（头部「取消」+ 底部预算/添加 foot） | 自带 |
 | 3 | `src/mobile/ai/AiSendSheet.tsx` | `.mb-sheet.ai-sheet` | 同 1（头部「完成」+ 说明段 + foot） | 自带 |
 | 4 | `src/mobile/ai/MobileAiPage.tsx` | `.mb-actionsheet` | 「附件」菜单 = **ActionSheet 语义**（图标项组 + 取消按钮），不是底部 Sheet；属 `floating.css` 的 ActionSheet 原语 | 自带（本批补：打开时先关面板，不再直接退出 AI 页） |

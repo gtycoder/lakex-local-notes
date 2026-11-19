@@ -12,6 +12,7 @@ import { Download, RefreshCw, ScrollText } from "lucide-react";
 import { Field, Group, Item, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatUpdatedAt } from "../lib/listTime";
 import type { AppInfo } from "../../core/ports";
@@ -207,24 +208,26 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
         title={snapshot.status === "downloaded" ? "更新已下载" : "发现新版本"}
         onClose={() => setUpdateSheetOpen(false)}
         footer={
-          <div className="mb-set-block__actions">
+          // 261119 按钮边界审计 B-2/B-9：footer 收进 SheetFooter（.mb-sheet__foot 唯一底栏几何：8/16/20+safe）；
+          // 多按钮走 children 保持「主 + 次 + ghost」梯队与顺序，主操作加 mb-flex1（不再与次操作同宽排队）。
+          <SheetFooter>
             {snapshot.status === "available" && asset ? (
-              <button type="button" className="mb-btn mb-btn--primary" onClick={() => void startUpdateDownload()}>
+              <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={() => void startUpdateDownload()}>
                 <Download size={16} />下载并安装
               </button>
             ) : null}
             {snapshot.status === "downloading" ? (
-              <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void cancelUpdateDownload()}>
+              <button type="button" className="mb-btn mb-btn--secondary mb-flex1" onClick={() => void cancelUpdateDownload()}>
                 取消下载
               </button>
             ) : null}
             {snapshot.status === "downloaded" ? (
-              <button type="button" className="mb-btn mb-btn--primary" onClick={() => void installDownloadedUpdate()}>
+              <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={() => void installDownloadedUpdate()}>
                 安装
               </button>
             ) : null}
             {snapshot.status === "error" ? (
-              <button type="button" className="mb-btn mb-btn--primary" onClick={() => void startUpdateDownload()}>
+              <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={() => void startUpdateDownload()}>
                 重试下载
               </button>
             ) : null}
@@ -236,7 +239,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
                 忽略此版本
               </button>
             ) : null}
-          </div>
+          </SheetFooter>
         }
       >
         <div className="mb-set-items">

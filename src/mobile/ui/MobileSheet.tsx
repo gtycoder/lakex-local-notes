@@ -17,7 +17,7 @@
  *  · 滚动锁：打开期间锁住页面滚动（html/body 的 overflow），按**打开中的面板数**嵌套计数，
  *    叠层时先关掉的那一个不会把锁提前放开。
  */
-import { useCallback, useEffect, useRef, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useRef, isValidElement, type ReactNode, type Ref } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
 import { restoreFocus } from "../../lib/focusRestore";
 import { X } from "lucide-react";
@@ -79,6 +79,15 @@ export function useSheetModalFocus(open: boolean, surfaceRef: import("react").Re
   }, [open, surfaceRef]);
 }
 
+/** footer 槽兜底（261119 按钮边界审计 B-1）：底栏根节点缺 `.mb-sheet__foot` 时需要包一层。
+ *  宿主元素看 className；文本/多节点/Fragment 一律包；复合组件不包（契约自带，护栏兜底）。 */
+function footerNeedsFoot(footer: ReactNode): boolean {
+  if (!isValidElement(footer)) return true;
+  if (typeof footer.type !== "string") return false;
+  const cls = (footer.props as { className?: unknown }).className;
+  return typeof cls !== "string" || !/(^|\s)mb-sheet__foot(\s|$)/.test(cls);
+}
+
 export interface MobileSheetProps {
   open: boolean;
   /** 标题（不给就只留关闭按钮）；无障碍名默认取字符串标题。 */
@@ -89,7 +98,11 @@ export interface MobileSheetProps {
   onClose: () => void;
   /** 允许用户关闭（false = 只能由流程自己关：不收遮罩点击、不响应右滑/返回键，也不画 × ）。 */
   dismissible?: boolean;
-  /** 固定在 `.mb-sheet` 底部的脚注（flex 子项；样式由使用方给现有 mb-* 类，本原语不加 CSS）。 */
+  /** 固定在 `.mb-sheet` 底部的脚注（flex 子项；样式由使用方给现有 mb-* 类，本原语不加 CSS）。
+   *  契约（261119 按钮边界审计 B-1 收口）：**底栏根节点必须是 `.mb-sheet__foot`**（唯一底栏几何）。
+   *  兜底：裸节点（页面级 `.mb-set-block__actions` 之类）由本原语包一层 `.mb-sheet__foot`；
+   *  复合组件按契约自带底栏几何（`SheetFooter` 根 = `.mb-sheet__foot`；`SelectionActionBar` =
+   *  自管安全区账的浮动卡，不并账）——由 `sheetFooterContract.test.ts` 钉住。 */
   footer?: ReactNode;
   /** 追加到 `.mb-sheet` 的类名（迁移既有面板时保留原类名 ⇒ 视觉不变）。 */
   className?: string;
@@ -166,11 +179,12 @@ export function MobileSheet({
         <div ref={headRef} className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet" onPointerDown={dismissKeyboardOnPointerDown}>
           <span className={"mb-sheet__title" + (titleClassName ? " " + titleClassName : "")}>{title}</span>
           {dismissible && (
-            <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+            // 261119 B-8：头部变薄后关闭钮 40×40 < 44 ⇒ 挂 .mb-tap 补足命中区（视觉不变）。
+            <button type="button" className="mobile-icon-btn mb-tap" onClick={onClose} aria-label="关闭"><X size={20} /></button>
           )}
         </div>
         <div ref={bodyRef} className={"mb-sheet__body" + (bodyClassName ? " " + bodyClassName : "")}>{children}</div>
-        {footer}
+        {footer ? (footerNeedsFoot(footer) ? <div className="mb-sheet__foot">{footer}</div> : footer) : null}
       </div>
     </>
   );

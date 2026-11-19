@@ -8,6 +8,9 @@
  *   ② src/mobile/mobileLayers.test.ts —— 移动端每个样式文件的声明数与重复组基线 + 无野样式文件
  *   ③ src/mobile/kernelStyleBootstrap.test.ts —— 挂内核的懒入口必须自带内核样式
  *   ④ scripts/ui-metrics.mjs —— 颜色/字号字面量与 !important 硬指标（两端共用，含移动端 CSS）
+ *   ⑤ 261119 按钮边界审计三道护栏：sheetFooterContract（footer 槽必须 .mb-sheet__foot）/
+ *      bottomChromeContract（bottom 锚定规则必须消费 --mobile-bottom-safe-area）/
+ *      tapAreaContract（视觉<44 ↔ 必须有扩区）—— 允许清单一律只减不增
  *
  * 用法：npm run check:mobileui   （CI 与本地合并前都跑；设备级验收另跑 check:mobilesnap）
  */
@@ -25,6 +28,6 @@ const run = (cmd, args, label) => {
   console.log("[check:mobileui] ✓ " + label);
 };
 
-run("npx", ["vitest", "run", "src/mobile/mobileIndependence.test.ts", "src/mobile/mobileLayers.test.ts", "src/mobile/kernelStyleBootstrap.test.ts"], "移动端独立性/层护栏");
+run("npx", ["vitest", "run", "src/mobile/mobileIndependence.test.ts", "src/mobile/mobileLayers.test.ts", "src/mobile/kernelStyleBootstrap.test.ts", "src/mobile/ui/sheetFooterContract.test.ts", "src/mobile/bottomChromeContract.test.ts", "src/mobile/tapAreaContract.test.ts"], "移动端独立性/层/按钮边界护栏");
 run("node", ["scripts/ui-metrics.mjs"], "UI 硬指标（ui-metrics）");
 console.log("\n[check:mobileui] 全部通过。设备级验收：npm run check:mobilesnap + scripts/css-audit/mobile-walkthrough.mjs");

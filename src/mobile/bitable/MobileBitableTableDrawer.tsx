@@ -62,7 +62,8 @@ export function MobileBitableTableDrawer({ open, tables, activeTableId, editable
                 <Table2 size={16} className="mbt-drawer__icon" aria-hidden="true" />
                 <span className="mbt-drawer__name">{table.name}</span>
                 {on && <Check size={16} className="mbt-drawer__check" aria-hidden="true" />}
-                <button type="button" className="mbt-drawer__more" aria-label={"数据表操作 " + table.name}
+                {/* 261119 B-8：⋮ 28×28 < 44 ⇒ 挂 .mb-tap 补足命中区（视觉不变）。 */}
+                <button type="button" className="mbt-drawer__more mb-tap" aria-label={"数据表操作 " + table.name}
                   onClick={(event) => { event.stopPropagation(); onActions(table.id); }}>
                   <MoreHorizontal size={16} />
                 </button>

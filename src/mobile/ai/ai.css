@@ -102,13 +102,10 @@
 .ai-jump { align-self: center; margin: 0 0 6px; height: 30px; padding: 0 12px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-accent-text); font-size: var(--lake-font-size-micro); }
 .ai-sheet__search { padding: 8px 16px 4px; }
 .ai-sheet__search .ai-sheet__input { width: 100%; }
-.ai-sheet__body { padding-bottom: 8px; }
 .ai-sheet__note { margin: 8px 16px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.6; }
-.ai-sheet__foot {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px calc(16px + var(--mobile-bottom-safe-area));
-  border-top: .5px solid var(--lake-border-1);
-}
+/* 261119 B-6：第三套底栏账 .ai-sheet__foot（10/16/16+safe）与 .ai-sheet__body 的 8px 并入
+   .mb-sheet__foot 口径（8/16/20+safe + body/foot 安全区只算一份，见 floating.css B-3）——
+   三面板底栏直接复用 .mb-sheet__foot 类，不再另立几何。 */
 .ai-sheet__bulk { display: flex; gap: 8px; padding: 10px var(--mb-page-pad) 2px; }
 .ai-budget { flex: 1 1 auto; min-width: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: 1.4; }
 .ai-budget b { color: var(--lake-text-1); }

@@ -80,6 +80,11 @@
 }
 .mb-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); }
 .mb-iconbtn--compact { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); border-radius: var(--mb-radius-sm); }
+/* 261119 按钮边界审计 B-7：36 紧凑档（.mb-btn--sm / .mb-iconbtn--compact）此前只有视觉 36、
+ * 没有扩区 —— MOBILE-DESIGN「视觉36px、有效命中44px」的承诺缺实现。照 .mb-chip 先例用 ::after
+ * 只纵向补到 44（inset: -4px 0），横向不动、防相邻紧凑钮命中区互叠；视觉盒子与几何快照不变。 */
+.mb-btn--sm, .mb-iconbtn--compact { position: relative; }
+.mb-btn--sm::after, .mb-iconbtn--compact::after { content: ""; position: absolute; inset: -4px 0; }
 .mb-iconbtn:disabled { opacity: var(--lake-disabled-opacity); }
 .mb-iconbtn > svg { display: block; }
 

@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Upload } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { formatBytes } from "../../lib/formatBytes";
 import { isPortableImportNativeAvailable } from "../native/portablePackage";
 import {
@@ -93,21 +94,19 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
   const snapshot = staged !== null && isMobileSnapshotManifest(staged.manifest);
   const noun = snapshot ? "恢复" : "导入";
 
+  // 261119 按钮边界审计 B-1/B-9：footer 收进 SheetFooter（.mb-sheet__foot 唯一底栏几何：8/16/20+safe）；
+  // 破坏性主操作走 danger 档（实心红主按钮），不再用裸 --danger-text 比「取消」还弱（主次倒挂）。
   const footer = result ? (
-    <div className="mb-set-block__actions">
-      <button type="button" className="mb-btn mb-btn--primary" onClick={() => void closeSheet()}>完成</button>
-    </div>
+    <SheetFooter confirm={{ label: "完成", onClick: () => void closeSheet() }} />
   ) : busy ? (
-    <div className="mb-set-block__actions">
+    <SheetFooter>
       <button type="button" className="mb-btn mb-btn--secondary" disabled>{noun}中…请不要退出 App</button>
-    </div>
+    </SheetFooter>
   ) : (
-    <div className="mb-set-block__actions">
-      <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void closeSheet()}>取消</button>
-      <button type="button" className="mb-btn mb-btn--danger-text" disabled={!staged} onClick={() => void start()}>
-        覆盖本机并{noun}
-      </button>
-    </div>
+    <SheetFooter
+      cancel={{ label: "取消", onClick: () => void closeSheet() }}
+      confirm={{ label: "覆盖本机并" + noun, variant: "danger", disabled: !staged, onClick: () => void start() }}
+    />
   );
 
   return (

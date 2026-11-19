@@ -933,7 +933,8 @@
 .mbt-drawer__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mbt-drawer__check { flex: 0 0 auto; color: var(--lake-fg-selected); }
 .mbt-drawer__empty { padding: var(--lake-space-giant) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); text-align: center; }
-.mbt-drawer__foot { padding: var(--lake-space-md) var(--mb-page-pad) var(--lake-space-xxl); border-top: .5px solid var(--lake-border-1); }
+/* 261119 B-5：底内距补安全区项（与 .mb-sheet__foot 同一口径 8/16/20+safe；此前手势条直接压住「新建数据表」按钮下缘）。 */
+.mbt-drawer__foot { padding: var(--lake-space-md) var(--mb-page-pad) calc(var(--lake-space-xxl) + var(--mobile-bottom-safe-area)); border-top: .5px solid var(--lake-border-1); }
 .mbt-drawer__hint { margin-top: var(--lake-space-sm); color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.5; }
 
 

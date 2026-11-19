@@ -31,7 +31,8 @@ function Snackbar({ item }: { item: ToastItem }) {
       className={"mb-toast is-hide" + (item.type === "error" ? " mb-toast--error" : "")}
       onClick={() => hideToast(item.id)}>
       <div className="mb-toast__text">{item.text}</div>
-      {item.timeout === 0 && <button className="mb-toast__close" aria-label="关闭" onClick={(e) => { e.stopPropagation(); hideToast(item.id); }}><X size={16} /></button>}
+      {/* 261119 B-8：关闭钮 28×28 < 44 ⇒ 挂 .mb-tap 补足命中区（视觉不变）。 */}
+      {item.timeout === 0 && <button className="mb-toast__close mb-tap" aria-label="关闭" onClick={(e) => { e.stopPropagation(); hideToast(item.id); }}><X size={16} /></button>}
     </div>
   );
 }

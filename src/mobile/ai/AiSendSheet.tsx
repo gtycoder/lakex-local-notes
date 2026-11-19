@@ -40,7 +40,7 @@ export function AiSendSheet({ open, docs, sendIds, onToggle, onAll, onClose }: A
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>完成</button>
         </div>
         <p className="ai-sheet__note">默认继承上一轮。改动只影响之后：会从资料块起重<strong>建缓存</strong>（本轮全价，之后恢复命中）。资料集在会话里固定。</p>
-        <div className="mb-sheet__body ai-sheet__body">
+        <div className="mb-sheet__body">
           {docs.length === 0 && <EmptyState inset>会话里还没有资料。先选择资料，或这一轮直接不带资料发问。</EmptyState>}
           {docs.map((doc) => (
             <Switch
@@ -58,7 +58,7 @@ export function AiSendSheet({ open, docs, sendIds, onToggle, onAll, onClose }: A
             </div>
           )}
         </div>
-        <div className="ai-sheet__foot">
+        <div className="mb-sheet__foot">
           <span className={"ai-budget" + (used > AI_CORPUS_MAX_CHARS ? " is-warn" : "")}>
             本轮发送 <b>{sendIds.length}</b> 篇，{used.toLocaleString("en-US")} 字
           </span>

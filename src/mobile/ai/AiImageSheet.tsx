@@ -81,7 +81,7 @@ export function AiImageSheet({ open, docs, used, onConfirm, onClose }: AiImageSh
           <span className="mb-sheet__title">资料里的图片</span>
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>取消</button>
         </div>
-        <div className="mb-sheet__body ai-sheet__body">
+        <div className="mb-sheet__body">
           {loading && <EmptyState inset>读取中…</EmptyState>}
           {!loading && items.length === 0 && <EmptyState inset>资料文档里没有可发送的图片</EmptyState>}
           {groups.map((group) => (
@@ -109,7 +109,7 @@ export function AiImageSheet({ open, docs, used, onConfirm, onClose }: AiImageSh
             </div>
           ))}
         </div>
-        <div className="ai-sheet__foot">
+        <div className="mb-sheet__foot">
           <span className="ai-budget">已选 <b>{selected.size}</b> / {Math.max(0, limit)} 张（本轮最多 {AI_IMAGES_MAX} 张）</span>
           <button type="button" className="mb-btn mb-btn--primary" disabled={selected.size === 0}
             onClick={() => {

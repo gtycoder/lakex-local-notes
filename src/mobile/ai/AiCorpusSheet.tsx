@@ -59,7 +59,7 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
             <input aria-label="搜索文档" placeholder="搜索文档…" value={query} onChange={(event) => setQuery(event.target.value)} />
           </span>
         </div>
-        <div className="mb-sheet__body ai-sheet__body">
+        <div className="mb-sheet__body">
           {rows.length === 0 && <EmptyState inset>没有匹配的文档</EmptyState>}
           {rows.map((doc) => {
             const on = selectedIds.includes(doc.id);
@@ -82,7 +82,7 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
             );
           })}
         </div>
-        <div className="ai-sheet__foot">
+        <div className="mb-sheet__foot">
           <span className={"ai-budget" + (used > AI_CORPUS_MAX_CHARS ? " is-warn" : "")}>
             已选 <b>{selected.length}</b> / {AI_CORPUS_MAX_DOCS} 篇，{used.toLocaleString("en-US")} / {AI_CORPUS_MAX_CHARS.toLocaleString("en-US")} 字
             {used > AI_CORPUS_MAX_CHARS ? "，超预算按顺序截断" : ""}
