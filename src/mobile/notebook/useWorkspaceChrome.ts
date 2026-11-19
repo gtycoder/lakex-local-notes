@@ -69,9 +69,10 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
   /**
-   * 阅读态「顶栏 / 底栏自动收起」（261019，对齐思源 .mobile-chrome--hidden 手感）：
+   * 阅读态「悬浮胶囊滚动收起」（261019 顶/底栏自动收起的底栏分支；261119 用户点单：**滚动不再收顶栏**，
+   * 工作区顶栏常驻、阅读态也不收 ⇒ 滚动判据只驱动底部悬浮胶囊）：
    * 判据在 ./scrollChrome（纯函数），这里只接 DOM：只认当前活动 .mobile-doc-body 的滚动，且只在
-   * kind=doc 且非编辑态生效（编辑态有 dock/键盘，不能动）。切文档 / 进出编辑 / 打开任意浮层 → 复位展开。
+   * kind=doc 且非编辑态生效（编辑态有 dock/键盘，不能动）。切文档 / 进出编辑 / 打开任意浮层 → 胶囊复位展开。
    */
   const [chrome, setChrome] = useState<ChromeScrollState>({ hidden: false, acc: 0 });
   const chromeRef = useRef(chrome);
@@ -81,8 +82,11 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   const bodyRef = useRef<HTMLElement | null>(null);
   const activeMetaRef = useRef({ kind: "doc" as string, editing: false });
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
-  // 平板不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
-  const chromeHiddenNow = subpageFullscreen || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
+  // 261119 用户点单：**滚动不再收顶栏**（工作区顶栏常驻，阅读态也不收）⇒ 顶栏唯一隐藏来源 = 子页全屏。
+  const topbarHidden = subpageFullscreen;
+  // 滚动收起只保留给底部悬浮胶囊（行为与旧口径逐字一致）：手机阅读态 doc 下滚收起、上滚复现；
+  // 平板不参与（顶栏/胶囊里有文档页签，滚动时闪掉会晃眼）。
+  const capsuleChromeHidden = topbarHidden || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
   // 261103 二轮定稿（用户）：**文档编辑态也要常显胶囊**（编辑态也可能没光标、键盘/二级面板都没展开，
   // 此时要能切目录 / 看大纲 / 换标签 / 切笔记本）；但允许被覆盖 ——
   //   ① 键盘弹起：直接隐藏（fixed 元素会跟着视口上浮，露在上面只会挡输入区）；
@@ -95,7 +99,7 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   // 键盘判据在过渡里抖一次 ⇒ 胶囊闪入闪出。做法 = **面板阶段冻结可见性**：打开前是什么就保持什么，
   // 面板关完再按键盘判据；编辑态胶囊的 CSS 过渡也已改成 none（mobile.css）。
   const baseHidden = baseCapsuleHidden({
-    chromeHidden: chromeHiddenNow,
+    chromeHidden: capsuleChromeHidden,
     editing: !!active?.editing,
     capsuleInEdit,
     keyboardOpen,
@@ -108,7 +112,7 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
     prevDockPhaseRef.current = dockPanelPhase;
   }
   const capsuleHidden = capsuleHiddenFor({
-    chromeHidden: chromeHiddenNow,
+    chromeHidden: capsuleChromeHidden,
     editing: !!active?.editing,
     capsuleInEdit,
     keyboardOpen,
@@ -195,7 +199,7 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   return {
     bodyRef,
     outlineAvailable,
-    chromeHiddenNow,
+    topbarHidden,
     capsuleInEdit,
     capsuleHidden,
     setSubpageFullscreen,

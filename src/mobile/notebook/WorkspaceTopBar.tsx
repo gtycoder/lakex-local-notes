@@ -8,7 +8,9 @@ import type { NotebookTab } from "./useNotebookTabs";
  */
 export interface WorkspaceTopBarProps {
   padTwoPane: boolean;
-  chromeHidden: boolean;
+  /** 子页全屏（多维表「记录详情」这类页内整页）时隐藏顶栏。261119 用户点单：**滚动不再收顶栏**（顶栏常驻、
+   * 阅读态也不收，收起只保留给底部悬浮胶囊）⇒ 这是顶栏唯一的隐藏来源。平板带文档页签，恒不隐藏。 */
+  topbarHidden: boolean;
   title: string;
   active: NotebookTab | null;
   activeId: string | null;
@@ -30,10 +32,10 @@ export interface WorkspaceTopBarProps {
 const EDITABLE_KINDS = ["doc", "usheet", "bitable", "board", "ink"];
 
 export function WorkspaceTopBar(props: WorkspaceTopBarProps) {
-  const { padTwoPane, chromeHidden, title, active, activeId, tabs, findOpen } = props;
+  const { padTwoPane, topbarHidden, title, active, activeId, tabs, findOpen } = props;
   const kind = active?.kind ?? "doc";
   const canEdit = !!active?.loaded && EDITABLE_KINDS.includes(kind);
-  const autoHidden = !padTwoPane && chromeHidden;
+  const autoHidden = !padTwoPane && topbarHidden;
   return (
     <header
       className={"toolbar toolbar--border mobile-topbar" + (autoHidden ? " mobile-topbar--auto-hidden" : "")}

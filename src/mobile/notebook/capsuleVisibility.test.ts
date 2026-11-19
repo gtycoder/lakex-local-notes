@@ -8,7 +8,7 @@ describe("baseCapsuleHidden（无面板时的基础判据）", () => {
   it("键盘弹起 → 隐藏", () => { expect(baseCapsuleHidden({ ...base, keyboardOpen: true })).toBe(true); });
   it("非编辑态 → 不隐藏（阅读态由滚动 chrome 管）", () => { expect(baseCapsuleHidden({ ...base, editing: false, keyboardOpen: true })).toBe(false); });
   it("编辑态但非文档（表格/多维表/画板/手写板）→ 隐藏", () => { expect(baseCapsuleHidden({ ...base, capsuleInEdit: false })).toBe(true); });
-  it("chromeHidden（滚动隐藏/子页全屏）优先 → 隐藏", () => { expect(baseCapsuleHidden({ ...base, chromeHidden: true })).toBe(true); });
+  it("chromeHidden（胶囊滚动隐藏/子页全屏）优先 → 隐藏", () => { expect(baseCapsuleHidden({ ...base, chromeHidden: true })).toBe(true); });
 });
 
 describe("capsuleHiddenFor（面板阶段冻结可见性，261104 闪入闪出修复）", () => {

@@ -17,8 +17,8 @@ const CSS = read("../mobile.css");
 /** 261103 二轮：编辑态胶囊的层序对手 = 底部 dock（z-index 在 editor-dock.css）。 */
 const DOCK = read("../editor/editor-dock.css");
 
-describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => {
-  it("判据：顶部展开、向下累计到阈值收起、向上更灵敏、反向清零", () => {
+describe("阅读时悬浮胶囊滚动收起（261019 顶/底栏自动收起的底栏分支；261119 用户点单：顶栏常驻不收）", () => {
+  it("胶囊判据：顶部展开、向下累计到阈值收起、向上更灵敏、反向清零", () => {
     const atTop = chromeAfterScroll({ hidden: true, acc: 0 }, 0, -40);
     expect(atTop).toEqual({ hidden: false, acc: 0 });
 
@@ -35,14 +35,22 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     expect(chromeAfterScroll({ hidden: false, acc: 10 }, 300, -5)).toEqual({ hidden: false, acc: 0 });
   });
 
-  it("工作区接线：只认 mobile-doc-body、编辑态不参与、开浮层复位、顶栏/胶囊同一判据", () => {
+  it("工作区接线：滚动只驱动胶囊（分支保持）；顶栏常驻 —— 滚动永不含顶栏隐藏", () => {
     expect(CHROME).toContain('chromeAfterScroll(cur, top, dy)');
     expect(CHROME).toContain('classList?.contains("mobile-doc-body")');
     expect(CHROME).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
+    // ① 滚动永不含顶栏隐藏：顶栏唯一隐藏来源 = 子页全屏（与滚动无关），滚动状态不进顶栏分支。
+    expect(CHROME).toContain("const topbarHidden = subpageFullscreen;");
+    expect(CHROME).not.toContain("chromeHiddenNow");
+    expect(WS).toContain("topbarHidden={topbarHidden}");
+    expect(TOPBAR).toContain("topbarHidden");
+    expect(TOPBAR).not.toMatch(/scrollChrome|chromeAfterScroll/);
+    // ② 胶囊分支保持：滚动收起判据原样喂给胶囊（手机阅读态 doc；平板不参与），子页全屏照旧隐藏胶囊。
+    expect(CHROME).toMatch(/const capsuleChromeHidden = topbarHidden \|\| \(!padTwoPane && chrome\.hidden/);
+    expect(CHROME).toContain("chromeHidden: capsuleChromeHidden,");
     expect(TOPBAR).toContain("mobile-topbar--auto-hidden");
-    expect(WS).toContain("chromeHidden={chromeHiddenNow}");
     // 261103 二轮：文档编辑态**常显**胶囊（抬到 dock 上方），但键盘弹起时隐藏、二级面板展开时被 dock 层级盖住；
-    // 表格/多维表/画板/手写板编辑态仍隐藏。顶栏自动收起判据不变。
+    // 表格/多维表/画板/手写板编辑态仍隐藏。
     expect(CHROME).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
     expect(CHROME).toContain("const { keyboardOpen } = useKeyboard();");
     // 261104：判据抽到 capsuleVisibility 纯函数 + 面板阶段**冻结**可见性（面板开合会顺带切 IME，旧判据会在过渡里抖一次 → 胶囊滑入/滑出闪）。
@@ -57,14 +65,17 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     // 层序：胶囊 above-dock = 2，dock 容器 = 4 ⇒ 二级面板展开时盖住胶囊（反向就是"胶囊浮在色板上"）。
     expect(CSS).toMatch(/\.mobile-bottom-bar--above-dock\s*\{[^}]*z-index:\s*2/);
     expect(DOCK).toMatch(/\.mobile-editor-dock\s*\{[^}]*z-index:\s*4/);
-    // 打开任意浮层 → 导航必须回来
+    // 打开任意浮层 → 胶囊（导航入口）必须回来
     expect(CHROME).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
   });
 
-  it("CSS：顶栏高度过渡收起 + reduced-motion 关闭", () => {
+  it("CSS：.mobile-topbar--auto-hidden 留作子页全屏隐藏（非死规则）+ 高度过渡 + reduced-motion 关闭", () => {
     expect(CSS).toMatch(/\.mobile-topbar--auto-hidden\s*\{[^}]*height:\s*0/);
     expect(CSS).toMatch(/\.mobile-topbar\s*\{[^}]*transition:\s*height var\(--mobile-duration-panel\)/);
     expect(CSS).toMatch(/prefers-reduced-motion[\s\S]{0,1200}\.mobile-topbar\s*\{\s*transition:\s*none/);
+    // 261119：滚动不再收顶栏 —— 规则族只服务子页全屏，注释注明（不再留「阅读态顶栏收起」的死口径）。
+    expect(CSS).toContain("滚动不再收起顶栏");
+    expect(CSS).not.toContain("阅读态顶栏收起");
   });
 
   it("转场骨架 + 正文淡入：工作区首次挂载与异步读回都先画骨架", () => {

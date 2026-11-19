@@ -213,7 +213,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const {
     bodyRef,
     outlineAvailable,
-    chromeHiddenNow,
+    topbarHidden,
     capsuleInEdit,
     capsuleHidden,
     setSubpageFullscreen,
@@ -440,7 +440,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     >
       <WorkspaceTopBar
         padTwoPane={padTwoPane}
-        chromeHidden={chromeHiddenNow}
+        topbarHidden={topbarHidden}
         title={title}
         active={active ?? null}
         activeId={activeId}

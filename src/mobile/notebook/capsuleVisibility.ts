@@ -15,7 +15,8 @@
 import type { DockPanelPhase } from "../editor/dockPanelPhase";
 
 export interface CapsuleVisibilityInput {
-  /** 阅读态顶/底栏自动收起（滚动隐藏）或子页全屏。 */
+  /** 胶囊自身的滚动隐藏（阅读态下滚收起，判据见 scrollChrome.ts）或子页全屏。
+   * 261119 用户点单后顶栏常驻不收起（不在此列），本输入只服务悬浮胶囊。 */
   chromeHidden: boolean;
   /** 当前是否有编辑器处于编辑态。 */
   editing: boolean;

@@ -62,7 +62,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
      滚动后的玻璃底/发丝线/渐隐统一在下方 .mobile-topbar.is-scrolled。 */
   height: calc(var(--mb-chrome-content-h) + max(0px, calc(var(--mb-chrome-inset-top) - var(--mb-chrome-inset-overhang))));
   position: sticky; top: 0; z-index: var(--mobile-z-topbar);
-  /* 阅读时自动收起（261019，对齐思源）：收起靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
+  /* 归零收起（261019 阅读态自动收起遗留；261119 起只服务子页全屏隐藏）：靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
   /* 261107：overflow 必须可见 —— 滚动后的「底部 14px 渐隐」要垂到栏外；收起态再单独裁切（见 .mobile-topbar--auto-hidden）。 */
   overflow: visible;
   transition: height var(--mobile-duration-panel) var(--mobile-ease-panel),
@@ -71,7 +71,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
     border-bottom-width var(--mobile-duration-panel) var(--mobile-ease-panel),
     opacity var(--mobile-duration-panel) var(--mobile-ease-panel);
 }
-/* 阅读态顶栏收起：高度归零 + 淡出；由 NotebookWorkspace 的 chrome 判据控制（见 notebook/scrollChrome.ts）。 */
+/* 子页全屏时顶栏隐藏：高度归零 + 淡出；由 NotebookWorkspace 的 subpageFullscreen 控制（多维表「记录详情」这类页内整页）。
+   261119 用户点单：**滚动不再收起顶栏**（工作区顶栏常驻、阅读态也不收）；滚动收起只保留给底部悬浮胶囊（判据见 notebook/scrollChrome.ts）。 */
 .mobile-topbar--auto-hidden {
   height: 0; min-height: 0; margin-top: 0; padding-top: 0; border-bottom-width: 0; opacity: 0; pointer-events: none;
   overflow: hidden;
@@ -81,7 +82,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
  * --mb-glass-bg-bar + --mb-blur-bar + --mb-shadow-bar（内含底部 0.5px 发丝线），并向下投 14px 渐隐。
  * 同时收掉首页纯文字 tab、居中显示当前页小标题（.mobile-topbar-collapsed-title）。
  * ⚠️ 这两个类名由滚动接线（另一批）施加；本文件只提供视觉，不加第二套顶栏实现。
- * 阅读态自动收起 .mobile-topbar--auto-hidden 的既有行为不变（上面那条只额外裁切）。 */
+ * 子页全屏隐藏 .mobile-topbar--auto-hidden 的既有行为不变（上面那条只额外裁切）。 */
 .toolbar.mobile-topbar { background: transparent; border-bottom: 0; }
 .mobile-topbar.is-scrolled {
   background: var(--mb-glass-bg-bar);
