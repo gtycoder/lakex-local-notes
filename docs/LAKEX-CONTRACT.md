@@ -2273,12 +2273,19 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **补丁口径（`vendor/lakex-doc-react/LOCAL-CHANGES.md` #34）**：`getSearchItems` 的 Fuse options 加 **`ignoreLocation: !0` + `ignoreFieldNorm: !0`**（位置/字段长度不计分；`score <= 0.1` 保留 = 「≤10% 错字」紧口径）。**实测口径**（从 bundle 抽 Fuse+ePW 跑，护栏 `src/features/editor/emojiPanelSearch.test.ts` 可复跑）：火→9 条（🔥/🌋/🧯/🚀/❤️‍🔥…）、苹果→🍎🍏、house→🏠 等 7 条、fire→13 条、空查询→1467 全量、house/fire 不出 🍎。**数据无需补中文别名**：ePW 已含中文关键词，不用桥接 `src/lib/emojiSearch.ts`（那是「目录选表情」面板的数据层，两套面板两套数据，勿混勿并）。
 - **扩展点结论**：`unicodeEmoji` 插件 option 只能注入 `emojiMap`/`emojiGroups` **数据**，救不了评分语义（除非把 1467 条数据整份搬到宿主重建成逐 token 短词条）⇒ 搜索函数本身无扩展点，走 LOCAL-CHANGES 最小补丁（同 #32 例外）。重转内核后 `emojiPanelSearch.test.ts` 会红提醒重放；`doc.umd.js` 有同一函数但不在构建链路、未打补丁。
 
-### 5.61 书签卡封面「闪烁环」真身与「未变才写」守卫（261119 录屏取证 + 隔离实例复现；已核实行为）
+### 5.61 书签卡封面「闪烁环」真身、「未变才写」守卫与「两级皆败静默隐藏」（261119 录屏取证 + 隔离实例复现 + 用户裁决；已核实行为）
 
 > 用户报「文档里卡片的闪烁问题」（录屏 `Screenrecorder-2026-11-19-18-48-16-295.mp4`，Lake 文档阅读态，书签卡在视野内）。
 
 - **真身 = 书签卡封面 img 的 onError 兜底同值重写环（不是布局回写扫描）**：内核 `_getCoverElement`（`lakex.js` 两处：块卡/h5 卡）的 `onError` **无条件** `coverRef.current.src = 兜底图`（`gw.alipayobjects.com/…A*MfA2QIGNXcE…`，构建期被 `lakexLocalize` 本地化为 `/vendor/lakex/alipay/A_MfA2…`）。封面 URL 失败（CSP/断网/防盗链）且兜底图也拉不到时：error → **同值**重写 src → 浏览器**重新拉取**（实测 `img.src = img.src` 会重新走一次加载）→ 再 error → 再同值重写……**网络往返节奏（实测 ~0.4–0.8s/圈、无上限）的加载/破图闪烁环**；封面盒在「loading 空盒 ↔ 破图盒」交替 = 用户看到的卡片闪烁。
 - **复现（隔离实例，dev 数据含录屏同款文档 `01--IO基础` + mmbiz 封面）**：断网态下 15s 窗口实测 **28 次 img-error + 27 次同值 src 重写**（写次数对齐网络节奏）；修复后同窗口 **2 error + 2 写（mmbiz→兜底各一）后静止**。
-- **修法 = AGENTS I2「未变才写」，应用层运行期 DOM 补丁**（`src/features/editor/bookmarkCoverFallbackGuard.ts`，挂在 `createLakeDocument` 的 mount，桌面/移动/预览共用）：给封面 img 挂**元素级 src 访问器**，赋值与 attribute 现值一致时直接跳过（不触发浏览器重拉）；内核 onError 语义不变——首次失败照常写兜底（值不同），兜底再失败时同值写被吞、环终止，封面稳定停在破图/兜底态；真实换图仍正常写。**不动内核产物**（LOCAL-CHANGES §二.1 应用层优先）。
+- **修法 = AGENTS I2「未变才写」+ 261119 用户裁决「两级皆败 ⇒ 静默隐藏缩略框」，应用层运行期 DOM 补丁**（`src/features/editor/bookmarkCoverFallbackGuard.ts`，挂在 `createLakeDocument` 的 mount，桌面/移动/预览共用）：① 给封面 img 挂**元素级 src 访问器**，赋值与 attribute 现值一致时直接跳过（不触发浏览器重拉）；内核 onError 语义不变——首次失败照常写兜底（值不同），兜底再失败时同值写被吞、环终止。② **两级皆败不再停在破图/兜底图（261119 用户裁决：静默隐藏缩略框，卡片只留标题/来源行）**：每次 error 分发结束时看内核 onError 有没有把下一级写上路（分发内**异值**写 = 兜底接力中；同值写被吞/根本没写 = 无下一级）⇒ 无下一级即给封面 img 加 `lake-bookmark-cover-failed` **静默隐藏**（样式单一来源 `styles/feature.css`：display:none + 兄弟 `.ne-card-bookmark-body` 摘封面间距 = 无封面排版；@layer feature 压内核 legacy 层，无 !important）；单级失败兜底图照常显示，真实换图（异值写）/加载成功（load）摘类恢复显示。隐藏只动封面 img 本体：卡壳 102/78px 定高不变、标题/来源行不塌、隐藏后零跳版。**不动内核产物**（LOCAL-CHANGES §二.1 应用层优先）。移动端已有同款镜像（`src/mobile/editor/edit-surface-kernel.css` 三条同名规则 + mobileLayers 基线登记，261119 集成补齐——移动端样式层不加载桌面 CSS，镜像 parity 见 `bookmarkCoverFallbackGuard.test`）。
 - **录屏取证修正（证伪「0.8s 布局回写环」假设）**：录屏 24.35fps/200帧，逐帧差分的「每 24 帧周期尖峰」= **H.264 GOP 关键帧再量化伪影**（全帧 ±1–2 luma、幅度在第 4 位小数抖动、静止段逐位相同、>8 luma 的变化像素只集中在 ~3150px 的封面盒）⇒ **不是整页重排、不是应用侧定时器**；真实 DOM 变化全部在书签卡封面盒（`tblend` 全帧差分 >8 luma 阈值与封面盒逐帧统计一致）。扫描器家族（`mountVideoCardLayoutSync` / `mediaCardResize`）已同步补「未变才写」（`applyVideoLayout` 与把手属性同值不写，护栏 `layoutWriteOnce.test.ts`：静置扫描 N 次 = 0 DOM 写、真实变化正常写）。
-- **护栏**：`src/features/editor/bookmarkCoverFallbackGuard.test.ts`（写次数断言：无守卫环 20 error = 20 写、有守卫 = 1 写；内核 onError 前提 pin——重转内核后提醒复核）+ `layoutWriteOnce.test.ts`。
+- **护栏**：`src/features/editor/bookmarkCoverFallbackGuard.test.ts`（写次数断言：无守卫环 20 error = 20 写、有守卫 = 1 写、隐藏后 error 风暴仍 1 写；单级失败兜底图仍显示 / 两级皆败隐藏 / 真实换图与 load 恢复显示；隐藏态类与 `styles/feature.css` 的接线 pin；内核 onError 前提 pin——重转内核后提醒复核）+ `layoutWriteOnce.test.ts`。
+
+## 5.62 面板态必须「开面板当帧」显式钉 --mb-app-h（§5.36 家族；261119 设备逐帧实测）
+
+- **现象**：移动端编辑态点 dock「＋」展开插入面板 ⇒ 正文滚动口突然长高、Chrome 把 scrollTop 钳到新下限（实测 491→179=sh−ch，短文档整屏跳到文首）＝「编辑区跳走/不可见」；收面板时恢复逻辑再反向跳一次。引入点 = 261111 流畅性批 f7d39f45（`--mb-app-h` 同值跳过/键盘态不写变量优化），随 v1.5.0 线携带。
+- **根因（两层）**：① `useEditSurface.ts` 的「target ≈ innerHeight ⇒ 清除 --mb-app-h（100% 等价）」短路分支 + effect 依赖数组缺 [innerHeight, 面板态]——键盘在面板**背后**收起（innerHeight 530→842）时 effect 不重跑，变量停在键盘态「已清除」⇒ 外壳回退 100% ⇒ 滚动口 +面板高；② 即便 effect 会重跑，resize→layout effect 之间仍有 **≥1 帧「变量缺席」窗口**，浏览器在该帧钳 scrollTop（钳位瞬时不可逆）⇒ 只修依赖不够。
+- **口径**：**面板态（panelMode||closing）必须在点「＋」当帧（键盘未收）显式把 --mb-app-h 钉成字面量**；「100% 等价」短路只许用于**无面板的纯键盘态**；effect 依赖含 innerHeight 与面板态。261111 的「键盘动画期间同值跳过/零写」收益保留（ref 守卫同值跳过）。
+- **护栏**：`useEditSurface.test` 回归用例（键盘态点＋ ⇒ 面板开当帧显式写、收起后回 100% 等价；去掉依赖即红）+ 复现装置 `scripts/mobile-audit/dock-panel-stability.mjs`（CDP：scrollTop 位移≤2px / 滚动口恒定 / `.ne-engine` 同实例不重挂 / 面板态变量显式在位；同机同文档修前 FAIL×4、修后 ALL PASS，冷启动复跑稳）。

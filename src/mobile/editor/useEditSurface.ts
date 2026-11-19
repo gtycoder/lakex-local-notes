@@ -255,6 +255,8 @@ export function useEditSurface<M extends string = Exclude<PanelMode, null>>(opts
   // ── 几何 ───────────────────────────────────────────────────────────────────
   const occupation = bottomOccupation({ panelOpen: !!panelMode, closing, panelHeight, keyboardOpen, keyboardHeight });
   const kbOffset = dockKbOffset({ panelOpen: !!panelMode, closing, innerHeight, shellHeight: base, panelHeight, edgeToEdgeOffset: offset });
+  /** 面板态 = 面板开着或收起过渡（键盘可能正在面板背后收起）——外壳高必须显式钉住、不许靠 100% 兜底。 */
+  const panelActive = Boolean(panelMode) || closing;
 
   // 外壳高度 = 稳定外壳高 − 底部占用（写到 :root，消费方是各编辑面的滚动容器）。
   //  ⚠️ 必须 useLayoutEffect（绘制前落地）：否则 vh 系的内核规则会先按旧视口算一次、被内容撑住，之后缩不回去。
@@ -264,6 +266,13 @@ export function useEditSurface<M extends string = Exclude<PanelMode, null>>(opts
   //       ② adjustResize 下键盘只改变视口、外壳高恰好等于 innerHeight ⇒ **不写变量**（html/body 的 100% 已经是它，
   //          写一次等于平白触发全页重算）；只有面板态 / edge-to-edge（值与视口不同）才写；
   //       ③ 清除只在卸载或退出编辑态时做一次，不在每次变化时 remove→set 往返。
+  //  ⚠️ ② 的「写 or 不写」判据依赖视口高与面板态 ⇒ **innerHeight / panelActive 必须进依赖数组**（261119 面板开合跳位回归）。
+  //  两层真身（设备逐帧实测）：
+  //  ① occupation 在「键盘态 ⇄ 面板态」按设计恒等（内容视口恒定的前提），键盘在面板背后收起时只有 innerHeight 变；
+  //     漏依赖 ⇒ effect 不重跑 ⇒ 变量停在键盘态的「已清除」上 ⇒ 外壳回退 100%（= 满屏 842）⇒ 滚动口长高一个面板高。
+  //  ② 就算 effect 会重跑，resize 与 layout effect 之间仍有 ≥1 帧「变量缺席」窗口 —— 浏览器在那帧把 scrollTop
+  //     钳到新下限（实测 491→179，钳位瞬时且不可逆）⇒ **面板态必须在开面板那一刻（键盘还没收）就先钉住值**，
+  //     所以「面板开着」不走 100% 等价短路（只有键盘态短路；那里的 remove 与 100% 逐像素相同、零跳变）。
   const appHeightWrittenRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -274,8 +283,10 @@ export function useEditSurface<M extends string = Exclude<PanelMode, null>>(opts
     const dock = dockRef.current;
     if (!dock || !dock.getBoundingClientRect().width) return;  // 隐藏视图（rect 宽 0）不覆盖可见实例的值
     const target = shellSurfaceHeight(base, occupation);
-    // 键盘（adjustResize）态：外壳高 == 视口高 ⇒ 100% 即等价，清掉变量而不是写一个新值。
-    if (Math.abs(target - window.innerHeight) <= 2) {
+    // 键盘（adjustResize）态**且没有面板**：外壳高 == 视口高 ⇒ 100% 即等价，清掉变量而不是写一个新值。
+    // ⚠️ 面板态（panelOpen/closing）不走这条短路：键盘要在面板背后收起、视口会长高，100% 会跟着长 ⇒
+    //    滚动口长高 ⇒ scrollTop 被钳位（261119 面板开合跳位）。面板态必须显式钉 530px 这类字面量。
+    if (!panelActive && Math.abs(target - window.innerHeight) <= 2) {
       if (appHeightWrittenRef.current !== null) { root.style.removeProperty("--mb-app-h"); appHeightWrittenRef.current = null; }
       return;
     }
@@ -283,7 +294,7 @@ export function useEditSurface<M extends string = Exclude<PanelMode, null>>(opts
     if (appHeightWrittenRef.current === value) return;
     root.style.setProperty("--mb-app-h", value);
     appHeightWrittenRef.current = value;
-  }, [writeAppHeight, editing, base, occupation, dockRef]);
+  }, [writeAppHeight, editing, base, occupation, innerHeight, panelActive, dockRef]);
   // 卸载时把变量交还给外壳（不能留在某个已卸载编辑面的旧值上）。
   useEffect(() => () => {
     if (appHeightWrittenRef.current !== null) {

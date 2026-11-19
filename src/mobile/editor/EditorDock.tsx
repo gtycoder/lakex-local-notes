@@ -714,7 +714,15 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
           面板内容保持可见（closingHold）直到被键盘盖住；否则键盘还在上升、面板先变成一块空白（实测约 200ms 空块）。
           只有输入法迟迟不来时才放行滑出（useEditSurface 的 1800ms 兜底）。 */}
       {(panelMode || closing) && (
-      <div className="med-panel" data-open={panelMode || closingHold ? "1" : "0"} data-closing={closing ? "1" : undefined} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
+      <div className="med-panel" data-open={panelMode || closingHold ? "1" : "0"} data-closing={closing ? "1" : undefined} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => {
+        // 默认 preventDefault 保选区（点面板条目不丢内核选区）；但**表单输入必须放行**（261119 设备报障：
+        // 链接编辑行的文本/链接输入框点得见聚焦态、打字进不去、键盘不出）—— mousedown 默认动作 = 聚焦 +
+        // 落光标 + 唤起软键盘，被 cancel 后 label 激活兜出的程序化 focus 不弹键盘（AGENTS §7#17）。
+        // 与桌面 SelectionToolbar 容器同一豁免口径（260924「输入即关闭 / 写不进去」），别再收窄/放宽选择器。
+        const t = e.target as HTMLElement | null;
+        if (t && typeof t.closest === "function" && t.closest("input, textarea, .ne-link-editor")) return;
+        e.preventDefault();
+      }}>
         <div className="med-panel-inner" onTransitionEnd={(event) => { if (event.target === event.currentTarget) surface.onPanelTransitionEnd(); }}>
           {renderedPanel === "emoji" ? (
             /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */
