@@ -7,7 +7,17 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
-### 261119 · 修复批二（知识库计数 / 顶栏常驻 / 按钮边界 / 卡片闪烁）（未发版）
+### 261119 · v1.5.1 收口批（目录展开/行样式、封面隐藏、禁移动拖拽缩放、链接输入/面板跳变、清理批）（已发版）
+
+- **目录逐级展开**（点单）：收起清子树展开态、再展开只开一级（`toggleExpandedNode` 复用 core.tree.subtreeIds；无持久化并钉死）；**置顶区同款 bug 登记未修**（跨槽位置顶语义，需单独设计）。行样式：行间空隙 1px 思源式独立行块（3px+ 被护栏挡）+ 行文字试调**正文同款**（text-1 + 400 字重，推翻 260923 降档；选中仍 semibold；旋钮清单在 treeRowGeometry/DESIGN Rows）。
+- **书签封面两级皆败静默隐藏**（裁决）：级联裁决（同值写被吞=无下一级）⇒ 隐藏缩略框、无封面排版、零跳版；feature.css 3 规则 + **移动镜像 3 条**（集成补齐，parity pin）；录屏 spinner 证实为 PixPin 点击特效（非应用）。
+- **移动禁用图片/视频拖拽缩放**（裁决）：`mediaCardResizeEnabled()` 平台闸门双守（挂载点+模块自卫），把手/盒/键盘←→/扫描器整链不装；**视频布局投影保留**（持久化宽度/对齐唯一渲染通道，中途冲突已裁定）；内核原生 resizer 隐藏保留；桌面零变化。
+- **链接输入修复**：dock 面板 onMouseDown 无豁免 preventDefault 吃掉聚焦/唤键盘（桌面 260924 同因判例移动端漏同款）⇒ 补 input/textarea/.ne-link-editor 豁免。
+- **＋面板开合跳变修复**（回归：261111 f7d39f45）：`--mb-app-h`『100% 等价』短路在键盘躲面板背后收起时序失效 + ≥1 帧钳位窗口 ⇒ 面板态当帧显式钉字面量、短路只许纯键盘态；设备矩阵修前 FAIL×4/修后 ALL PASS；LAKEX-CONTRACT **§5.62** 回填。
+- **清理批**：TAP_REVIEWED 23→1（唯一例外 pad-tab-add 带判例）、cardMenu 死属性、nodeIcon 冗余、toastCopy 单源、batchNotes 判列改 `trashed_at`、速记草稿防抖等内核就绪+空 body 不写（revert-proof）。
+- **门禁**：tsc 0；全量 vitest **1071 文件 / 6804 例 0 failed**；ui-metrics/check:core/check:mobileui/check:arch/check:bundle/diff-check 全过。**已发版 v1.5.1**（tag `b5ecf605` 注解双推，Release workflow 触发）。
+
+### 261119 · 修复批二（知识库计数 / 顶栏常驻 / 按钮边界 / 卡片闪烁）（已随 v1.5.1 发布）
 
 - **知识库笔记本文档计数**（用户点单）：根因 = docCounts 只按 parentId 数根目录直属文档（分组内文档计到分组 id）⇒ 卡片 0 篇。`notebookDocCounts.notebookSubtreeDocCounts` O(n) 子树聚合（isGoneNote 口径剔 trashed/回收站/purge，note 也可作父），书架/列表同口径；桌面无同名计数面（AI 选资料本就子树口径）已核。
 - **阅读态顶栏常驻**（用户点单「去掉下滑全屏，只对悬浮胶囊生效」）：`useWorkspaceChrome` 拆 `topbarHidden`（唯一来源=子页全屏）/ `capsuleChromeHidden`（旧滚动判据逐字转给胶囊）；scrollChrome 成胶囊专用判据；让位几何自洽（底部 80px 胶囊让位不动）。
@@ -583,6 +593,8 @@
 - **261112 R1 设备验收**：真机 Xiaomi 2109119BC（Android 14，serial 50950385）+ 5554 模拟器已装 R1 APK；Q04 回收站文档只读预览、Q22 SecureStore→SecretBox 跨重启真机通过；快照矩阵（手机 10 态 / 平板 10 态 / 多维表 3 态 / 23 屏 / 窗口矩阵）已重烤并两轮 0 差异；Q03/Q07/Q05 观感项仍待人工点收；桌面 42 态已重烤（证据 [docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)）。
 
 **v1.1.4 已发**（261114）：tag `v1.1.4`（注解，tag object `de37abe6` → commit `f2c44c1b`）已双推 Gitee/GitHub；release workflow run **43564917249** 由 tag 触发：Windows/Android/macOS 三个构建 job **全 success**；GitHub Release **v1.1.4** 已发布（2026-11-14T06:15:35Z），8 资产：`LakexLocalNotes-1.1.4-android-release.apk` / `-arm64.dmg` / `-x64.dmg` / `-arm64.zip` / `-x64.zip` / `LakexLocalNotes.Setup.1.1.4.exe` / `latest.json` / `release-body.md`；`latest.json.version = 1.1.4`。`Publish Release` job 在 GitHub Release 发布后仍进行（Gitee 镜像/收尾，可能耗时），不影响 GitHub 产物。Android 本机 debug APK 已装 `lake_mobile`（versionName 1.1.4 / versionCode 11104）并启动。
+
+**v1.5.1 已发**（261119）：`package.json 1.5.1`（Android versionCode 11501 派生）；注解 tag **v1.5.1**（commit `b5ecf605`）双推 Gitee+GitHub；release workflow 触发（内容 = 修复批二 + 修复批三 + 目录/封面/禁缩放收口批，发布说明 = RELEASE-NOTES v1.5.1 段；无数据/协议迁移）。
 
 **v1.5.0 已发**（261119）：`package.json 1.5.0`（Android versionName 1.5.0 / versionCode 11500 由根 package.json 派生）；注解 tag **v1.5.0**（commit `23492cc9`）双推 Gitee+GitHub（origin 第二 pushurl 一次推两边）；release workflow run **44490098568** 由 tag 触发（Release，构建 macOS/Windows/Android + packaged smoke 内联兜底 + 发布 GitHub Releases/Gitee 镜像）。发版内容 = 261119 各批（快捷菜单两项/拍照直出相机/速记返回链/多维表四项/标签长按菜单/跳变八项/选项色板两行/表格取色合规/视频宽高弹窗合流）+ 261117 随下版两笔（text_cache 保存即建、更新中心版本标签），发布说明 = RELEASE-NOTES v1.5.0 段。发版前评审 = 双只读评审流（P0×0 / P1×4 / P2×11 全闭环，见 release 前两笔修补提交）。
 
