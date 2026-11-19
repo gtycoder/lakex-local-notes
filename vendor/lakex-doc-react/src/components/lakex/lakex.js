@@ -197636,7 +197636,7 @@ const __lakexFactory = (e, t) =>
                 key: 'getSearchItems',
                 value: function (e, t) {
                   return t.trim().toLowerCase()
-                    ? new eid(e, { includeMatches: !0, includeScore: !0, distance: 12, keys: ['keywords'] })
+                    ? new eid(e, { includeMatches: !0, includeScore: !0, distance: 12, ignoreLocation: !0, ignoreFieldNorm: !0, keys: ['keywords'] })
                         .search(t)
                         .filter(function (e) {
                           return e.score <= 0.1;

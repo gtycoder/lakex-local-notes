@@ -2262,3 +2262,13 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **图片 imgsize「宽高」弹层提交语义**（`MediaSizePop.tsx:3-12` 实测）：**Enter 提交**（`isImeConfirming` 判据统一收口）；**IME 组字期不提交**；**无应用按钮、无可见脚注**（语义提示走输入框 `title` → 全局 `.ln-tip` 悬停气泡，样板没有可见说明脚注）。25/50/75/100 预设档点选即应用，收起由调用方应用语义负责。
 - **内核 antd KButton 可作卡弹层按钮 + 输入行可复用**：`FrameworkUiLib.Button`（= 内核 antd Button，`er4`）可直接作卡弹层按钮——实例 = 链接编辑弹层「确定」（`kernelUiAtoms.tsx:125,158`）；`.ne-card-toolbar-input` + `.ne-card-toolbar-input-title` 输入行是内核同一条共享规则，可在卡弹层复用（实例 = `MediaSizePop` 输入行，`MediaSizePop.tsx:7`）。
 - **护栏**：`videoSizeMenu.render.test.tsx` / `cardContextMenu.test.ts`（同家族表面）。
+
+### 5.60 内核文内表情面板（unicode-emoji）的搜索机制 + 补丁口径（261119 读码 + bundle 实测；已核实行为）
+
+> 用户报「Lake 文档里的表情筛选什么都筛不出来」（搜「火」空结果）。面板 = `5.35 ①② 的 `ne-ui-unicode-emoji-panel`（unicodeEmoji 占位卡唤起，底部 tab 表情/人物/自然/食物/旅行/活动/物品/符号）；**与「目录选表情」面板（`src/lib/emojiSearch.ts` + `NodeIconPicker`，另一套数据另一条流）无关**。
+
+- **搜索链路**：搜索框（`ePX`）→ `onInputChange(value)` → `getDisplayGroupArray` → `getDisplayEmojiGroups` → **`getSearchItems`**（`lakex.js`）：`new Fuse(items, { includeMatches, includeScore, distance: 12, keys: ['keywords'] }).search(q).filter(score <= 0.1)`；空查询直接回全量。Fuse 是**内核自带的 fuse.js 6.6.2**（bundle 内 `class eid`，`eid.version = '6.6.2'`）。
+- **数据**：面板 props `emojiMap`/`emojiGroups` 来自 `unicodeEmoji` 插件 option（`eRn`：`new eRn(config)` 做 Object.assign 合并；编辑器 config 的 `unicodeEmoji: { emojiGroups, emojiMap }` 会经 `lG.extend`（`framework/editor/src/editor-option.ts:117`）注入 `plugin.option._option` ⇒ **存在未文档化的官方数据注入面**）。不注入时走面板 defaultProps：`emojiMap = ePW`（`JSON.parse(inflate(base64))`，**1467 条** emoji → 空格分隔的英文短名 + CLDR 中文词，**1460/1467 含中文**，如 🔥 = `fire flame tool hot cook 旅行 地点 火`）+ `emojiGroups` 8 组（表情/人物/自然/食物/旅行/活动/物品/符号，与用户截图一致）。
+- **病灶（原实现为什么什么都筛不出）**：Fuse 评分 = `errors/len + |命中位置 − location(0)|/distance(12)`，且 Fuse 自身 `threshold` 0.6 先行判 `isMatch` ⇒ 命中位置离开词条开头就丢分、**超过 ~0.7 字符整条 0 命中**；中文关键词全在词条尾部 ⇒「火」0 命中；英文也只有词条首词能过 `score <= 0.1` 滤网（fire ✓ / apple ✗）。字段长度归一（最终 score = bitap^norm）另把长词条的满分抬过 0.1 ⇒ 表现 =「什么都筛选不出来」（浏览/分类/空查询不受影响）。
+- **补丁口径（`vendor/lakex-doc-react/LOCAL-CHANGES.md` #34）**：`getSearchItems` 的 Fuse options 加 **`ignoreLocation: !0` + `ignoreFieldNorm: !0`**（位置/字段长度不计分；`score <= 0.1` 保留 = 「≤10% 错字」紧口径）。**实测口径**（从 bundle 抽 Fuse+ePW 跑，护栏 `src/features/editor/emojiPanelSearch.test.ts` 可复跑）：火→9 条（🔥/🌋/🧯/🚀/❤️‍🔥…）、苹果→🍎🍏、house→🏠 等 7 条、fire→13 条、空查询→1467 全量、house/fire 不出 🍎。**数据无需补中文别名**：ePW 已含中文关键词，不用桥接 `src/lib/emojiSearch.ts`（那是「目录选表情」面板的数据层，两套面板两套数据，勿混勿并）。
+- **扩展点结论**：`unicodeEmoji` 插件 option 只能注入 `emojiMap`/`emojiGroups` **数据**，救不了评分语义（除非把 1467 条数据整份搬到宿主重建成逐 token 短词条）⇒ 搜索函数本身无扩展点，走 LOCAL-CHANGES 最小补丁（同 #32 例外）。重转内核后 `emojiPanelSearch.test.ts` 会红提醒重放；`doc.umd.js` 有同一函数但不在构建链路、未打补丁。

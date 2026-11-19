@@ -148566,6 +148566,8 @@ ${f}
 							includeMatches: !0,
 							includeScore: !0,
 							distance: 12,
+							ignoreLocation: !0,
+							ignoreFieldNorm: !0,
 							keys: ["keywords"]
 						}).search(t).filter(function(e) {
 							return e.score <= .1;
