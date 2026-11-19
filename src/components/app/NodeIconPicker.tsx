@@ -157,7 +157,7 @@ export const NodeIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { a
                 type="button"
                 role="tab"
                 aria-selected={section.name === active}
-                className={"ln-tabs__item" + (section.name === active ? " is-active" : "")}
+                className={"node-icon-picker__tab" + (section.name === active ? " is-active" : "")}
                 onClick={() => jump(section.name)}
               >{section.name}</button>
             ))}

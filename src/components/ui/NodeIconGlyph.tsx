@@ -18,7 +18,7 @@ export function NodeIconGlyph({ value }: { value: string | null | undefined }) {
   if (parsed.kind === "notebook") {
     const NbSvg = parsed.icon.Svg;
     return (
-      <span className="node-icon-glyph node-icon-glyph--notebook" aria-hidden="true">
+      <span className="node-icon-glyph" aria-hidden="true">
         <NbSvg />
       </span>
     );
