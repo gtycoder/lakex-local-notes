@@ -355,3 +355,12 @@ body.lake-media-resizing[data-resize-cursor="nesw-resize"] { cursor: nesw-resize
 body.lake-media-resizing[data-resize-cursor="nwse-resize"] { cursor: nwse-resize; }
 .lake-editor-tab ne-card[data-card-name="image"] .ne-ui-image-resizer,
 .lake-editor-tab ne-card[data-card-name="image"] .ne-ui-image-resizer-handler { display: none; }
+
+/* 书签卡封面「两级皆败」静默隐藏（261119 用户裁决；类由 features/editor/bookmarkCoverFallbackGuard 运行期加/摘）：
+ * 原 URL 与内核兜底图都加载失败 ⇒ 不再停在破图/兜底图。隐藏的是封面 img 本体（不动卡壳）：
+ * .ne-card-bookmark-content 是 flex，.body（flex:1）自然吃满 = 无封面排版；兄弟规则摘掉 .body 的
+ * 封面间距（内核 margin-left 16px / h5 12px），标题/来源行贴回内容内距 —— 卡高不变、行不塌、隐藏后零跳版。
+ * 本文件在 @layer feature ⇒ 层序压过内核 legacy 层的 .ne-card-bookmark-* 原规则，无需 !important。 */
+.lake-bookmark-cover-failed { display: none; }
+.lake-bookmark-cover-failed + .ne-card-bookmark-body,
+.lake-bookmark-cover-failed + .h5-ne-card-bookmark-body { margin-left: 0; }

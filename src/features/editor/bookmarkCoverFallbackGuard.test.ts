@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  BOOKMARK_COVER_HIDDEN_CLASS,
   BOOKMARK_COVER_SELECTOR,
   guardBookmarkCoverWriteOnce,
   installBookmarkCoverFallbackGuard,
@@ -12,16 +13,31 @@ import {
  * 书签卡封面闪烁环护栏（261119）：
  * 真身 = 内核封面 img onError 无条件把 src 重写为兜底 URL；兜底也失败时
  * error → 同值重写 → 浏览器重拉 → error ……无限环（录屏里「卡片每隔不到一秒闪一下」）。
- * 修法 = 「未变才写」：同值 src 赋值直接跳过。这里以「内核式 onError 写回」模拟环，
- * 断言 ① 首次兜底照常写入（行为不变）② 之后同值写 = 0 次（环终止）③ 真实换图仍正常写。
+ * 两层修法：①「未变才写」——同值 src 赋值直接跳过；② 261119 用户裁决「两级皆败 ⇒ 静默隐藏
+ * 缩略框」——error 分发内没有异值写（内核兜底下一级没上路）⇒ 加隐藏态类。
+ * 这里以「内核式 onError 写回」模拟级联，断言 ① 首次兜底照常写入（行为不变）② 之后同值写
+ * = 0 次（环终止）③ 真实换图仍正常写 ④ 单级失败兜底图仍显示 ⑤ 两级皆败静默隐藏 ⑥ 恢复/换图显示。
  */
 const FALLBACK = "/vendor/lakex/alipay/A_MfA2QIGNXcEAAAAAAAAAAAAAARQnAQ";
 const ORIGINAL = "http://mmbiz.qpic.cn/mmbiz_jpg/deadbeef/0?wx_fmt=jpeg";
+const NEXT_URL = "https://example.com/another-cover.jpg";
 
 function coverImg(): HTMLImageElement {
   const img = document.createElement("img");
   img.className = "ne-card-bookmark-cover-img";
   return img;
+}
+
+/** 微任务 + 宏任务各让一拍：隐藏裁决在 error 分发结束后的微任务里定夺。 */
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** 装一个「内核式 onError」：每次 error 都无条件重写为兜底（lakex.js _getCoverElement）。 */
+function withKernelFallback(host: HTMLElement, img: HTMLImageElement): () => void {
+  const onKernelError = (): void => {
+    img.src = FALLBACK;
+  };
+  host.addEventListener("error", onKernelError, true);
+  return () => host.removeEventListener("error", onKernelError, true);
 }
 
 describe("书签卡封面 src「未变才写」守卫", () => {
@@ -131,6 +147,89 @@ describe("书签卡封面 src「未变才写」守卫", () => {
     } finally {
       Object.defineProperty(HTMLImageElement.prototype, "src", desc!);
     }
+  });
+});
+
+describe("两级皆败 ⇒ 静默隐藏缩略框（261119 用户裁决）", () => {
+  it("单级失败 ⇒ 兜底图照常显示（不隐藏）", async () => {
+    const host = document.createElement("div");
+    const img = coverImg();
+    img.src = ORIGINAL;
+    host.appendChild(img);
+    installBookmarkCoverFallbackGuard(host);
+    const stop = withKernelFallback(host, img);
+    img.dispatchEvent(new Event("error", { bubbles: false }));
+    await tick();
+    stop();
+    // 原 URL 败、内核兜底下一级已上路 ⇒ 缩略框不隐藏，兜底图照常接管
+    expect(img.getAttribute("src")).toBe(FALLBACK);
+    expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(false);
+  });
+
+  it("两级皆败 ⇒ 静默隐藏缩略框；隐藏后 error 风暴零写（环死 + 稳定）", async () => {
+    const host = document.createElement("div");
+    const img = coverImg();
+    img.src = ORIGINAL;
+    host.appendChild(img);
+    const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+    let sets = 0;
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      configurable: true,
+      get: desc!.get,
+      set(this: HTMLImageElement, value: string) {
+        sets += 1;
+        desc!.set!.call(this, value);
+      },
+    });
+    try {
+      installBookmarkCoverFallbackGuard(host);
+      const stop = withKernelFallback(host, img);
+      img.dispatchEvent(new Event("error", { bubbles: false })); // 原 URL 败 → 兜底写入（异值）
+      img.dispatchEvent(new Event("error", { bubbles: false })); // 兜底也败 → 同值写被吞 = 无下一级
+      await tick();
+      expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(true);
+      // 隐藏后 error 风暴：内核同值重写持续被吞 —— 零写、不抖
+      for (let i = 0; i < 20; i += 1) img.dispatchEvent(new Event("error", { bubbles: false }));
+      await tick();
+      expect(sets).toBe(1);
+      expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(true);
+      stop();
+    } finally {
+      Object.defineProperty(HTMLImageElement.prototype, "src", desc!);
+    }
+  });
+
+  it("恢复/换图 ⇒ 显示：真实换图立即恢复；加载成功（load）恢复", async () => {
+    const host = document.createElement("div");
+    const img = coverImg();
+    img.src = ORIGINAL;
+    host.appendChild(img);
+    installBookmarkCoverFallbackGuard(host);
+    const stop = withKernelFallback(host, img);
+    // 造出两级皆败的隐藏态
+    img.dispatchEvent(new Event("error", { bubbles: false }));
+    img.dispatchEvent(new Event("error", { bubbles: false }));
+    await tick();
+    expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(true);
+    // ① 真实换图（异值写）⇒ 立即恢复显示
+    img.src = NEXT_URL;
+    expect(img.getAttribute("src")).toBe(NEXT_URL);
+    expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(false);
+    // ② React setAttribute 换图路径不经过访问器 ⇒ load 成功也要能恢复
+    img.dispatchEvent(new Event("error", { bubbles: false }));
+    img.dispatchEvent(new Event("error", { bubbles: false }));
+    await tick();
+    expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(true);
+    img.dispatchEvent(new Event("load", { bubbles: false }));
+    expect(img.classList.contains(BOOKMARK_COVER_HIDDEN_CLASS)).toBe(false);
+    stop();
+  });
+
+  it("隐藏态类的样式在 styles/feature.css 接线（display:none + 无封面排版的 body 间距摘除）", () => {
+    const css = readFileSync(path.resolve(process.cwd(), "src/styles/feature.css"), "utf8");
+    expect(css).toContain(`${BOOKMARK_COVER_HIDDEN_CLASS} { display: none; }`);
+    expect(css).toContain(`${BOOKMARK_COVER_HIDDEN_CLASS} + .ne-card-bookmark-body`);
+    expect(css).toContain(`${BOOKMARK_COVER_HIDDEN_CLASS} + .h5-ne-card-bookmark-body`);
   });
 });
 
