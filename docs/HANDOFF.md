@@ -7,6 +7,21 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · 移动端修复批（4 组点单 + 跳变八项 + 拍照直出相机）+ README 双语/徽章 + 视频弹窗内核化（v1.4.0 后，未发版）
+
+用户点单四组 + 只读审计八项 + 两个文档点单，9 条并行流（写范围互斥）+ lead 集成；全部门禁绿、APK 已装 lake_mobile。
+
+- **速记 capture 返回链**（点单1）：根因 = 系统收输入法**不派发 backButton**、焦点残留 ⇒ 第 2 下被「收键盘优先」分支误吞（旧现场要 3 下）。capture 退出判据改 `softKeyboardVisible()`（ui/dismissKeyboard 新增，与 useKeyboard 同双通道）；`consumeBack` 全局语义未动（用户明令只改快捷入口）。实测：打字中返回 #1 收键盘、**#2 直接退出**（假单独模块直达桌面）。护栏 `captureBackExit.render.test` 6 例。已知边缘：IME 收起动画 ~200-300ms 内连按仍可能多吞一下；`useKeyboard.measure` 与新判据同源两处待收口。
+- **拍照直出系统相机**（点单2）：根因 = Capacitor file chooser 两条确定性断点（Manifest 缺 `<queries>` IMAGE_CAPTURE、file_paths.xml 缺 external-files/Pictures 根）⇒ capture 静默退化相册（logcat 指纹 `Media capture intent could not be launched`）。A 层修根因（救活全部 `<input capture>` 路径）+ B 层自写 `CameraCapturePlugin`（ACTION_IMAGE_CAPTURE + FileProvider 落盘；取消返回 null 不回退、失败显式提示、**绝不静默开相册**）；dock 拍照 / 首页「拍摄」/ AI 拍照全收口 `takeCameraPhoto()`（动态 import 不占入口预算）。设备实测点拍照 → 焦点 `com.android.camera2/CaptureActivity`。walk 侧新增 `cameraCaptureStub.mjs`（nativePromise 拦截、canary 自证三层）+ `quicknote-insert-camera` 屏；AGENTS §7#24 重启交还已接。
+- **多维表四项 + 行详情**（点单3 + task-5）：①选项色点改可点按钮 → 面板同款 `.mbt-feditor__colors` 色板（候选 = COLOR_BOARD_VALUES 桌面同源 70 色，用户裁决维持；「默认颜色」清空）；②表格↔表单几何同源收口（壳层只留安全区、`--mb-page-pad` 各内容块自管、`.mbt-is-form` 清零）⇒ 头部三态实测 [0,68,412] 恒定、表格内边距/计数恢复；③表单失焦后拖滑杆不再回弹键盘（`bitablePointerFocus` 本地收紧——共享 dismissKeyboardOnPointerDown 对任何 input 早退致文本框不真失焦；记录编辑面板同型一并修，字段面板实测无触发面）；④只读行详情页 `.mbt-page-bar` 补 topChrome overlay 契约（不再压状态栏）+ 打开跳变改同批通知。F-D 多选头部 `.mbt-headslot` 同槽换装（消除 50px 跳）；F-G `.mb-menusheet__submenu` 安全区消费 + SURFACE_MARKERS 登记。
+- **标签移除 × → 长按动作菜单**（点单4，用户裁决）：详情条目（文档行/小记卡同语义）长按 350ms / 右键弹 MobileSheetMenu（打开 / 移除标签 / 取消）；长按唯一实现 useLongPress（`useTagRowMenuPress` 只做接线：按钮上不起手、吞后续 click）；二次确认与落库链路不变。**设备点收未做**（契约面无标签 API，自动种夹具不可行）。
+- **跳变八项**（只读审计 `design-plans/mobile-ui-jank-audit-261119.md`，含「丝滑准则」）：F-A 文档内查找条改覆盖式（正文几何零位移，实测 top 60→60）；F-B/C/H `QuickNotePreview` **slotFrame 恒定槽位**（占位/富预览/内核兜底同槽同高 + 展开/收起位移过渡走令牌 + reduced-motion；多图卡 220px 恒定槽、文本卡 5 行摘要槽——用户裁决维持）+ 首屏 8 条预热（quickNotePrewarmIds 单一判据）；F-E 重依赖首开同构骨架 `NotePaneSkeleton`（bitable/usheet/ink 三型，不再「空态→骨架→查看器」三段换构）；F-F 预览层入场走 `--mobile-duration-panel`。kind 触点登记 +1（NotePaneSkeleton 3 处 = 骨架形态分派）。
+- **README 双语/徽章 + 现状对齐**（点单）：语言徽章（中/英互链）+ 两行信息徽章（release/license/downloads 活徽章 + **闭源内核橙色 honesty 标** + platforms/node/editor/sync/guide/update）+ 正文 15 处纠错补新（空间顺序 = 知识库/小记/标签/AI/日记、⌘1–5 映射、多维表 5 视图、端口 19877/19876·19880/19881、便携包手机导出、Android 卸载保留、IconPark 致谢…）；`README.en.md` 整份英文（19 节 1:1、事实零漂移、术语表统一）。guide 用户手册空间顺序对齐 8 文件 26 处（改前核实 HOME_TABS/快捷键代码）+ `settingsSearch`/`defaultSpace` 旧序残留清零。
+- **视频宽度弹窗内核化**（点单二轮终裁）：一轮 ln-menu 形态被用户改判「与图片工具栏一致」⇒ 改 **CardMenu 内核家族**逐像素同族（5px 圆角/无 hairline/30px 行/14px 字/30px 对勾槽）；`cardMenu.tsx` 组件级单一来源（renderImage 四菜单与视频弹窗共用）；「应用」= 内核 antd Button（KButton）。**用户裁决 = 例外于 ln-* 单一来源**（卡工具条内核家族表面），已注释留档。图片「宽高」弹窗（imgsize）仍旧形态未动。
+- **预算登记（用户批准）**：`check-bundle-budget.mjs` mobile-entry-js **51,200 → 51,440**（本批真实功能增量；已做拍照动态 import 瘦身 -255B；实测 51,359，余 81B；**再涨须重新论证**）。
+- **门禁（终轮全量）**：`tsc` 0；全库 vitest **1053 文件 / 6663 例（14 skipped）0 failed**；`ui-metrics` 0（!important 9/9、跨文件重复 45/45、shadowed 0）；`check:core` 181 文件 0 违规；`check:mobileui` / `check:arch`（desktop 599,783/600,000）/ `check:bundle`（mobile entry 51,359/51,440）/ `git diff --check` 全过。
+- **设备验收（模拟器 lake_mobile，已装包）**：速记返回链 / 表单焦点不回弹 / 拍照直出相机 / 视图切换头部恒定 / 查找条零位移 **5 项 PASS**；多维表 7 屏探针 7/7（字段色点、编辑记录面板截图核对）。**待点收**：标签长按菜单、视频弹窗桌面实机观感、真机（小米）拍照复核（MIUI OEM 步骤见 task-2 报告）。新验收探针 `scripts/mobile-audit/form-focus-accept.mjs` / `doc-find-camera-accept.mjs`（自建自清、可复跑）。
+
 ### 261117 · 六流并发批（P0/P1/P2 全推进）+ v1.4.0 发版
 
 用户授权自主收口：P0 两项 + P1 四项 + P2 两项由 6 个并发流（写入范围互斥、lead 集成）交付，随后全量 review、双推、打 tag 发版。
@@ -483,6 +498,15 @@
 - **打包产物**：本地 `release/` 已删（ignored 旧产物）；发版重建，瘦身基线仍为 v1.3.1（`.app` 393MB / `asar` 70MB / 依赖 9 个，见 `docs/BUILD-SIZE.md`）。
 - **视觉门禁**：本批无视觉变更，未跑 stylesnap/mobile-snap。
 
+**261119 · 修复批基线（未发版；v1.4.0 之后）**
+
+- `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
+- 全量 vitest：**文件 1053（passed / 13 skipped）/ 用例 6663（passed / 14 skipped）/ 0 failed**。
+- `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0）；`cssLayers`/`mobileLayers` 棘轮按实测登记：selectionToolbar.css **164**、mobile-find.css **20**、mobileBitable.css **1109**、notePaneSkeleton.css **23**（新）、quick-notes.css **277**、floating.css **316**、mobile.css **1487**、kit.css 659。
+- `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:arch` 0 违规（desktop 首屏 599,783/600,000）；`check:bundle` PASS（mobile entry **51,359/51,440**（261119 用户批准登记上调，理由入脚本注释）、移动 CSS 140,465/141,312、preload 12/12）。
+- `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
+- 设备（模拟器 lake_mobile，本批已装包）：5 项交互验收 PASS（速记返回/表单焦点/拍照相机/头部恒定/查找条）+ 多维表 7 屏探针 7/7；标签长按菜单与桌面视频弹窗目视待用户点收。
+
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
@@ -592,6 +616,18 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
+**261119 批待办**
+
+- **长按图标快捷菜单两项（261119 点单，开发中）**：「拍照小记」（快捷方式 → capture 并直接调相机，拍完图入小记；取消留空卡不退）与「剪切板小记」（最新一条剪贴板内容预填小记；空则提示）。落点 = Android App Shortcuts（res/xml 快捷方式 + 深链 `lakexlocalnotes://quick-note?src=…`）+ capture 种子链路；剪贴板读取走自有 Kotlin 插件（不新增 npm 依赖）。
+- **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
+- **视频宽度弹窗桌面实机目视**（261119）：机制与其它卡工具条菜单同款，低风险。
+- **真机（小米）拍照复核**（261119）：模拟器已验直出相机；MIUI OEM 行为按 task-2 报告步骤（取消/EXTRA_OUTPUT 兜底）。
+- **guide 3 张截图重拍**（261119）：android-home-quicknotes / android-home-library / android-settings-editor 仍是旧界面（文字已加「以界面为准」兜底）。
+- **图片「宽高」弹窗（imgsize）家族化**（261119 登记，未点单）：仍为 cardpop 白面板 + ln-segment；可复用 VideoSizeMenu 的 CardMenu 改法。
+- **标签详情小记卡两态切换**（F-H 同型，261119 登记）：纯文本占位 → 富预览仍两态；quickNotes 侧已用 slotFrame 收口，标签卡未接。
+- **预览层退场过渡**（261119 登记）：需 MobileApp/SettingsDrawer 挂载点配合；按「返回可直切」先例可接受。
+- **useKeyboard.measure 与 softKeyboardVisible 判据收口**（261119 登记）：同一键盘可见性判据两处实现，建议 measure 委托收口单一来源。
+
 **当前批次（261114 收口：设备 / 10k+100k 大库 / 2GB 便携包 / S3 多端回归）待办**
 
 - **发版 v1.1.4 已完成**（tag/commit/workflow/资产见 §1「发布与推送事实」）；剩余只需等 Publish job 的 Gitee 镜像收尾并核对（GitHub Release 已发布）。
@@ -599,7 +635,6 @@
 - **S3 真实桶多端回归已完成**（261114，PASS）：真实七牛桶 `local-lake-hebei` 对象根前缀 `lakex-notes-dev3` 下 A,B 21/21、A–F/I/J 94/94、K（3 实例）14/14 全 PASS，residual=0、收尾 0 对象；命令与结果见 `scripts/multi-end-sync/README.md`。**移动端/真机仍不在本入口**（`--with-mobile` 明确未实现），移动端多端仍按 [21 号报告](audit-261112/21-s3-multi-end-mobile.md) 手工。
 - **大库观察项**：桌面目录树 10k 行未虚拟化（约 20.1 万 DOM、renderer heap 313–317MB）本次仍可用，但继续增长需虚拟化/分页；热轮搜索曾出现 1.9s（冷轮 445ms），重跑确认是否抖动。
 - **移动端↔桌面真实 S3 冒烟已完成（261114 手工）**：见 §0 收口验收；`--with-mobile` 仍未实现，后续可把该手工流程固化进 `regression.mjs`（需要 Android 驱动/配置注入）。
-- **移动端「tab 标记 gone + 只读横幅」缺失（261114 审计残余，P2）**：打开中被删后旧内容仍显示，自动保存 1s 后明说「保存被拒绝」，关闭/返回/完成会丢弃标签并 toast；未做只读横幅（不在本次最小修复范围）。
 - **现代 Web 写法审计（261115 · v2 全量）**：见 [MODERN-WEB-AUDIT](MODERN-WEB-AUDIT.md)。语料 = GoogleChrome modern-web-guidance **252 篇**（克隆 `5e5cd33`）；判定 **命中 13 / 部分 68 / 干净 1 / 待验证 32 / 不适用 138**；工具 108 条（发布版 35）+ 手工 30 条问题清单（A01–A30）。实测运行时 = Electron 44.9.3 / **Chromium 152.0.7977.167**（`process.versions`）。v2 新发现：`NativeTitleTips` 拦截器三缺口、`content-visibility` 已用于目录树/大纲（10k 树的问题在 DOM 不在 CSS）、`boot.html` **476KB** 内联 APNG、无 `meta color-scheme` 导致首帧闪浅色、`scheduler.yield`/`useDeferredValue` 全缺。**已开工**：分支 `modernize/web-platform-261115`（master 已备份 + `backup/master-261115`）；A01/A03(步1)/A04/A07–A09(inert)/A12/A14/A15/A16/A18/A19/A21(部分)/A24/A25–A27/A29 已修，其余推迟项与依赖顺序见审计 **§11**（未合 master）。
 
 **上一批次（261113 转小记 + 发版复核批）待办**

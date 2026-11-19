@@ -1,6 +1,19 @@
 # Local Lakex Notes
 
-[![Release](https://img.shields.io/github/v/release/gtycoder/lakex-local-notes?label=release&color=2ea44f)](https://github.com/gtycoder/lakex-local-notes/releases)
+[![中文](https://img.shields.io/badge/-%E4%B8%AD%E6%96%87-red?style=flat-square)](README.md)
+[![English](https://img.shields.io/badge/-English-blue?style=flat-square)](README.en.md)
+
+[![release](https://img.shields.io/github/v/release/gtycoder/lakex-local-notes?label=release&color=2ea44f&style=flat-square)](https://github.com/gtycoder/lakex-local-notes/releases)
+[![license 许可](https://img.shields.io/github/license/gtycoder/lakex-local-notes?style=flat-square)](LICENSE)
+[![内核 kernel](https://img.shields.io/badge/%E5%86%85%E6%A0%B8%20kernel-Lakex%20v1.99.0%20vendored%20%E9%97%AD%E6%BA%90-orange?style=flat-square)](NOTICE)
+[![platforms 平台](https://img.shields.io/badge/platforms%20%E5%B9%B3%E5%8F%B0-macOS%20%C2%B7%20Android-lightgrey?style=flat-square)](guide/README.md)
+[![node 环境](https://img.shields.io/badge/node%20%E7%8E%AF%E5%A2%83-%E2%89%A5%2024-brightgreen?style=flat-square)](#环境要求)
+[![downloads 下载](https://img.shields.io/github/downloads/gtycoder/lakex-local-notes/total?style=flat-square&label=downloads%20%E4%B8%8B%E8%BD%BD)](https://github.com/gtycoder/lakex-local-notes/releases)
+
+[![editor 编辑器](https://img.shields.io/badge/editor%20%E7%BC%96%E8%BE%91%E5%99%A8-Lakex%20v1.99.0%20pinned-blue?style=flat-square)](docs/lakexEditor-developer-docs/)
+[![sync 同步](https://img.shields.io/badge/sync%20%E5%90%8C%E6%AD%A5-S3%20%E5%85%BC%E5%AE%B9%20%C2%B7%20%E5%8D%8F%E8%AE%AE%20v3-blue?style=flat-square)](docs/SYNC-PROTOCOL.md)
+[![guide 手册](https://img.shields.io/badge/guide%20%E6%89%8B%E5%86%8C-19%20%E7%AB%A0%20%C2%B7%2019%20chapters-informational?style=flat-square)](guide/README.md)
+[![update 更新](https://img.shields.io/badge/update%20%E6%9B%B4%E6%96%B0-%E5%86%85%E7%BD%AE%E6%9B%B4%E6%96%B0%E4%B8%AD%E5%BF%83-informational?style=flat-square)](docs/UPDATE-CENTER.md)
 
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
@@ -18,7 +31,7 @@
 
 Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格、多维表、画板、小记全部保存在本地（SQLite + 文件），S3（七牛 Kodo / S3 兼容）只用于多端备份与同步。不存在账号体系、团队协作或云端依赖；没有网络也能完整写作与检索。
 
-**五个一级空间**（两端同名，桌面 `⌘1`–`⌘5` 切换）：知识库、小记、日记、AI 写作、标签。
+**五个一级空间**（两端同名，桌面 `⌘1`–`⌘5` 切换）：知识库、小记、标签、AI 写作、日记（可关闭的 AI 写作 / 日记排最后）。
 
 - 桌面端：Electron 44 + React 18，macOS 优先
 - 移动端：Vite + Capacitor，Android 为正式端之一
@@ -29,18 +42,18 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 
 **编辑与文档**
 - 笔记本 / 分组 / 文档树，支持拖拽排序与移动层级；**批量多选**（桌面 ⌘/Ctrl + Shift、移动端长按/选择模式）：移动（思源式目录树弹窗）、移入回收站、打标签
-- Lakex 富文本：标题、列表、待办、引用、代码块、公式、分栏、折叠块、图片、附件、文档引用
+- Lakex 富文本：标题、列表、待办、引用、代码块、公式、分栏、折叠块、图片、附件、文档引用、语雀书签卡（粘贴导入 + 卡工具条）；图片/视频可拖边缘缩放与对齐
 - 表格（Univer）：公式库、数字格式、边框、合并、对齐、换行、冻结、排序、筛选、查找替换、超链接、单元格备注、十字高亮
-- 多维表（自研）：表格 / 看板视图、字段类型、筛选、排序、搜索、附件与正文详情
-- 画板（Drawnix）与手写板（多页 A4、笔迹/高亮/橡皮、撤销重做；**图片页背景**、编辑态**插入图片/PDF**、手写批注、**导出 PDF**；Android 可从系统分享直接新建并导入 PDF）
+- 多维表（自研）：表格 / 看板 / 画册 / 日历 / 表单五种视图、字段类型、筛选、排序、搜索、表单草稿暂存、附件与正文详情
+- 画板（Drawnix，支持**自定义素材库**——数据目录 `materials/` 文件夹自行放置）与手写板（多页 A4、页签标记、页内贴图/文字块、笔迹/高亮/橡皮、撤销重做；**图片页背景**、编辑态**插入图片/PDF**、手写批注、**导出 PDF**；Android 可从系统分享直接新建并导入 PDF）
 - 小记：独立时间线、标签、预览快路径 + 内核只读兜底、转正式文档（**继承标签**）、单条「保存并同步」
-- **日记**：独立空间（桌面 ⌘3 / 移动首页第 4 个 tab）——数据仍是普通 Lake 文档（"日记"笔记本 + 标题即日期 + 年/月分组自动收纳），写今天/翻历史/空间内搜索；不做标签、不做缺天提醒
+- **日记**：独立空间（桌面 ⌘5 / 移动首页 Dock 第 5 格）——数据仍是普通 Lake 文档（"日记"笔记本 + 标题即日期 + 年/月分组自动收纳），写今天/翻历史/空间内搜索；日记本固定不可变，单条可「转为文档 / 转为小记」；不做标签、不做缺天提醒
 - **AI 写作**（桌面 ⌘4）：独立空间——会话/多文档推理/提示词库/深度思考，答案用内核只读视图渲染，可生成文档到笔记本或保存到小记；会话只存本机、不进同步
-- **空间切换快捷键**：⌘1 文档 · ⌘2 小记 · ⌘3 日记 · ⌘4 AI 写作 · ⌘5 标签
+- **空间切换快捷键**：⌘1 知识库 · ⌘2 小记 · ⌘3 标签 · ⌘4 AI 写作 · ⌘5 日记；日记 / AI 写作可关闭（隐藏一级入口、不删数据、不阻断内部跳转）
 - 文档标签：属性面板打标签、标签空间（只读聚合 + 标签管理 + 跳转）、侧栏按标签筛选；移动端「标签」一级页（标签空间 + 管理：新建/重命名/合并/删除/拖拽）+ 文档标签查看与移除
 - **导入 / 导出**：桌面「+ → 导入」按类型分项——Markdown / Word（.docx）/ Excel（.xlsx）/ CSV（多选；Markdown 图片物化、frontmatter/远程图降级，Word 转文档，Excel/CSV 转表格）；移动端系统分享仅 Markdown（进「默认笔记本」）；批量导出默认格式统一为可编辑/同目录——文档 → Markdown 资料包、表格 → CSV、多维表 → CSV、手写板 → PDF、画板 → PDF
 - 同步记录：最近「被覆盖 / 他端删除 / 保存时磁盘被改」账本（角标 + 列表 + 一键恢复本地版）
-- 大纲、历史快照、回收站（软删 + 墓碑 + 恢复标记）、附件与图片管理、全文搜索（FTS5）
+- 大纲、历史快照、回收站（软删 + 墓碑 + 恢复标记）、附件与图片管理、全文搜索（FTS5）、编辑锁（只读、随同步传播）、打开中被删即时只读横幅
 - AI 助手：选区浮层 / 顶栏 / 块菜单入口，文本与图片、PDF 文本解析（Key 只在主进程）
 
 **同步与存储**
@@ -58,7 +71,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 ## 技术栈
 
 - 桌面：Electron 44.9、React 18.3、TypeScript 5.9、Vite 8、better-sqlite3 13
-- 移动：Capacitor 8（Android）、Vite、原生 Kotlin 插件（文件 / 安全存储 / 快捷键 / 分享）
+- 移动：Capacitor 8（Android）、Vite、原生 Kotlin 插件（文件 / 安全存储 / 快捷键 / 分享 / 相机）
 - 编辑器：`@dlient/lakex-doc-react`（本地私有引入，内含语雀 Lakex 内核 v1.99.0；以 vendored 形式随仓库及构建产物包含）、`@univerjs/*` 1.0.3（精确锁）、Drawnix、perfect-freehand
 - 同步：`@aws-sdk/client-s3`、七牛 Kodo（S3 兼容）
 - 其它：sharp（图片转换）、unpdf（PDF 文本）、write-excel-file（Excel 导出）
@@ -116,8 +129,9 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 
 **换机两条路**
 
-- **便携包**（离线全量）：桌面「设置 → 备份与恢复 → 导出便携包」得到一个 `.zip.lln`（≤4GiB，不含历史快照），手机「从便携包导入（覆盖本机）」，之后 S3 只做增量；没配 S3 也能用
+- **便携包**（离线全量）：桌面「设置 → 备份与恢复 → 导出便携包」得到一个 `.zip.lln`（≤4GiB，不含历史快照），手机「从便携包导入（覆盖本机）」，手机端也可「导出便携包到文件」（系统下载目录，卸载后仍留存）；之后 S3 只做增量；没配 S3 也能用
 - **S3 同步**（增量）：两端配置同一个私有桶，新设备打开云同步拉取；库损坏时用「从云端恢复」（不会上传本机数据）
+- **Android 卸载保留数据**：Android 10+ 系统卸载确认框可选「保留应用数据」（`hasFragileUserData`；重装须同签名同来源）
 - 怎么选、各自的边界与失败面：[guide/18 换机、便携包与迁移](guide/18-portable-and-migrate.md) · 规格 [docs/PORTABLE-TRANSFER.md](docs/PORTABLE-TRANSFER.md)
 
 ## 环境要求
@@ -151,7 +165,7 @@ npm install
 npm run dev          # Vite(1421) + Electron（CDP 9222）
 ```
 
-- 本地资源服务：`http://127.0.0.1:19876`
+- 本地资源服务：dev `http://127.0.0.1:19877` / 打包版 `http://127.0.0.1:19876`（端口按构建形态固定、不回退，`LAKE_ASSET_PORT` 可覆盖）；浏览器端（设置 → 浏览器端）：打包版 `19880` / dev `19881`
 - 移动端浏览器预览（仅 UI / 纯 DOM 逻辑，原生桥降级）：
 
 ```bash
@@ -207,7 +221,7 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 - 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
 - CI 发版产出的 macOS 包为 **ad-hoc 签名、未公证**（`mac.identity=-`）；首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
-- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；发布说明与更新日志同源 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)（**v1.1.0 → v1.0.0** 倒序合集）
+- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；发布说明与更新日志同源 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)（各版本倒序合集，顶部段落 = 当前发布说明）
 - 内置更新中心（检查更新 / 更新日志 / 自动检查与自动下载；仅稳定版，**不做静默安装**，下载后由用户打开安装包；下载校验 sha256，Android 另验签名）
 
 ## 文档
@@ -235,9 +249,9 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 - 部分界面版式与主题令牌参考自 **SiYuan（思源笔记，AGPL-3.0）**；相关规则收编在 `src/styles/compat.css` / `kit.css`，署名保留在应用设置页「关于」与文件头
 - 表格：[Univer](https://github.com/dream-num/univer)（Apache-2.0，1.0.3 精确锁）
 - 画板：[Drawnix](https://github.com/plait-board/drawnix)
-- 图标：[Lucide](https://lucide.dev)（ISC）
+- 图标：[Lucide](https://lucide.dev)（ISC）；个别图标源自 IconPark（Apache-2.0，见 `NOTICE` / `LICENSES`）
 - 字体：MiSans（小米，MiSans 字体许可）· JetBrains Mono（SIL OFL 1.1）
-- 参考：语雀 Lakex 编辑器官方文档（`yuque-developer-docs`）
+- 参考：语雀 Lakex 编辑器官方文档本地镜像（[docs/lakexEditor-developer-docs/](docs/lakexEditor-developer-docs/)）
 
 ## 免责声明
 
