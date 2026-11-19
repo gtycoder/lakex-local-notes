@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261119 · 修复批二（知识库计数 / 顶栏常驻 / 按钮边界 / 卡片闪烁）（未发版）
+
+- **知识库笔记本文档计数**（用户点单）：根因 = docCounts 只按 parentId 数根目录直属文档（分组内文档计到分组 id）⇒ 卡片 0 篇。`notebookDocCounts.notebookSubtreeDocCounts` O(n) 子树聚合（isGoneNote 口径剔 trashed/回收站/purge，note 也可作父），书架/列表同口径；桌面无同名计数面（AI 选资料本就子树口径）已核。
+- **阅读态顶栏常驻**（用户点单「去掉下滑全屏，只对悬浮胶囊生效」）：`useWorkspaceChrome` 拆 `topbarHidden`（唯一来源=子页全屏）/ `capsuleChromeHidden`（旧滚动判据逐字转给胶囊）；scrollChrome 成胶囊专用判据；让位几何自洽（底部 80px 胶囊让位不动）。
+- **按钮边界两类收口**（用户点单 + 审计 `design-plans/mobile-button-boundary-audit-261119.md`）：①底栏账唯一——便携包/更新弹窗裸 footer 迁 `.mb-sheet__foot`（0 内距沉底贴手势条 = 「按钮过分靠下」真因）、body/foot 双叠 safe 收一份、drawer/ai foot 并账、MobileSheet footer 槽强制包 foot；便携包确认主次倒挂修正。②44 命中——`.mb-btn--sm/.mb-iconbtn--compact` 类内 ::after 纵向扩区（30+ 面一次收口）+ 三散点 .mb-tap。**三道护栏进 check:mobileui**：sheetFooterContract / bottomChromeContract（bottom 安全区镜像，允许清单只减不增）/ tapAreaContract（视觉<44↔扩区对账）。
+- **文档卡片闪烁**（用户点单）：真身 = 内核书签卡封面 `onError` **同值重写无限环**（同值 src 赋值浏览器仍重拉 ⇒ 失败↔重试 ~0.4-0.8s/圈，实测 15s 27 同值写/28 error；录屏「全页闪」为 H.264 GOP 伪影——**取证修正**：周期尖峰是关键帧再量化，非应用活动）。修法 = `bookmarkCoverFallbackGuard`（元素级 src 访问器「未变才写」，应用层运行时补丁不动内核产物，挂 createLakeDocument）+ videoCardOps/mediaCardResize 扫描器同补未变才写；修复后静置 2 写即稳。LAKEX-CONTRACT §5.61 回填。
+- **门禁**：tsc 0；全量 vitest **1067 文件 / 6769 例 0 failed**；ui-metrics / check:core / check:mobileui（含三道新护栏）/ check:arch / check:bundle / git diff --check 全过。
+
 ### 261119 · v1.5.0 后三修复批（目录表情样式 / 内核表情中文筛选 / 表格默认字号 11）（未发版）
 
 - **目录选表情面板样式恢复**（用户点单「挤 + 样式丢失」）：根因两步事故 = 99829213 把页签类名 `node-icon-picker__tab` 改成 `__type-tab` 但 CSS 三条规则留在原名（孤儿）→ 09f41ba1 把孤儿当死类删除并迁 kit ln-tabs（挤成一团）。恢复 `.node-icon-picker__tab` 一族（九格等分 ≈43px、27px 行高档位、hover/选中/焦点三态，全令牌）；补**样式类不离散双向护栏**（CSS↔TSX 对账，反向钉死改名失联型事故）；nodeIcon.css 基线 78→97（恢复被误删既有视觉，逐条写因）。
@@ -530,7 +538,7 @@
 **261119 · 修复批基线（未发版；v1.4.0 之后）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
-- 全量 vitest：**文件 1058（passed / 13 skipped）/ 用例 6704（passed / 14 skipped）/ 0 failed**（含 261119 各批新增）。imeEnterWiring 33 处（MediaSizePop 收口后）；selectionToolbar.css 基线 158。
+- 全量 vitest：**文件 1067（passed / 13 skipped）/ 用例 6769（passed / 14 skipped）/ 0 failed**（含 261119 各批新增）。imeEnterWiring 33 处（MediaSizePop 收口后）；selectionToolbar.css 基线 158；check:mobileui 新增三道按钮边界护栏。
 - `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0）；`cssLayers`/`mobileLayers` 棘轮按实测登记：selectionToolbar.css **164**、mobile-find.css **20**、mobileBitable.css **1109**、notePaneSkeleton.css **23**（新）、quick-notes.css **277**、floating.css **316**、mobile.css **1487**、kit.css 659。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:arch` 0 违规（desktop 首屏 599,783/600,000）；`check:bundle` PASS（mobile entry **51,359/51,440**（261119 用户批准登记上调，理由入脚本注释）、移动 CSS 140,465/141,312、preload 12/12）。
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
@@ -660,6 +668,10 @@
 - **速记失败提示文案双写（261119 登记）**：「速记内容准备失败」在 MobileApp catch 与 captureModeFlow 字节失败两处各一份（懒分包边界不共享常量）；要单一来源挪 toastBus。
 - **nodeIcon 小清理（261119 登记）**：`.node-icon-picker__type-action` 与 kit `.ln-tabs__action` 重复（可再降 1）；页签选中态 text-1+600 是「原样式」本体，若要与 kit 墨线统一可一行切。
 - **unicodeEmoji 数据注入面（261119 登记备用）**：内核 option `unicodeEmoji:{emojiGroups,emojiMap}`（未文档化，LAKEX-CONTRACT §5.60）——未来若要把目录面板的 emojiSearch 中文别名接进内核面板可走该面，当前补丁已够用不接。
+- **batchNotes 软删列口径不一（261119 登记）**：`bridge/batchNotes.ts:81` 用 `deleted_at` 判 trashed，写路径（trashSubtree/trashRepository）标 `trashed_at`——回收站/批处理修面跟进。
+- **TAP_REVIEWED 20+ 同型小目标（261119 登记）**：mb-segment__item(36)/med-f-btn(40)/mbt-cell-btn(24) 等（清单在 tapAreaContract TAP_REVIEWED）——多数一行 ::after 收口，下批一次清或 smallTap 走查定级；kit 自绘 checkbox/radio 15px 命中区未扩同登记。
+- **按钮边界 B-4/B-10/B-12/13（261119 登记）**：固定 50dvh、键盘盖 foot、编辑 dock/让位账底安全区——前两者是定稿/契约不动，B-12/13 在 bottomChromeContract 允许清单待设备实测定级。
+- **录屏取证教训（261119）**：H.264 GOP 关键帧再量化会产生「周期性全帧微差」伪影（本批曾误读为 0.8s 重绘环）——录屏分析先排关键帧伪影，静止段逐位比对 + 变化像素定位到盒级才算数。
 - **发版前设备快照矩阵未跑（261119）**：mobilesnap 基线因色板/卡片几何变化待重烤（已在上方登记）；本次发版门禁 = 静态全量 + packaged smoke（CI 内联）+ 用户真机点收。
 - **标签长按菜单设备点收**（261119）：装包已装；契约面无标签 API 无法自动种夹具，需用户上手长按验证。
 - **视频宽度弹窗桌面实机目视**（261119）：机制与其它卡工具条菜单同款，低风险。
