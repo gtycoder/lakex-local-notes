@@ -58,6 +58,7 @@ import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
 import { formatCrashEntries, readCrashLog } from "./lib/crashLog";
 import { ensureDb } from "./bridge/context";
 import { showToast } from "./ui/toastBus";
+import { QUICK_NOTE_PREPARE_FAILED_TEXT } from "./ui/toastCopy";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
 // 261111 首屏瘦身：原生调试契约（lakeNativeContract / nativeSqlite）与缓存清理（cachePort）都是
@@ -555,7 +556,7 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
       if (captureFlowGenRef.current !== gen) return;
       prefillPendingRef.current = false;
       setSeedReady(true);
-      showToast("速记内容准备失败", { type: "error" });
+      showToast(QUICK_NOTE_PREPARE_FAILED_TEXT, { type: "error" });
     });
   };
   // 冷启动（原生 hint）那次订阅不再回调（skipColdRead）⇒ 补跑取数流；只跑一次。

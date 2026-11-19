@@ -18,6 +18,7 @@ import { takeCameraPhoto } from "../native/cameraCapture";
 import { readClipboardText } from "../native/clipboardText";
 import type { QuickNoteSeed } from "../native/sharedContent";
 import { showToast } from "../ui/toastBus";
+import { QUICK_NOTE_PREPARE_FAILED_TEXT } from "../ui/toastCopy";
 
 /** captureSeed 图片项（与 QuickNoteSeed.images 同形）。 */
 type SeedImage = QuickNoteSeed["images"][number];
@@ -101,7 +102,7 @@ export async function runCameraCapture(input: {
     // 读照片字节失败（文件被回收/读取异常）= 语义等价的失败回传：与原生失败同口径走 onCancel
     //（不落任何种子、清 pending、放行挂载）+ 可见提示 —— 不许静默留空壳写作卡（P2-2）。
     if (!isCurrent()) return;
-    showToast("速记内容准备失败", { type: "error" });
+    showToast(QUICK_NOTE_PREPARE_FAILED_TEXT, { type: "error" });
     input.onCancel();
     return;
   }
