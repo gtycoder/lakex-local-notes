@@ -8,6 +8,7 @@ import { NativeDialog } from "../../components/ui/Overlay";
 import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { BitableAiConfig, BitableField, BitableFieldType, BitableRelation, BitableTable } from "../../core/bitableDoc.js";
 import { BITABLE_DATE_FORMAT_OPTIONS, BITABLE_DEFAULT_OPTION_COLOR, BITABLE_FIELD_TYPE_LABEL, BITABLE_NUMBER_FORMAT_OPTIONS, BITABLE_OPTION_COLORS, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, aiPromptFieldNames, isKnownFieldType, isRelationFieldType, newBitableId, optionColorHex } from "../../core/bitableDoc.js";
+import { OPTION_COLOR_BOARD_GROUPS } from "../../core/colorPalette.js";
 import { fieldHasData } from "../../core/bitableMutations.js";
 import { ColorPalette, DatePicker, FieldTypeIcon, FieldTypeSelect, Popover, SelectMenu } from "./bitableCells.js";
 import { moveItem } from "./bitableEditorModel";
@@ -305,7 +306,7 @@ export function FieldEditorModal({ field, readOnly, tables, tableId, onClose, on
               </div>
             ))}
             {colorFor && (
-              <ColorPalette anchor={colorFor.anchor} value={options.find((o) => o.id === colorFor.optionId)?.color} recentKey="bitable-option"
+              <ColorPalette anchor={colorFor.anchor} value={options.find((o) => o.id === colorFor.optionId)?.color} recentKey="bitable-option" groups={OPTION_COLOR_BOARD_GROUPS}
                 defaultLabel="无背景色" defaultKind="background"
                 onPick={(color) => setOptions(options.map((o) => (o.id === colorFor.optionId ? { ...o, color } : o)))}
                 onDefault={() => setOptions(options.map((o) => (o.id === colorFor.optionId ? { ...o, color: undefined } : o)))}

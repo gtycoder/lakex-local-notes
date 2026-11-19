@@ -284,6 +284,21 @@ describe("多维表编辑器护栏", () => {
     expect(PALETTE_CSS).toMatch(/\.bt-color-recent \.bt-color-swatch \{[^}]*width: 22px/);
   });
 
+  it("选项色候选收窄（261119 用户点单）：选项色板 = OPTION_COLOR_BOARD_GROUPS 2 行深浅档；其它全色阶入口仍全量", () => {
+    // 选项色唯一收窄点 = FieldEditorModal 的选项 ColorPalette；共享件缺省仍 COLOR_BOARD_GROUPS 全量
+    expect(EDITOR).toMatch(/recentKey="bitable-option"\s+groups=\{OPTION_COLOR_BOARD_GROUPS\}/);
+    expect(EDITOR.match(/groups=\{OPTION_COLOR_BOARD_GROUPS\}/g)).toHaveLength(1);
+    expect(SHARED_PALETTE).toMatch(/groups = COLOR_BOARD_GROUPS/);
+    // 其它全色阶入口（列文字色 / 进度色 / 条件填色）不收窄 ⇒ 仍是 7×10 全量（防误伤）
+    const columnText = EDITOR.match(/recentKey="bitable-column-text"[\s\S]{0,600}?onClose=/)?.[0];
+    expect(columnText).toBeTruthy();
+    expect(columnText).not.toContain("groups=");
+    const progress = EDITOR.match(/recentKey="bitable-progress"[\s\S]{0,600}?onClose=\{\(\) => setProgressColorAnchor\(null\)\}/)?.[0];
+    expect(progress).toBeTruthy();
+    expect(progress).not.toContain("groups=");
+    expect(FILL_EDITOR).not.toContain("OPTION_COLOR_BOARD_GROUPS");
+  });
+
   it("字段编辑弹窗：进度字段的颜色面板不被「选项编辑器」块吞掉（260929-OPT 修）", () => {
     // 真 bug：进度字段 supportsOptions=false，而颜色面板曾被写在 {supportsOptions && ...} 块内
     // ⇒ 点色块永远打不开面板。这里用源码顺序锁死：面板必须在「添加选项」按钮之后（bug 时在其前）。

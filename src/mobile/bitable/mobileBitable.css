@@ -988,10 +988,15 @@
 /* 261119（用户点单）：选项色点 = 可点按钮（点开同款 .mbt-feditor__colors 色板改 option.color）；
    数据驱动色值的例外同进度条颜色行。 */
 .mbt-feditor__swatch { flex: 0 0 auto; width: 14px; height: 14px; padding: 0; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-bg-sunken); cursor: pointer; }
-.mbt-feditor__colors { display: flex; flex-wrap: wrap; gap: var(--lake-space-md); }
+/* 261119（用户点单：选项色收成 2 行深浅档，70 → 20）：色板槽改 10 列网格 —— 2 行 × 10 列
+   同色相上下深浅一一对应（core/colorPalette.OPTION_COLOR_BOARD_VALUES 行优先 = 上浅下深）；
+   28px 固定格在 292–325px 的面板里一行放不下 10 个（10×28+9×8=352）⇒ 拆行必乱列，改轨道自适应：
+   轨道上限 28px（原格子尺寸）、窄屏按面板宽收缩、宽屏左对齐不放大。进度条颜色同款共用（9 格一行）。
+   声明数 0 增（display/flex-wrap → grid 两件 + gap 取值收紧；格子 28px 固定 → 1:1 自适应）。 */
+.mbt-feditor__colors { display: grid; grid-template-columns: repeat(10, minmax(0, 28px)); gap: var(--lake-space-sm); }
 .mbt-feditor__color {
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  aspect-ratio: 1;
   border: .5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel);

@@ -16,8 +16,9 @@
  *
  * 261119 用户点单：选项左侧色点**可改色** —— 点色点在该选项下方展开本面板已有的
  * .mbt-feditor__colors 色板（与「进度条颜色」同款），选色写 option.color；候选色 =
- * core/colorPalette 的 COLOR_BOARD_VALUES（与桌面端字段编辑器选项色板 ColorPalette 同一数据源，
- * **不自造色值**；optionColorHex 原样透传 hex）。
+ * core/colorPalette 的 OPTION_COLOR_BOARD_VALUES（2 行 × 10 列同色相深浅档，行优先上浅下深；
+ * 与桌面端字段编辑器选项色板 ColorPalette 同一数据源，**不自造色值**；optionColorHex 原样透传 hex）。
+ * 「默认颜色」清空项独立占首行，20 色排成 2 行 × 10 列网格（上下同列同色相）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isImeConfirming } from "../../core/ime";
@@ -35,7 +36,7 @@ import {
   type BitableFieldOption,
   type BitableFieldType,
 } from "../../core/bitableDoc.js";
-import { COLOR_BOARD_VALUES } from "../../core/colorPalette.js";
+import { OPTION_COLOR_BOARD_VALUES } from "../../core/colorPalette.js";
 import type { BitableFieldConfigPatch } from "../../core/bitableMutations";
 import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
@@ -259,14 +260,20 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
                         <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
                       </div>
                       {colorOptionId === option.id && (
-                        <div className="mbt-feditor__colors" role="group" aria-label={"选项颜色：" + (option.name || "选项 " + (index + 1))}>
-                          <button type="button" className={"mbt-feditor__color" + (!option.color ? " is-on" : "")} aria-label="默认颜色"
-                            onClick={() => setOptionColor(option.id, undefined)} />
-                          {COLOR_BOARD_VALUES.map((color) => (
-                            <button key={color} type="button" aria-label={"颜色 " + color}
-                              className={"mbt-feditor__color" + (optionColorHex(option.color)?.toLowerCase() === color.toLowerCase() ? " is-on" : "")}
-                              style={{ background: color }} onClick={() => setOptionColor(option.id, color)} />
-                          ))}
+                        <div className="mbt-feditor__group" role="group" aria-label={"选项颜色：" + (option.name || "选项 " + (index + 1))}>
+                          {/* 「默认颜色」清空项独立占首行（点它把 option.color 清成 undefined） */}
+                          <div className="mbt-feditor__colors">
+                            <button type="button" className={"mbt-feditor__color" + (!option.color ? " is-on" : "")} aria-label="默认颜色"
+                              onClick={() => setOptionColor(option.id, undefined)} />
+                          </div>
+                          {/* 2 行 × 10 列同色相（行优先上浅下深；OPTION_COLOR_BOARD_VALUES 行优先拍平） */}
+                          <div className="mbt-feditor__colors">
+                            {OPTION_COLOR_BOARD_VALUES.map((color) => (
+                              <button key={color} type="button" aria-label={"颜色 " + color}
+                                className={"mbt-feditor__color" + (optionColorHex(option.color)?.toLowerCase() === color.toLowerCase() ? " is-on" : "")}
+                                style={{ background: color }} onClick={() => setOptionColor(option.id, color)} />
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

@@ -88,7 +88,7 @@ function rememberColor(key: string, color: string) {
 }
 
 /** 应用内统一颜色选择面板：全量内核实色卡 + 最近使用 + 自定义颜色。 */
-export function ColorPalette({ anchor, at, value, recentKey, onPick, onClose, defaultLabel, defaultKind = "background", onDefault, side = "below", closeOnPick = true, closeOnNestedOverlay = false }: {
+export function ColorPalette({ anchor, at, value, recentKey, onPick, onClose, defaultLabel, defaultKind = "background", onDefault, side = "below", closeOnPick = true, closeOnNestedOverlay = false, groups = COLOR_BOARD_GROUPS }: {
   anchor: HTMLElement;
   /**
    * 坐标锚点（优先于 anchor，见 usePopoverPosition）。
@@ -110,6 +110,12 @@ export function ColorPalette({ anchor, at, value, recentKey, onPick, onClose, de
   closeOnPick?: boolean;
   /** 普通浮层语义：点击其它嵌套浮层也关闭；列文字子菜单不传，保留子菜单行为。 */
   closeOnNestedOverlay?: boolean;
+  /**
+   * 候选色行（缺省 = 全量 7×10 内核色板：背景/文字/填色等全色阶入口都走缺省）。
+   * 多维表**选项色**传 core/colorPalette 的 OPTION_COLOR_BOARD_GROUPS（2 行深浅档）收窄候选；
+   * 只收窄候选集合，最近使用/自定义颜色/默认项行为不变。
+   */
+  groups?: readonly (readonly string[])[];
 }) {
   const active = optionColorHex(value)?.toLowerCase();
   const defaultActive = !value || value === "transparent";
@@ -135,7 +141,7 @@ export function ColorPalette({ anchor, at, value, recentKey, onPick, onClose, de
           </button>
         )}
         <div className="bt-color-rows">
-          {COLOR_BOARD_GROUPS.map((row, rowIndex) => (
+          {groups.map((row, rowIndex) => (
             <div className="bt-color-row" key={rowIndex}>
               {row.map((color) => (
                 <button key={color} type="button" className={"bt-color-swatch" + (active === color.toLowerCase() ? " is-selected" : "")}

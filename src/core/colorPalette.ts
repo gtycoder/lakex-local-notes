@@ -2,6 +2,8 @@
  * 这是 lakex 当前固定色卡的实色部分；Lake 编辑器自己的适配器继续负责“默认/无填充/渐变/最近使用/更多颜色”。
  * 其余应用内选色统一使用这 70 个固定实色 + 自定义色，不维护平行色板；颜色字面量集中在本文件。
  */
+// 70 色阶来源 = vendor/lakex-doc-react/src/components/lakex/lakex.js 的内核色阶（Zc，约 122960 行起）；
+// 与内核运行时色板逐值一致（261119 配色审计 §3 P1 口径），文档/手写板/选项色取色面以此为桌面可选基线。
 export const COLOR_BOARD_GROUPS: readonly (readonly string[])[] = [
   ["#000000", "#262626", "#595959", "#8C8C8C", "#BFBFBF", "#D9D9D9", "#E9E9E9", "#F5F5F5", "#FAFAFA", "#FFFFFF"],
   ["#F5222D", "#FA541C", "#FA8C16", "#FADB14", "#52C41A", "#13C2C2", "#1890FF", "#2F54EB", "#722ED1", "#EB2F96"],
@@ -17,6 +19,29 @@ export const COLOR_BOARD_VALUE_SET = new Set(COLOR_BOARD_VALUES);
 
 /** 选色默认值取浅色档，避免新建选项/背景一开始就过重。 */
 export const DEFAULT_LIGHT_COLORS = COLOR_BOARD_GROUPS[2];
+
+/**
+ * 多维表**选项色**色板（261119 用户点单：70 色收成 2 行深浅档，不再给 5 档深浅判断）。
+ *
+ * 2 行 × 10 列，**列 = 同一色相、上下深浅一一对应（上浅下深）**；候选全部取自
+ * COLOR_BOARD_VALUES（桌面端支持的内核色阶，FieldEditorModal 选项色板同一数据源），不自造色值：
+ *   列 0 红 #FFA39E/#FF4D4F · 列 1 橙红 #FFBB96/#FF7A45 · 列 2 橙 #FFD591/#FFA940 ·
+ *   列 3 黄 #FFFB8F/#FFEC3D · 列 4 绿 #B7EB8F/#73D13D · 列 5 青 #87E8DE/#36CFC9 ·
+ *   列 6 蓝 #91D5FF/#40A9FF · 列 7 靛 #ADC6FF/#597EF7 · 列 8 紫 #D3ADF7/#9254DE ·
+ *   列 9 品红 #FFADD2/#F759AB
+ * 上行 = 浅中档（COLOR_BOARD_GROUPS[3]），下行 = 鲜艳中档（COLOR_BOARD_GROUPS[4]）——
+ * 261119 用户红框原图选定这两档（上浅下深对应；红框上方另有 [2] 最浅档行，不入选）。
+ * 平板/桌面/移动共用一份；「默认颜色」清空项由 UI 侧画，不在数组里。
+ */
+export const OPTION_COLOR_BOARD_GROUPS: readonly (readonly string[])[] = [
+  // 浅中档（= COLOR_BOARD_GROUPS[3]，261119 用户红框原图选定）
+  ["#FFA39E", "#FFBB96", "#FFD591", "#FFFB8F", "#B7EB8F", "#87E8DE", "#91D5FF", "#ADC6FF", "#D3ADF7", "#FFADD2"],
+  // 鲜艳中档（= COLOR_BOARD_GROUPS[4]）
+  ["#FF4D4F", "#FF7A45", "#FFA940", "#FFEC3D", "#73D13D", "#36CFC9", "#40A9FF", "#597EF7", "#9254DE", "#F759AB"],
+] as const;
+
+/** 选项色板拍平（行优先：先浅档一行、再深档一行 ⇒ 移动端 10 列网格天然上下同列同色相）。 */
+export const OPTION_COLOR_BOARD_VALUES: readonly string[] = OPTION_COLOR_BOARD_GROUPS.flat();
 
 /**
  * 移动端文档工具栏色板（261012 用户定稿：**照抄语雀 App 的排布**，但颜色一律取内核色阶，**不自己造色**）。

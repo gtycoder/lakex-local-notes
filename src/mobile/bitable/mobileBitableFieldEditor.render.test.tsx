@@ -3,8 +3,8 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileBitableFieldEditorSheet } from "./MobileBitableFieldEditorSheet";
-import { createBitableField } from "../../core/bitableDoc";
-import { COLOR_BOARD_VALUES } from "../../core/colorPalette";
+import { createBitableField, BITABLE_OPTION_PALETTE } from "../../core/bitableDoc";
+import { COLOR_BOARD_VALUES, OPTION_COLOR_BOARD_GROUPS, OPTION_COLOR_BOARD_VALUES } from "../../core/colorPalette";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -141,7 +141,7 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     expect(patch.options.map((o) => o.name)).toEqual(["复盘", "提问", "选项 3"]);
   });
 
-  it("选项色点可改色：点色点展开同款色板（候选 = 桌面选项色板同一来源），选色落 option.color", () => {
+  it("选项色点可改色：点色点展开同款色板（候选 = 桌面选项色板同一来源的 2 行深浅档），选色落 option.color", () => {
     const onSave = vi.fn();
     render({ ...createBitableField("select", "状态", "f-status"), options: [{ id: "o1", name: "复盘", color: "green" }] }, onSave);
     // 色点 = 可点按钮（旧实现是 aria-hidden 的 span，改不了色）
@@ -153,17 +153,37 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     expect(swatch!.getAttribute("aria-expanded")).toBe("true");
     const palette = host.querySelector('[role="group"][aria-label="选项颜色：复盘"]');
     expect(palette).toBeTruthy();
-    expect(palette!.className).toContain("mbt-feditor__colors");
-    // 候选色集合 = COLOR_BOARD_VALUES（core/colorPalette；桌面端字段编辑器选项色板 ColorPalette 同一数据源，不自造色值）
-    const candidates = [...palette!.querySelectorAll<HTMLButtonElement>('button[aria-label^="颜色 "]')]
+    expect(palette!.className).toContain("mbt-feditor__group");
+    // 「默认颜色」清空项保留首位：独立占第一行，20 色随后排进 10 列网格（上下同列同色相）
+    const rows = [...palette!.querySelectorAll(".mbt-feditor__colors")];
+    expect(rows.length).toBe(2);
+    expect(rows[0].querySelector('button[aria-label="默认颜色"]')).toBeTruthy();
+    // 候选色集合 = OPTION_COLOR_BOARD_VALUES（core/colorPalette 选项色板 2 行 × 10；桌面端字段编辑器
+    // 选项色板 ColorPalette 同一数据源，不自造色值）；行优先 = 上浅档行、下深档行
+    const candidates = [...rows[1].querySelectorAll<HTMLButtonElement>('button[aria-label^="颜色 "]')]
       .map((b) => b.getAttribute("aria-label")!.slice("颜色 ".length));
-    expect(candidates.length).toBe(COLOR_BOARD_VALUES.length);
-    expect(new Set(candidates)).toEqual(new Set(COLOR_BOARD_VALUES));
+    expect(candidates).toEqual([...OPTION_COLOR_BOARD_VALUES]);
+    expect(candidates.slice(0, 10)).toEqual([...OPTION_COLOR_BOARD_GROUPS[0]]);
+    expect(candidates.slice(10)).toEqual([...OPTION_COLOR_BOARD_GROUPS[1]]);
+    // 候选全部属于桌面支持集 COLOR_BOARD_VALUES（20 = 2 行 × 10，不自造色值）
+    expect(candidates.length).toBe(20);
+    expect(candidates.every((c) => COLOR_BOARD_VALUES.includes(c))).toBe(true);
     // 选色 → 确认后 patch.options[0].color = 该 hex（optionColorHex 原样透传）
-    act(() => palette!.querySelector<HTMLButtonElement>('button[aria-label="颜色 #F5222D"]')!.click());
+    act(() => rows[1].querySelector<HTMLButtonElement>('button[aria-label="颜色 #FF4D4F"]')!.click());
     act(() => btnByText("确认")!.click());
     expect((onSave.mock.calls[0][0] as { options: Array<{ color?: string }> }).options)
-      .toEqual([{ id: "o1", name: "复盘", color: "#F5222D" }]);
+      .toEqual([{ id: "o1", name: "复盘", color: "#FF4D4F" }]);
+  });
+
+  it("选项色板只收「选项色」的候选：进度条颜色色板原样保留（防误伤其它色板）", () => {
+    render({ ...createBitableField("progress", "进度", "f-prog"), defaultValue: "50" }, vi.fn());
+    const palette = host.querySelector('.mbt-feditor__colors');
+    expect(palette).toBeTruthy();
+    const candidates = [...palette!.querySelectorAll<HTMLButtonElement>('button[aria-label^="颜色 "]')]
+      .map((b) => b.getAttribute("aria-label")!.slice("颜色 ".length));
+    // 进度条颜色仍取 BITABLE_OPTION_PALETTE 前 8 色（非选项色板、非全量 70 之外的任何收窄）
+    expect(candidates).toEqual(BITABLE_OPTION_PALETTE.slice(0, 8).slice());
+    expect(palette!.querySelector('button[aria-label="默认颜色"]')).toBeTruthy();
   });
 
   it("选项色点：旧命名色经 optionColorHex 回显；「默认颜色」清掉 option.color", () => {
