@@ -613,9 +613,14 @@
   /* 261119 用户试调：回 text-1 近黑 **且字重降正文档 400**——260923 的「又重又密」是 text-1+500 组合问题，
      现按「正文的字重放到目录」取 text-1 + regular 400；选中仍 semibold（261115 口径不变）。 */
   color: var(--lake-text-1);
-  /* 260923：13px → 14px（--lake-font-size-body），对齐内核原生大纲项的字面（14px/line-height 22px）。
-     261015 试调过 15 / 14.5 两档（用户均判不合适）⇒ 回到 14px。 */
-  font-size: var(--lake-font-size-body);
+  /* 261120 用户点单（第二轮试档）：目录字号 = **14.5px** —— 16px（= 正文字号设置默认）太大、
+     14px 又显小，用户指定取中间值。用相邻两档令牌求均值得 14.5（不写字号字面量，字号门禁保持 0）。
+     ⚠ 这是用户明确点单的**试档**（261015 曾试过 15 / 14.5 并回退 14；本次以「像正文」为目标重试）：
+     若再判不合适，改回 var(--lake-font-size-body) 一行即可（护栏 treeRowGeometry 同步）。 */
+  font-size: calc((var(--lake-font-size-body) + var(--lake-font-size-bodyMd)) / 2);
+  /* 行高不跟正文（正文 1.57）：目录是**单行列表**，行高只决定行盒高度 ⇒ 取 tight(1.35) 把
+     16px 字压在 21.6px 行盒里，行高 27/29 与 contain-intrinsic（23/25）保持原值、不触发「目录跳动」回归。 */
+  line-height: var(--lake-line-height-tight);
   font-weight: var(--lake-font-weight-regular);
   white-space: nowrap;
   overflow: hidden;

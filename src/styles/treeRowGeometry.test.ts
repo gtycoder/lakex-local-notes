@@ -51,8 +51,12 @@ describe("桌面目录树行几何（261119 行间隙微调）", () => {
     expect(CHROME).toContain("contain-intrinsic-size: auto 25px;");
   });
 
-  it("字号档位未动：目录标题 14px（--lake-font-size-body），不单独抬档", () => {
-    expect(ruleBody(CHROME, ".note-row-copy strong")).toMatch(/font-size: var\(--lake-font-size-body\)/);
+  it("字号 = 14.5px 试档（body 与 bodyMd 的中间值，令牌求均、不写字面量）", () => {
+    const body = ruleBody(CHROME, ".note-row-copy strong");
+    // 261120 用户点单第二轮：16px（正文字号默认）太大、14px 偏小 ⇒ 试 14.5px。
+    // 用相邻两档令牌求均值（calc），不引入字号字面量、也不新增档位令牌。
+    expect(body).toMatch(/font-size: calc\(\(var\(--lake-font-size-body\) \+ var\(--lake-font-size-bodyMd\)\) \/ 2\)/);
+    expect(body).not.toMatch(/font-size: var\(--lake-font-size-body\);/);
   });
 
   it("选中块与 hover 同几何：状态规则只换色（无 margin/padding/圆角/尺寸/过渡声明）", () => {
