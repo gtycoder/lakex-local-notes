@@ -634,6 +634,17 @@
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
 - 设备（模拟器 lake_mobile，本批已装包）：5 项交互验收 PASS（速记返回/表单焦点/拍照相机/头部恒定/查找条）+ 多维表 7 屏探针 7/7；标签长按菜单与桌面视频弹窗目视待用户点收。
 
+**261120 · v1.5.4 基线（点单批 + 首屏瘦身收口，tag 待打）**
+
+- `npx tsc --noEmit` = **0**；`typecheck:electron` = **0**。
+- 全量 vitest：**文件 1079 passed / 13 skipped（1092）**；**用例 6847 passed / 14 skipped（6861）/ 0 failed**。
+- `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0 / 颜色 0 / 字号 0 / 未定义令牌 0）。
+- `check:core` **181** 文件 0 违规；`check:mobileui` 通过。
+- `check:bundle` **PASS**：desktop 首屏 **579,041 / 592,000**（余 12,959B）；mobile 首屏 **340,354/345,000**（余 4,646B）；mobile entry **43,335/46,000**（余 2,665B）、CSS **140,279/141,312**、preload 12/12；vendor CSS 审计 OK。
+- 本批相对 v1.5.3：移动入口 51,330 → **43,335（−8,727B，−17%）**、移动首屏 348,295 → **340,354**；预算收紧（entry 46,000 / 首屏 345,000）。
+- 层围栏基线按批登记：chrome.css **579**、kit.css 766、mobile.css 1496、mobile/theme/light **76** / dark **151**、shell.css 360。
+- 视觉/设备基线：stylesnap `hover-row:1315:{light,warm}` 两态重烤 0 差异（其余 40 态未跑，本批未触）；**mobile-snap 10 态整体重烤**（原基线 11-17，此后 20 个移动端提交未重烤，逐态元素数恒 +4 已归因），复检 0 差异；bitable-snap 3 态重烤（多维表内容字号 15px）。
+- Android：debug APK 已构建并安装 emulator-5554；启动页白底/无圆盘冷启动逐帧验过；真机（小米）未验。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
@@ -755,8 +766,7 @@
 
 **261120 批待办**
 
-- **mobile entry 现余 3,397B（42,603/46,000）**：本批瘦身已把「一加功能就撞预算」的状态解掉；下一笔移动端入口增量前仍先看能否走懒加载（候选：第二个 tanstack 使用点、settings 抽屉里的静态重依赖）。
-- **首屏预算新防线待观察**：`budget-gate.yml` 首次在 push master 上跑要确认它真的红/绿（下一笔提交后看 Actions）；若 `npm ci` + 双 build 在 ubuntu 上超 20 分钟需调 timeout。
+- **mobile entry 现余 2,665B（43,335/46,000）**：v1.5.4 又加了「已收起」与书架卡改版（+732B）；下一笔移动端入口增量前仍先看能否走懒加载（候选：第二个 tanstack 使用点、settings 抽屉里的静态重依赖、crashLog 仍被 MobileErrorBoundary 静态引用）。
 - **移动端文档引用：真机（小米）未验**；另注意注册表是 `lazy` 组件，页面刚启动的极短窗口内若立刻插入文档引用会回落桌面浮层（理论窗口 < 一个 chunk 加载，实际未复现；要消掉就把 Sheet 改成静态 import，代价是 entry 预算）。
 - **文档引用 Sheet 的设备观感待用户点收**（标题/搜索/行高/拖动调高）；`mobilesnap` 基线未因本批重烤（本批未改既有屏几何，新增的是新弹层）。
 - **桌面右键菜单顶层新增两项**：其他入口（顶栏菜单/头部＋）未同步，若用户要求「所有入口一致」再评估（当前只按点单改目录右键）。
@@ -767,7 +777,6 @@
 - **快捷菜单剩余点收（261119 深链两路径已在模拟器实测通过）**：已验 = camera 深链直出相机（焦点 `com.android.camera2/CaptureActivity`）+ 取消留卡不再弹；clipboard 深链预填（可信按键造剪贴板 → 清空卡 → 触发深链文本完整回归）+ 空剪贴板不预填分支。待用户点收 = **长按桌面图标三项并列**（launcher UI 无法自动化）与真机（小米）链路。
 - **cardMenu.tsx 收尾清理（261119 登记）**：CardMenuItem 的 focusable/ariaPressed 已无调用方（上轮为视频弹窗加的）、头注释仍提「与视频宽度弹层共用」——下批清掉。
 - **表格色板案 2（261119 登记）**：core/colorPalette 单一来源 + ComponentManager 重注册 COLOR_PICKER_COMPONENT（须等选项 20 色定稿后落值、过 univerContract + usheet-kernel-probes、禁新增 patch）。
-- **mobilesnap 基线待重烤（261119）**：选项色板网格化改了修改字段面板几何，装包后 `check:mobilesnap` 相关态基线需按 §5.3 重烤。
 - **休眠色板登记（审计 §2.M）**：SheetMenuBody 圆点色板（无构建方）与「工作表标签更改颜色」（未实现）——动它们前先过配色审计口径。
 - **inkPerf.test 墙钟断言满载 flaky（261119）**：35ms 预算满载跑出 40ms、单跑 3/3 过——与 perf.integration 同类口径（低负载为准）。
 - **QuickNotePreview slot 代码出桌面图（261119 登记瘦身方向）**：组件拆分使 slotFrame/展开过渡不进桌面首屏（check-arch.mjs 注释同步登记）。
