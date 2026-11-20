@@ -9,7 +9,8 @@
     /* 启动页（261115）：为 UA 自绘表面声明色彩模式，并用 light-dark() 取色 ——
        修 docs/MODERN-WEB-AUDIT.md A26/A27（深色系统下滚动条/画布仍是浅色）。 */
     :root { color-scheme: light dark; }
-    html, body { height: 100%; margin: 0; overflow: hidden; background: light-dark(#f3f4f6, #1e2126); }
+    /* 261120 用户点单「都统一白色」：浅色档启动底 = 纯白（深色档保持 #1e2126，避免深色系统白闪）。 */
+    html, body { height: 100%; margin: 0; overflow: hidden; background: light-dark(#ffffff, #1e2126); }
     body {
       display: grid;
       place-items: center;

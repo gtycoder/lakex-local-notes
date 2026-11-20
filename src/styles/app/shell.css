@@ -98,6 +98,9 @@
 }
 
 .empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--lake-text-3); }
+/* 261120 用户点单「都统一白色」：启动那屏（BrandLaunchMark loading-screen）铺纯白，与 boot 窗/首帧同色不闪；
+   深色档走 --lake-bg-launch 的深色取值。 */
+.loading-screen { background: var(--lake-bg-launch, var(--lake-bg-window)); }
 
 .empty-workspace { gap: 6px; }
 

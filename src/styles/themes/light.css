@@ -6,6 +6,9 @@
   color-scheme: light;
   /* 表面（三级：窗底 < 面板 < 抬升） */
   --lake-bg-window: #e9edf3;
+  /* 261120 用户点单「都统一白色」：**启动层**底 = 纯白（boot 窗 / 首帧 / BrandLaunchMark 那一屏）。
+     只服务启动那一层，不改 app 正常窗口的 --lake-bg-window。 */
+  --lake-bg-launch: #ffffff;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f0f3f7;

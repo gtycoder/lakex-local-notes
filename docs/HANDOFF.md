@@ -13,6 +13,7 @@
 - **根因**：圆形底不是应用内动画的（那份 261112 已换成透明折纸），而是**原生启动图**：Android 的 v31 splash 用 `@mipmap/ic_launcher`（自适应图标背景层 `#F0FBF5` 薄荷色）当系统启动图标、pre-31 用 `drawable*/splash.png`（同样带薄荷圆盘）；桌面 boot 窗口的 `electron/boot-anim.apng` + `boot-poster.png` 也带圆盘。
 - **移动端（定稿）**：v31 `windowSplashScreenAnimatedIcon` → `@drawable/launch_splash_none`（透明）、pre-31 改为纯色底不显示 logo；`launch_background` `#EDEDF1` → **#FFFFFF**；`capacitor.config.ts` backgroundColor、`mobile.html` 的 theme-color / 首帧底 → **#ffffff**；Paper Finch 动画层新增 `--lake-bg-launch`（浅色白 / 深色黑、纯黑档深灰），与原生 splash 同色不闪。**删除** `drawable*/splash.png`（10 个，436KB）——以后不会再被误引用。
 - **桌面端（定稿）**：`electron/boot-poster.png` 换成 `public/brand/14a-paper-finch-mark.png`（透明折纸，同一份资产）；boot.html 去掉 APNG + poster 双图，只留一张 + 250ms 淡入（reduced-motion 静态）；**删除** `electron/boot-anim.apng`（328KB）并同步 `BOOT_SPLASH_ASSETS` / `package.json build.files` / `bootAssets.test`（新增「poster 必须与透明折纸逐字节相同」的圆盘回归护栏）。桌面启动底仍走主题窗色（#f3f4f6 / #1e2126，用户未要求改白）。
+- **桌面端底色跟进（用户追加「都统一白色」）**：boot.html 浅色档 #f3f4f6 → **#ffffff**（深色档仍 #1e2126）；主进程两个窗口 backgroundColor 浅色 #E9EDF3 → **#FFFFFF**；index.html theme-color → #ffffff；新增桌面令牌 --lake-bg-launch（浅白 / 深 #191a1d），.loading-screen（BrandLaunchMark 启动幕布）铺它 ⇒ 启动窗/首帧/启动幕布三处同白。
 - **验证**：移动真机冷启动逐帧抓图 —— 原生 splash 纯白无图、应用内白底 + 透明折纸 + 「正在打开本地知识库」；桌面用离屏 Electron 渲染 boot.html 截图确认只有折纸（无圆盘）。
 
 ### 261120 之后 · 移动知识库书架卡尺寸（用户点单，两轮）

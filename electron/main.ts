@@ -313,7 +313,8 @@ function createBootWindow() {
     resizable: false,
     movable: true,
     title: "LakexLocalNotes",
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#E9EDF3", // 启动窗与浅色窗底令牌一致（261112：去掉白底闪屏）
+    // 261120 用户点单「都统一白色」：浅色档启动底 = 纯白（与 boot.html / 移动端一致；深色档仍 #1e2126）。
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#FFFFFF",
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -375,7 +376,8 @@ async function createWindow() {
     minHeight: 480,
     show: false,
     // 与 boot 窗同一个主题底色：渲染进程重载/首帧失败时也不能闪纯白。
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#E9EDF3",
+    // 同 boot 窗：浅色档纯白（首帧前的那一层）；深色档 #1e2126。
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#FFFFFF",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // 红绿灯垂直居中到「可见头区」中心：y + 直径/2 = (TOPBAR_HEIGHT + TOPBAR_SEAM)/2。
     // **别再把 y 写成常数**：曾因顶栏 38→32 而红绿灯没跟、中心错位 3px（用户 260923 报）。

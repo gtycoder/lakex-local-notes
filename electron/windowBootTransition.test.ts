@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 const MAIN = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 
 describe("主窗口 / boot 窗口切换", () => {
-  it("主窗显式设置主题底色，避免重载时闪纯白", () => {
-    expect(MAIN).toContain('backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#E9EDF3"');
+  it("主窗显式设置底色：浅色档纯白（与 boot 窗同色，261120 用户点单「都统一白色」），深色档 #1e2126", () => {
+    expect(MAIN).toContain('backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#FFFFFF"');
+    // 重载时不再有 #E9EDF3 灰底那层（浅色启动三处同白：boot.html / 主窗底 / loading-screen）
+    expect(MAIN).not.toContain('"#E9EDF3"');
   });
 
   it("揭示主窗时先藏 boot、再 show 主窗、最后 destroy boot", () => {
