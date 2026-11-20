@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpToLine, Copy, FolderInput, History, Info, Lock, LockOpen, Pencil, Pin, Tag as TagIcon, Trash } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDownToLine, ArrowUpToLine, Copy, FolderInput, History, Info, Lock, LockOpen, Pencil, Pin, Tag as TagIcon, Trash } from "lucide-react";
 import { Menu, Submenu } from "../../ui/Overlay";
 import { ExportSubmenuItem, type ExportFormat } from "../../ui/ExportSubmenuItem";
 import { CreateChildItems, type CreateChildKind } from "./CreateChildItems";
@@ -28,6 +28,11 @@ export interface ContextMenuProps {
   /** 「置顶」入口（261107，设备本地）：文档/分组/笔记本都可置顶；不改变原目录。 */
   pinned: boolean;
   onTogglePin: () => void;
+  /** 261120：「收起 / 取消收起」——**笔记本专属**（用户：和重命名、删除并列；笔记本本来就没有置顶）。
+   *  collapsible = core/notebookCollapse.canCollapseNotebook（回收站/未分类/日记本逻辑排除，不给入口）。 */
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   /** 批量操作进行中：创建副本禁用（IPC 并发复制没有意义）。 */
   busy: boolean;
   /** 261120：在上方 / 在下方新建（与当前文档同父级紧邻插入；只有文档行提供）。
@@ -36,7 +41,7 @@ export interface ContextMenuProps {
   onClose: () => void;
 }
 
-export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, onCreateSibling, busy, onClose }: ContextMenuProps) => {
+export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, collapsible, collapsed, onToggleCollapse, onCreateSibling, busy, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -107,7 +112,17 @@ export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMark
           <button className="ln-menu__item" role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
         </>
       ) : (
-        <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+        <>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+          {/* 261120 用户点单：笔记本行与「重命名/删除」并列的「收起」（= 置顶的反向，纯设备本地）。
+              回收站/未分类/日记本由 core/notebookCollapse 逻辑排除 ⇒ 这里连入口都不给。 */}
+          {collapsible && onToggleCollapse && (
+            <button className="ln-menu__item" role="menuitem" onClick={() => { onToggleCollapse(); onClose(); }}>
+              {collapsed ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+              <span>{collapsed ? "取消收起" : "收起"}</span>
+            </button>
+          )}
+        </>
       )}
       <div className="context-menu-sep" role="separator" />
       <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>

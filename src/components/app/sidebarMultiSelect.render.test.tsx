@@ -440,7 +440,8 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
 
     rightClick("nb");
-    expect(tokens()).toEqual(["重命名", "---", "删除"]);
+    // 261120 用户点单：笔记本行新增「收起」（与重命名、删除并列；笔记本本来没有置顶）
+    expect(tokens()).toEqual(["重命名", "收起", "---", "删除"]);
   });
 
   it("单条右键「置顶」⇒ 写入设备本地 + 出现置顶区；再次右键变为「取消置顶」", () => {

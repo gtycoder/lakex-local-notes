@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261120 之后 · 笔记本「已收起」（用户点单批）
+
+- **需求（原话口径已对齐）**：把不常用的笔记本收进「已收起」分区；**纯设备本地、各端独立、不进 S3**；桌面 = 置顶的反向（置底），展开后行为与目录一致、区域最多 **1/3 目录栏高度**（最大高度、动态）；移动端 = 知识库主列表下方一条分割 + 折叠分组，**默认收起**；两端都记忆展开态；收起项从主列表消失、不参与排序（取消收起回到列表末尾，不做「记原位」）；笔记本菜单入口与重命名/删除并列（**笔记本本来没有置顶**）；**不做拖拽进分区**；日记本/回收站/「未分类」从逻辑上排除；其它入口（切换笔记本/搜索/新建父级）全量不过滤。
+- **实现（单一来源）**：core/notebookCollapse.ts = canCollapseNotebook（三类特殊本逻辑排除）+ pruneCollapsedNotebookIds + splitCollapsedNotebooks + normalize；桌面 store features/sidebar/collapsedNotebooks.ts（lakex-local-notes-v3.sidebar-collapsed-notebooks / -open）、移动 store mobile/data/collapsedNotebooks.ts（lakex-local-notes-mobile.collapsed-notebooks / collapsedOpen），两端各自 localStorage、不写库。
+- **桌面**：Sidebar 把 roots 用 splitCollapsedNotebooks 切两份；底部 SidebarCollapsedSection（同一份 TreeRow ⇒ 子树/右键/拖拽全同款），max-height 33.333% + 区内滚动；右键菜单「收起/取消收起」（canCollapseNotebook 决定是否给入口）；搜索/标签筛选期间不做收纳（与置顶区同口径）；全部收起时主列表给提示。
+- **移动**：HomePage 知识库书架/列表共用切分；底部 home-collapsed 分割 + 折叠分组（默认收起），展开内联渲染 NotebookGrid；长按菜单加「收起/取消收起」（逻辑排除的本不出现该项）；全部收起时主列表提示「笔记本都在下方「已收起」里」（不再显示「暂无知识库」）。
+- **验证**：桌面 dev 实测（5 本 → 收起「测试本」后主列表 4 本、底部「已收起 1」默认折叠；展开后 3 行 = 本 + 2 篇子文档、分区高 91px < 792/3；展开态落盘；恢复：取消收起后分区消失）；移动端实测（长按「个人笔记」→ 菜单含「收起」→ 主列表清空 + 提示 + 「已收起 1」；展开后卡片出现、展开态落盘）。护栏：core/notebookCollapse.test（含 split）、两端 store 测试（localStorage-only）、sidebarCollapsed.render.test（7 例：收起/取消/默认折叠/特殊本排除/历史残留清理/全部收起提示）、mobile collapsedNotebooks.render.test（5 例）。
 ### 261120 之后 · 多维表内容字号 15px（用户点单）
 
 - **需求**：先问「多维表的默认字号是多少」→ 答 14px → 用户「改成15吧」（与刚定的目录 15px 对齐）。

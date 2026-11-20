@@ -581,6 +581,52 @@
  * 产品既有决策一律保留：标题超长**直接裁切不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**
  * （选中态不常驻，用户 260914）；拖拽落点样式不动。 */
 .note-list { padding: 0 5px; }
+/* 261120 用户点单：目录底部「已收起」笔记本分区（= 置顶的反向：置底）。
+   默认收起（展开态记忆见 features/sidebar/collapsedNotebooks），展开后行行为与目录完全一致。
+   高度 = 内容自适应，**最多 1/3 目录栏高度**（父级是 flex 列的侧栏 ⇒ 百分比 max-height 可解析），超出区内滚动。 */
+.sidebar-collapsed {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 33.333%;
+  margin-top: 4px;
+  border-top: 0.5px solid var(--lake-border-1);
+}
+.sidebar-collapsed__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  margin: 4px 4px 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  font: inherit;
+  font-size: var(--lake-font-size-body);
+  font-weight: var(--lake-font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar-collapsed__header:hover {
+  background: var(--lake-bg-press);
+  color: var(--lake-text-1);
+}
+.sidebar-collapsed__count {
+  margin-left: auto;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-collapsed__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
 .note-row {
   /* 261006：改**对称** 8px（原右 7 / 左 8——左侧那 1px 来自 Sidebar 的行内 paddingLeft:8，
    * 已删除；值现在只在本条 shell 层规则里）。注意 app/shell.css 里那条 .note-row 的 padding

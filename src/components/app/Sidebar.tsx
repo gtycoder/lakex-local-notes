@@ -31,6 +31,15 @@ import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
+import { SidebarCollapsedSection } from "./SidebarCollapsedSection";
+import {
+  readCollapsedNotebookIds,
+  readCollapsedOpen,
+  toggleCollapsedNotebook,
+  writeCollapsedNotebookIds,
+  writeCollapsedOpen,
+} from "../../features/sidebar/collapsedNotebooks";
+import { canCollapseNotebook, pruneCollapsedNotebookIds, splitCollapsedNotebooks } from "../../core/notebookCollapse";
 import { toggleExpandedNode } from "./sidebar/treeExpandState";
 import {
   readPinnedOpen,
@@ -188,6 +197,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   /** 桌面「置顶」：纯设备本地的入口列表（不改原目录、不写库、不进 S3）。 */
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => readPinnedTreeIds());
   const [pinnedOpen, setPinnedOpen] = useState<boolean>(() => readPinnedOpen());
+  /** 桌面「已收起」笔记本：纯设备本地的归纳状态（默认收起；收起后从主列表消失，只在底部置底区出现）。 */
+  const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<string[]>(() => readCollapsedNotebookIds());
+  const [collapsedOpen, setCollapsedOpen] = useState<boolean>(() => readCollapsedOpen());
   /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
   const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
   /** 批量「添加标签…」：只追加，可现场新建；id 快照与标签目录在打开时现读。 */
@@ -229,12 +241,32 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     return { childrenByParent: treeIndex.childrenByParent, visibleIds };
   }, [treeIndex, props.tagFilter]);
   const roots = (displayIndex.childrenByParent.get(null) ?? []).filter((node) => displayIndex.visibleIds.has(node.id));
+  /**
+   * 「已收起」（261120 用户点单）：收起项从目录主列表消失、只在底部置底区出现。
+   * 搜索/标签筛选期间**不做收纳**（与置顶区同一口径：筛选时底部区隐藏，免得「目录被筛掉、底部还在」）。
+   */
+  const collapseSectionHidden = !!query || (props.tagFilter ? isTagSelectionActive(props.tagFilter.selection) : false);
+  const collapsedIdSet = useMemo(() => new Set(collapsedNotebookIds), [collapsedNotebookIds]);
+  const { active: activeRoots, collapsed: collapsedRootsRaw } = useMemo(
+    () => splitCollapsedNotebooks(roots, collapseSectionHidden ? [] : collapsedNotebookIds),
+    [roots, collapsedNotebookIds, collapseSectionHidden],
+  );
+  const collapsedIdSetForMenu = collapsedIdSet;
+  const collapsedRoots = collapsedRootsRaw;
 
   // ---- 目录树多选（261106 task-81，用户定稿 A 方案）----
   // 可见可多选行（DFS 顺序；笔记本跳过）：Shift 区间与「全选」都以它为准。
   const visibleSelectableOrder = useMemo(() => selectableVisibleOrder(displayIndex), [displayIndex]);
   const selectedIdSet = useMemo(() => new Set(selection.ids), [selection.ids]);
   const nodeById = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
+  // 「已收起」历史/异常写入清理：节点已加载且确认**不可收起**（回收站/未分类/日记本/非笔记本）才剔除。
+  // 节点未知时保留（加载期/筛选期不误删），否则会在树还没到时把用户的收纳清空。
+  useEffect(() => {
+    const next = pruneCollapsedNotebookIds(collapsedNotebookIds, nodeById);
+    if (next.length === collapsedNotebookIds.length) return;
+    writeCollapsedNotebookIds(next);
+    setCollapsedNotebookIds(next);
+  }, [collapsedNotebookIds, nodeById]);
   const selectionActions = useMemo(() => treeSelectionActions(nodeById, selection), [nodeById, selection]);
   /** 「创建副本」可用判据（261106）：选区里**全是文档**才成立 ⇒ 分组/笔记本/混选时菜单项禁用并给原因。 */
   const selectionAllNotes = useMemo(
@@ -1149,6 +1181,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     [query, props.tagFilter, pinnedIds, nodeById],
   );
   const refreshPinnedState = useCallback(() => setPinnedIds(readPinnedTreeIds()), []);
+  /** 「收起 / 取消收起」笔记本（261120 用户点单）：逻辑排除回收站/未分类/日记本，仅笔记本可收起。 */
+  const toggleCollapseNode = useCallback((node: TreeNode) => {
+    if (!canCollapseNotebook(node)) return;
+    const nowCollapsed = toggleCollapsedNotebook(node.id);
+    setCollapsedNotebookIds(readCollapsedNotebookIds());
+    setBatchNotice((nowCollapsed ? "已收起《" : "已取消收起《") + node.title + "》");
+  }, []);
+  const toggleCollapsedSection = useCallback(() => {
+    setCollapsedOpen((open) => {
+      writeCollapsedOpen(!open);
+      return !open;
+    });
+  }, []);
   const togglePinNode = useCallback((node: TreeNode) => {
     // 笔记本不可置顶（用户 261107 明确）：只有文档 / 分组可以。
     if (node.nodeType === "notebook") return;
@@ -1323,15 +1368,23 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         />
       )}
       <nav className="note-list tree-list" ref={treeRef} onClick={(event) => { if (event.target === event.currentTarget) cancelSelection(); }}>
-        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
-        {roots.length === 0 && <div className="empty-list">{
+        {activeRoots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
+        {activeRoots.length === 0 && <div className="empty-list">{
           query
             ? "没有匹配的目录项，Esc 或再点筛选图标可清空"
             : props.tagFilter && isTagSelectionActive(props.tagFilter.selection)
               ? "没有符合标签筛选的文档，点标签上的 × 清除筛选"
-              : "点击 + 新建第一个笔记本"
+              : collapsedRoots.length > 0
+                // 用户 261120：所有笔记本都收起时主列表空着，但不代用户把任何本"救"回来
+                ? "笔记本都在下方「已收起」里，展开分区查看"
+                : "点击 + 新建第一个笔记本"
         }</div>}
       </nav>
+      {collapsedRoots.length > 0 && (
+        <SidebarCollapsedSection open={collapsedOpen} count={collapsedRoots.length} onToggle={toggleCollapsedSection}>
+          {collapsedRoots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
+        </SidebarCollapsedSection>
+      )}
       {batchMenu && (
         <TreeSelectionContextMenu
           x={batchMenu.x}
@@ -1350,7 +1403,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onClose={() => setBatchMenu(null)}
         />
       )}
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} onCreateSibling={(position, kind) => createSibling(contextNode, position, kind)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} collapsible={canCollapseNotebook(contextNode)} collapsed={collapsedIdSetForMenu.has(contextNode.id)} onToggleCollapse={() => toggleCollapseNode(contextNode)} onCreateSibling={(position, kind) => createSibling(contextNode, position, kind)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId, kind) => void startImport(targetId, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {

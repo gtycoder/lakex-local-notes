@@ -276,6 +276,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .home-section { background: transparent; border-radius: 0; margin: 0; overflow: visible; }
 .home-section:first-child { margin-top: 0; }
 .home-section:last-child { margin-bottom: 0; }
+/* 261120 用户点单：知识库底部「已收起」笔记本分组 —— 主列表下方一条分割 + 折叠分组，默认收起。
+   书架/列表共用（NotebookGrid 内部按 view 渲染）；展开是页面内联，不是弹层。 */
+.home-collapsed { margin-top: 10px; border-top: 0.5px solid var(--lake-border-1); }
+.home-section__count { color: var(--lake-text-3); font-size: var(--lake-font-size-small); font-variant-numeric: tabular-nums; }
 .home-section--list { margin: 0; }
 .home-section--list .home-section__head { padding: 12px 16px 6px; }
 .home-section__head { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 16px 6px; }

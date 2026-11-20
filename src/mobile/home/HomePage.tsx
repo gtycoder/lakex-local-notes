@@ -11,7 +11,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 // 261120 首屏瘦身：虚拟行窗口拆成懒组件（@tanstack ≈8.2KB gzip 不再进入口 chunk）。
 const QuickNotesVirtualList = lazy(() => import("./QuickNotesVirtualList").then((m) => ({ default: m.QuickNotesVirtualList })));
-import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, ListFilter, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, ListFilter, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 const NotebookGrid = lazy(() => import("./NotebookGrid").then((m) => ({ default: m.NotebookGrid })));
@@ -22,6 +22,14 @@ import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quic
 import { quickNotePrewarmIds } from "../../core/quickNoteDetailPrewarm";
 import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import {
+  readCollapsedNotebookIds,
+  readCollapsedOpen,
+  toggleCollapsedNotebook,
+  writeCollapsedNotebookIds,
+  writeCollapsedOpen,
+} from "../data/collapsedNotebooks";
+import { canCollapseNotebook, pruneCollapsedNotebookIds, splitCollapsedNotebooks } from "../../core/notebookCollapse";
 import { MobileSheet } from "../ui/MobileSheet";
 import { NameSheet } from "../ui/NameSheet";
 import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
@@ -199,6 +207,9 @@ export function HomePage(props: HomePageProps) {
    * 菜单只放"编辑"三项：重命名 / 设置图标 / 删除笔记本 —— **不含**新建文档、新建分组（用户明确去掉）。
    */
   const [nbMenuFor, setNbMenuFor] = useState<TreeNode | null>(null);
+  /** 「已收起」笔记本（261120 用户点单）：纯设备本地归纳；收起后从知识库主列表消失，只在底部「已收起」分组出现。 */
+  const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<string[]>(() => readCollapsedNotebookIds());
+  const [collapsedNotebooksOpen, setCollapsedNotebooksOpen] = useState<boolean>(() => readCollapsedOpen());
   const [renamingNb, setRenamingNb] = useState<{ id: string; value: string } | null>(null);
   const [iconNb, setIconNb] = useState<TreeNode | null>(null);
   /** 「＋」按压态（语雀手感）：revealed = 长按到点浮出气泡，armed = 已上滑越过触发线。 */
@@ -288,6 +299,31 @@ export function HomePage(props: HomePageProps) {
   );
   const toggleFavoriteOpen = (): void => {
     setFavoriteOpen((v) => { const next = !v; writeFavoritesOpen(next); return next; });
+  };
+
+  // 「已收起」笔记本（261120 用户点单）：主列表只留常用的，收起项落到知识库底部「已收起」分组。
+  // 书架/列表两种视图共用同一份切分；剔除逻辑单一来源 = core/notebookCollapse（回收站/未分类/日记本）。
+  const collapsedNotebookIdSet = useMemo(() => new Set(collapsedNotebookIds), [collapsedNotebookIds]);
+  const { active: activeNotebookList, collapsed: collapsedNotebookList } = useMemo(
+    () => splitCollapsedNotebooks(notebooks, collapsedNotebookIds),
+    [notebooks, collapsedNotebookIds],
+  );
+  useEffect(() => {
+    // 已知但不可收起的 id（回收站/未分类/日记本/非笔记本）静默剔除；节点未知时保留（加载期不误删）。
+    const byId = new Map(notebooks.map((nb) => [nb.id, nb]));
+    const next = pruneCollapsedNotebookIds(collapsedNotebookIds, byId);
+    if (next.length === collapsedNotebookIds.length) return;
+    writeCollapsedNotebookIds(next);
+    setCollapsedNotebookIds(next);
+  }, [collapsedNotebookIds, notebooks]);
+  const toggleCollapsedNotebooks = (): void => {
+    setCollapsedNotebooksOpen((open) => { writeCollapsedOpen(!open); return !open; });
+  };
+  const toggleNotebookCollapse = (nb: TreeNode): void => {
+    if (!canCollapseNotebook(nb)) return; // 逻辑排除：回收站/未分类/日记本/非笔记本
+    const nowCollapsed = toggleCollapsedNotebook(nb.id);
+    setCollapsedNotebookIds(readCollapsedNotebookIds());
+    showToast((nowCollapsed ? "已收起《" : "已取消收起《") + (nb.title || "未命名") + "》");
   };
 
   const {
@@ -845,15 +881,51 @@ export function HomePage(props: HomePageProps) {
               <span className="home-section__title">笔记本</span>
             </div>
             <Suspense fallback={null}>
+            {activeNotebookList.length === 0 && collapsedNotebookList.length > 0 ? (
+              // 261120：全部笔记本都收起时主列表不显示「暂无知识库」（那会误导成没有笔记本），
+              // 也不代用户把任何本"救"回来 —— 只指向下方的「已收起」分组。
+              <div className="mb-empty">笔记本都在下方「已收起」里</div>
+            ) : (
             <NotebookGrid
-              notebooks={notebooks}
+              notebooks={activeNotebookList}
               docCounts={docCounts}
               view={libraryView}
               onOpenNotebook={onOpenNotebook}
               onLongPressNotebook={(nb) => setNbMenuFor(nb)}
             />
+            )}
             </Suspense>
           </section>
+          {/* 「已收起」（261120 用户点单）：知识库主列表下方的分割 + 折叠分组，默认收起；
+              展开后与上面完全同款（书架/列表视图同样生效），不是弹层。 */}
+          {collapsedNotebookList.length > 0 && (
+            <section className="home-section home-collapsed" key={"collapsed-" + libraryView}>
+              <div className="home-section__head">
+                <button
+                  type="button"
+                  className="home-section__toggle"
+                  onClick={toggleCollapsedNotebooks}
+                  aria-expanded={collapsedNotebooksOpen}
+                  aria-label={collapsedNotebooksOpen ? "收起已收起笔记本" : "展开已收起笔记本"}
+                >
+                  <span className="home-section__title">已收起</span>
+                  {collapsedNotebooksOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span className="home-section__count" aria-hidden="true">{collapsedNotebookList.length}</span>
+                </button>
+              </div>
+              {collapsedNotebooksOpen && (
+                <Suspense fallback={null}>
+                  <NotebookGrid
+                    notebooks={collapsedNotebookList}
+                    docCounts={docCounts}
+                    view={libraryView}
+                    onOpenNotebook={onOpenNotebook}
+                    onLongPressNotebook={(nb) => setNbMenuFor(nb)}
+                  />
+                </Suspense>
+              )}
+            </section>
+          )}
         </div>
         </section>
         <section ref={quickPaneRef} className="mobile-tab-pane">
@@ -1092,6 +1164,14 @@ export function HomePage(props: HomePageProps) {
         items={[
           { id: "rename", label: "重命名", icon: Pencil },
           { id: "icon", label: "设置图标", icon: SmilePlus },
+          // 261120 用户点单：「收起 / 取消收起」与重命名、图标、删除并列（笔记本专属；三项特殊本不给入口）
+          ...(nbMenuFor && canCollapseNotebook(nbMenuFor)
+            ? [{
+                id: "collapse",
+                label: collapsedNotebookIdSet.has(nbMenuFor.id) ? "取消收起" : "收起",
+                icon: collapsedNotebookIdSet.has(nbMenuFor.id) ? ArchiveRestore : Archive,
+              }]
+            : []),
           { id: "delete", label: "删除笔记本", icon: Trash, danger: true },
         ]}
         onClose={() => setNbMenuFor(null)}
@@ -1101,6 +1181,7 @@ export function HomePage(props: HomePageProps) {
           if (!nb) return;
           if (it.id === "rename") setRenamingNb({ id: nb.id, value: nb.title || "" });
           else if (it.id === "icon") setIconNb(nb);
+          else if (it.id === "collapse") toggleNotebookCollapse(nb);
           else if (it.id === "delete") void deleteNotebook(nb);
         }}
       />
