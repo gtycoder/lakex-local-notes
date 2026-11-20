@@ -153,9 +153,9 @@ describe("capture 首帧（261022，零等待）", () => {
     expect(MAIN_ACTIVITY).toContain("lakeLaunchUrl");
   });
 
-  it("首帧纯色底：不盖图、不延迟", () => {
+  it("首帧纯色底：不盖图、不延迟（261120 用户点单：启动底改白）", () => {
     const HTML = read("../../../mobile.html");
-    expect(HTML).toContain("background: #ededf1");
+    expect(HTML).toContain("background: #ffffff");
     expect(HTML).not.toContain("boot-screen");
   });
 
@@ -166,8 +166,10 @@ describe("capture 首帧（261022，零等待）", () => {
     expect((MANIFEST.match(/android:host="quick-note"/g) ?? [])).toHaveLength(1);
     expect(SHORTCUTS).toContain('android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"');
     expect(ANDROID_STYLES).toContain("AppTheme.NoActionBarLaunchNoLogo");
-    expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_none</item>');
-    expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>');
+    // 261120 用户点单：普通启动也**不再显示图标** —— 原 launcher 图标的薄荷背景层就是
+    // 「绿色纸片背后的圆形底」；现在普通启动与 capture 的 NoLogo 同口径（品牌只在应用内 Paper Finch 动画出现）。
+    expect(ANDROID_STYLES_V31).not.toMatch(/windowSplashScreenAnimatedIcon">@mipmap\//);
+    expect((ANDROID_STYLES_V31.match(/@drawable\/launch_splash_none/g) ?? []).length).toBe(2);
   });
 
   it("写作卡骨架与真实卡片同构（正文/标签/动作行），内核就绪前盖住白卡", () => {

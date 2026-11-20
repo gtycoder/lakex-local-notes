@@ -38,7 +38,8 @@ export const PRELOAD_SOURCE_FILE = "electron/preload.cjs";
 
 /** 启动遮罩页与它的两张图：源树文件直接进包（build.files 里逐个列出）。 */
 export const BOOT_SPLASH_FILE = "electron/boot.html";
-export const BOOT_SPLASH_ASSETS = ["electron/boot-anim.apng", "electron/boot-poster.png"] as const;
+/** 261120：去掉带动画 APNG（它带薄荷圆盘）——启动页只留透明折纸 poster。 */
+export const BOOT_SPLASH_ASSETS = ["electron/boot-poster.png"] as const;
 
 /** Electron 打包后 asar 外层解包目录名（固定名，不能改）。 */
 export const ASAR_UNPACKED_DIR = "app.asar.unpacked";

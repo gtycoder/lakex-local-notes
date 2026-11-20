@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 普通启动：保留 app logo（Android 12+ 系统 splash）。 -->
+    <!-- 普通启动（Android 12+ 系统 splash）：261120 用户点单 —— 纯白底、**不显示图标**。
+         原 launcher 自适应图标的背景层是薄荷色 ⇒ 系统把它画成「绿色纸片背后的圆形底」。 -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/launch_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_none</item>
         <item name="android:windowBackground">@color/launch_background</item>
     </style>
 

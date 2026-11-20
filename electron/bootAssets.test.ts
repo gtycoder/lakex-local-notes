@@ -21,20 +21,20 @@ describe("boot.html 资源", () => {
     expect(Buffer.byteLength(HTML, "utf8")).toBeLessThan(8 * 1024);
   });
 
-  it("引用两份独立图片，且文件存在、是 PNG、尺寸合理", () => {
-    expect(HTML).toContain('src="boot-anim.apng"');
+  it("只引用一张透明折纸（261120 用户点单：去掉薄荷圆盘；APNG 连同圆盘一起删掉）", () => {
     expect(HTML).toContain('src="boot-poster.png"');
-    for (const rel of ["boot-anim.apng", "boot-poster.png"]) {
-      const buf = readFileSync(new URL(rel, here));
-      expect(buf.subarray(0, 8).equals(PNG_MAGIC), rel + " 必须是 PNG").toBe(true);
-      expect(statSync(new URL(rel, here)).size).toBeGreaterThan(10 * 1024);
-    }
+    expect(HTML).not.toContain("boot-anim.apng");
+    const buf = readFileSync(new URL("boot-poster.png", here));
+    expect(buf.subarray(0, 8).equals(PNG_MAGIC), "boot-poster.png 必须是 PNG").toBe(true);
+    expect(statSync(new URL("boot-poster.png", here)).size).toBeGreaterThan(10 * 1024);
+    // 圆盘回归护栏：poster 必须与「透明底绿折纸」是**同一份**资产
+    expect(buf.equals(readFileSync(new URL("../public/brand/14a-paper-finch-mark.png", here)))).toBe(true);
   });
 
   it("打包清单包含启动页图片（electron-builder files）", () => {
     const pkg = JSON.parse(read("../package.json")) as { build?: { files?: string[] } };
     const files = pkg.build?.files ?? [];
-    for (const rel of ["electron/boot.html", "electron/boot-anim.apng", "electron/boot-poster.png"]) {
+    for (const rel of ["electron/boot.html", "electron/boot-poster.png"]) {
       expect(files, rel + " 必须在 build.files 里，否则打包后启动页 404").toContain(rel);
     }
   });
@@ -47,7 +47,6 @@ describe("boot.html 资源", () => {
   });
 
   it("装饰图 alt 为空（状态由 role=status 的文字播报）", () => {
-    expect(HTML).toMatch(/<img class="boot__anim"[^>]*alt=""/);
-    expect(HTML).toMatch(/<img class="boot__poster"[^>]*alt=""/);
+    expect(HTML).toMatch(/<img class="boot__mark"[^>]*alt=""/);
   });
 });

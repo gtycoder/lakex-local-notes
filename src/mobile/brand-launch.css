@@ -5,7 +5,8 @@
   z-index: var(--mobile-z-dialog);
   display: grid;
   place-items: center;
-  background: var(--lake-bg-window);
+  /* 261120 用户点单：启动期间铺**白**（--lake-bg-launch；深色档为黑/深灰），与原生 splash 同色不闪。 */
+  background: var(--lake-bg-launch, var(--lake-bg-window));
 }
 .mb-launch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .mb-launch__mark {

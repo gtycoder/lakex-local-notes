@@ -3,13 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- theme-color 单一来源 = capacitor.config.ts 的 backgroundColor（#ededf1，与原生 splash 同色）；
+    <!-- theme-color 单一来源 = capacitor.config.ts 的 backgroundColor（**#ffffff**，与原生 splash 同色）。
+         261120 用户点单「启动用白色背景」：灰 #ededf1 → 白；原生 splash / 首帧底 / Paper Finch 动画三处一起白。
          261112：删掉此前的 #f5f6f8 副本 —— 两个 meta 后者胜，只是让单一来源凭空多一份漂移点。 -->
     <!-- 移动端 CSP：**单一来源 = vite.mobile.config.ts 的 MOBILE_CSP**，构建期注入本占位符。
          ⚠️ 不要在这里手写策略 —— 第二份副本必然与构建脚本漂移（261010 收口前的实际状态）。
          注入正确性由 src/mobile/mobileCspSingleSource.test.ts 卡住。 -->
     <meta http-equiv="Content-Security-Policy" content="%MOBILE_CSP%" />
-    <meta name="theme-color" content="#ededf1" />
+    <meta name="theme-color" content="#ffffff" />
     <!-- 261115：同 index.html，声明支持明/暗（首帧底仍与原生 splash 同色，避免白闪） -->
     <meta name="color-scheme" content="light dark" />
     <!-- 261115 A03：同 index.html（Android WebView 的文字缩放档） -->
@@ -17,7 +18,7 @@
     <title>LakexLocalNotes</title>
     <!-- 261022：首帧纯色底（与原生 splash 同色）。不是图片/遮罩，只避免 WebView 首帧前的白闪。 -->
     <style>
-      html, body { margin: 0; height: 100%; background: #ededf1; }
+      html, body { margin: 0; height: 100%; background: #ffffff; }
     </style>
   </head>
   <body>

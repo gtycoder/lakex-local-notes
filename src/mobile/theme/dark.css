@@ -12,6 +12,8 @@
   --mb-canvas-2: #000000;
   --mb-canvas-glow: transparent;
   --lake-bg-window: #000000;
+  /* 启动底（深色档）= 纯黑：与同批白底浅色对称，深色下不会白闪。 */
+  --lake-bg-launch: #000000;
   --lake-bg-panel: #0a0a0a;
   --lake-bg-canvas: #0a0a0a;
   --lake-bg-raised: #141414;
@@ -35,6 +37,7 @@
   /* 表面（思源 midnight 分层：内容面 #1e1e1e / 块面 #2c2c2c / 外围 body #2e3236）。
    * panel 与 canvas 同值（深色四种黑的教训，260926）；结构不随主题变，只换变量。 */
   --lake-bg-window: #2e3236;
+  --lake-bg-launch: #2e3236;
   --lake-bg-panel: #1e1e1e;
   --lake-bg-canvas: #1e1e1e;
   --lake-bg-block: #2c2c2c;

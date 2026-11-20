@@ -20,21 +20,30 @@
       cursor: default;
     }
     .boot { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-    .boot__anim { display: block; width: 128px; height: 128px; }
-    .boot__poster { display: none; width: 128px; height: 128px; }
+    /* 261120 用户点单：桌面启动页**只留绿色折纸**（去掉薄荷圆形底盘）。
+       boot-poster.png 现为透明底折纸（与 public/brand/14a-paper-finch-mark.png 同一份）；
+       原来的带动画 APNG 也带圆盘 ⇒ 一并删除（省 328KB）。入场只做 250ms 淡入。 */
+    .boot__mark {
+      display: block;
+      width: 128px;
+      height: 128px;
+      animation: boot-in 250ms ease-out both;
+    }
     .boot__label { color: light-dark(#6f7784, #9aa4b2); font-size: 13px; line-height: 1.5; }
+    @keyframes boot-in {
+      from { opacity: 0; transform: translateY(6px) scale(0.98); }
+      to { opacity: 1; transform: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
-      .boot__anim { display: none; }
-      .boot__poster { display: block; }
+      .boot__mark { animation: none; }
     }
   </style>
 </head>
 <body>
   <div class="boot" role="status" aria-live="polite">
-    <!-- 261115：APNG/PNG 从内联 data URI 挪成独立文件（原 HTML 476KB → ~1.3KB）。
+    <!-- 261120：只留透明底绿色折纸（原来的 APNG/圆盘 poster 都带薄荷圆底，已删）。
          装饰图 alt=""（状态由下方 label 播报），避免读屏念出文件名。 -->
-    <img class="boot__anim" src="boot-anim.apng" alt="" width="128" height="128" />
-    <img class="boot__poster" src="boot-poster.png" alt="" width="128" height="128" />
+    <img class="boot__mark" src="boot-poster.png" alt="" width="128" height="128" />
     <span class="boot__label">正在打开本地知识库</span>
   </div>
 </body>

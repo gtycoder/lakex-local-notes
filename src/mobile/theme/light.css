@@ -10,6 +10,9 @@
   /* 表面：思源分层 = 白（内容面）/ #f6f6f6（块面）/ #ebedf0（外围通道，= 思源 --b3-body-background）。
    * 不把外围铺进正文/小记卡 —— 卡与正文保持白色。 */
   --lake-bg-window: #ebedf0;
+  /* 261120 用户点单：**启动底用白**（原生 splash 同色；Paper Finch 动画期间也铺白，白→白不闪灰）。
+     只服务启动那一层（.mb-launch-overlay），不改窗口其它地方的 --lake-bg-window。 */
+  --lake-bg-launch: #ffffff;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f6f6f6;
