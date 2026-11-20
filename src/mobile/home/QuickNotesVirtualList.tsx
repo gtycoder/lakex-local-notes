@@ -11,12 +11,14 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+// 类型只从 HomePage 取（type-only，编译后擦除 ⇒ 不产生运行时循环依赖）。
+import type { MobileQuickNote } from "./HomePage";
 
 export interface QuickNotesVirtualListProps {
   /** 已排序好的小记（同一数组引用变化 = 需要重新 measure）。 */
-  items: readonly { id: string }[];
+  items: readonly MobileQuickNote[];
   /** 第 index 条怎么渲染（父级闭包，含选中态/预览/长按等语义）。 */
-  renderCard: (note: never) => ReactNode;
+  renderCard: (note: MobileQuickNote) => ReactNode;
   /** 小记列表的滚动容器（父级 ref 注入；未就绪时先不虚拟化）。 */
   scrollElement: HTMLDivElement | null;
   /** 外部要求滚到某条的下标（全局搜索命中/待处理小记）；消费后通过 onScrollToIndexDone 清空。 */
@@ -78,7 +80,7 @@ export function QuickNotesVirtualList({ items, renderCard, scrollElement, scroll
             data-index={item.index}
             style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "6px 14px", transform: `translateY(${item.start - scrollMargin}px)` }}
           >
-            {renderCard(note as never)}
+            {renderCard(note)}
           </div>
         );
       })}

@@ -4,6 +4,7 @@
  * 收起项从主列表消失、落到「笔记本」下方的折叠分组（默认收起、可展开）、展开态记忆；
  * 特殊本（回收站/未分类/日记本）逻辑排除，永远留在主列表。
  */
+import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -119,6 +120,15 @@ describe("知识库「已收起」笔记本分组", () => {
     expect(libraryText).toContain("已收起");
     expect(libraryText).not.toContain("暂无知识库");
     expect(header()).not.toBeNull();
+  });
+
+  it("长按菜单口径：可收起本才有「收起/取消收起」，特殊本连入口都不给", () => {
+    // jsdom 环境下 import.meta.url 不是 file: 协议 ⇒ 用仓库根相对路径读源码（vitest cwd = 仓库根）
+    const src = readFileSync("src/mobile/home/HomePage.tsx", "utf8");
+    expect(src).toContain('id: "collapse"');
+    expect(src).toContain("canCollapseNotebook(nbMenuFor)");
+    expect(src).toContain('collapsedNotebookIdSet.has(nbMenuFor.id) ? "取消收起" : "收起"');
+    expect(src).toContain("toggleNotebookCollapse(nb)");
   });
 
   it("特殊本逻辑排除：即使被写进本地表也留在主列表（不渲染分组）", async () => {

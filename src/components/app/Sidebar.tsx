@@ -257,7 +257,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     () => splitCollapsedNotebooks(roots, collapseSectionHidden ? [] : collapsedNotebookIds),
     [roots, collapsedNotebookIds, collapseSectionHidden],
   );
-  const collapsedIdSetForMenu = collapsedIdSet;
   const collapsedRoots = collapsedRootsRaw;
 
   // ---- 目录树多选（261106 task-81，用户定稿 A 方案）----
@@ -1199,7 +1198,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       return next;
     });
     setBatchNotice((nowCollapsed ? "已收起《" : "已取消收起《") + node.title + "》");
-  }, []);
+  }, [props.nodes]);
   /**
    * 「已收起」分区内的子树展开态（261120 用户追加口径：**分区里的笔记本子级默认收起**）。
    * 与主列表的 expanded **完全隔离** ⇒ 收起前在主列表展开过的层级，进分区后不会自动摊开；
@@ -1450,7 +1449,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onClose={() => setBatchMenu(null)}
         />
       )}
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} collapsible={canCollapseNotebook(contextNode)} collapsed={collapsedIdSetForMenu.has(contextNode.id)} onToggleCollapse={() => toggleCollapseNode(contextNode)} onCreateSibling={(position, kind) => createSibling(contextNode, position, kind)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} collapsible={canCollapseNotebook(contextNode)} collapsed={collapsedIdSet.has(contextNode.id)} onToggleCollapse={() => toggleCollapseNode(contextNode)} onCreateSibling={(position, kind) => createSibling(contextNode, position, kind)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId, kind) => void startImport(targetId, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {

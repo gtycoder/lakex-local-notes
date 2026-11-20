@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#F0FBF5</color>
-    <!-- 261022：与原生 splash 同色，splash 退场到 WebView 首帧之间不露白（纯色，不盖图）。
-         261112 备注：原生启动面固定 #EDEDF1，与 WebView 首帧令牌 lake-bg-window(#E9EDF3) 有 4/0/2 的
-         不可见差；这是**刻意的平台面 vs 主题令牌**分离（重烤 11 张启动图成本 > 收益），不要为对齐改令牌。 -->
+    <!-- 原 11 张 drawable*/splash.png（带薄荷圆盘）已于 261120 删除：启动面不再有图，纯色 + 应用内折纸动画。
+         颜色 = 启动白，与 WebView 首帧 / Paper Finch 动画层 / 桌面启动三处同值（用户 261120「都统一白色」）。 -->
     <!-- 261120 用户点单：启动页**纯白底**（原 #EDEDF1 灰）；不留 logo/圆形底 —— 品牌只在应用内 Paper Finch 动画里出现。 -->
     <color name="launch_background">#FFFFFF</color>
 </resources>
