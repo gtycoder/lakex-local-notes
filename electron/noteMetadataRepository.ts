@@ -2,7 +2,7 @@ import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { assertTreeNodeTitle, normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
 import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
-import { nextSiblingSortOrder, shiftSiblingsForTop, type SortDb } from "./treeSort.js";
+import { nextSiblingSortOrder, shiftSiblingsAfter, shiftSiblingsForTop, type SortDb } from "./treeSort.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -135,14 +135,20 @@ export class NoteMetadataRepository {
     id: string;
     space?: DiaryFolderSpace | null;
     position?: NoteInsertPosition;
+    /** 261120（目录右键「在上方/在下方新建」）：插到该 sort_order 之后；给了锚点就不再走 position 口径。 */
+    afterSortOrder?: number;
   }): TreeNode {
     const { parentId, nodeType, title, id } = input;
     const now = this.deps.nowIso();
     const position = normalizeNoteInsertPosition(input.position);
-    // 排序语义单一实现见 electron/treeSort.ts（与文档创建共用同一套「顶部后移 / 末尾 MAX+1」）。
-    const sortOrder = position === "top" ? 0 : nextSiblingSortOrder(this.db as unknown as SortDb, this.workspaceId, parentId);
+    // 排序语义单一实现见 electron/treeSort.ts（与文档创建共用同一套「顶部后移 / 末尾 MAX+1 / 锚点后一位」）。
+    const sortOrder = input.afterSortOrder !== undefined
+      ? input.afterSortOrder + 1
+      : position === "top" ? 0 : nextSiblingSortOrder(this.db as unknown as SortDb, this.workspaceId, parentId);
     const tx = this.db.transaction(() => {
-      if (position === "top") {
+      if (input.afterSortOrder !== undefined) {
+        shiftSiblingsAfter(this.db as unknown as SortDb, { workspaceId: this.workspaceId, parentId, afterSortOrder: input.afterSortOrder, updatedAt: now });
+      } else if (position === "top") {
         // 分组/笔记本只有 tree_nodes 行 ⇒ withNotes=false（不误动 notes 表）。
         shiftSiblingsForTop(this.db as unknown as SortDb, { workspaceId: this.workspaceId, parentId, updatedAt: now, withNotes: false });
       }
@@ -163,13 +169,13 @@ export class NoteMetadataRepository {
     return this.insertTreeNodeAtPosition({ parentId: null, nodeType: "notebook", title: trimmed, id: id ?? this.deps.uuid(), space, position });
   }
 
-  createGroup(parentId: string, title: string, position?: NoteInsertPosition): TreeNode {
+  createGroup(parentId: string, title: string, position?: NoteInsertPosition, afterSortOrder?: number): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
     catch { throw new AppError("InvalidInput", "名称不能为空"); }
     this.deps.ensureParent(parentId);
     this.deps.assertParentCompatible(parentId, "group");
-    return this.insertTreeNodeAtPosition({ parentId, nodeType: "group", title: trimmed, id: this.deps.uuid(), position });
+    return this.insertTreeNodeAtPosition({ parentId, nodeType: "group", title: trimmed, id: this.deps.uuid(), position, afterSortOrder });
   }
 
   renameTreeNode(id: string, title: string): TreeNode {

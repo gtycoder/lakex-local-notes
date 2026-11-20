@@ -29,8 +29,8 @@ import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID } from "../..
 //（用户 261012 定稿「色板照抄语雀、不用那么多颜色」）；颜色仍全部取自 core/colorPalette.ts 的内核色阶。
 import { normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant } from "../../features/editor/selectionToolbar/colorMemory";
 import { colorApplyCommand, toFontSize, unwrapValue } from "../../features/editor/selectionToolbar/selectionToolbarModel";
-import { applyTextLink, captureLinkTarget, isValidLink, type LinkEditorTarget } from "../../features/editor/selectionToolbar/linkEditor";
-import { KLinkEditor } from "../../features/editor/selectionToolbar/kernelUiAtoms";
+import { applyTextLink, captureLinkTarget, type LinkEditorTarget } from "../../features/editor/selectionToolbar/linkEditor";
+import { LinkEditorSheet } from "./LinkEditorSheet";
 // 「编辑面」的口径：算术在 editSurfaceModel.ts（纯函数 + CI 单测），owner（外壳高 / 面板状态机 / 输入法 / 焦点守卫）在 useEditSurface.ts
 import { useEditSurface } from "./useEditSurface";
 import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
@@ -260,11 +260,11 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
    * 「Aa」面板内的**内联展开**件（用户 261012 定：全套走语雀方式 —— 都在面板内展开，不弹层、不做二级面板）：
    *   - 颜色：**两行各自独立**（用户 261014 定）—— 上排 A = 文字色、下面色板 = 背景色，
    *     不再共用"变体"状态（那样两行会互相回显，用户看到的"串联"）；
-   *   - linkOpen：链接编辑行是否展开（复用内核 .ne-link-editor 那套 UI 与共享判定 linkEditor.ts）。
+   *   - linkSheetOpen：链接编辑浮窗是否打开（261120 起改为底部可拖动浮窗；判定/选区还原仍走共享 linkEditor.ts）。
    */
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkText, setLinkText] = useState("");
-  const [linkSrc, setLinkSrc] = useState("");
+  /** 261120：链接编辑改成**底部可拖动浮窗**（LinkEditorSheet），不再在面板内联展开。 */
+  const [linkSheetOpen, setLinkSheetOpen] = useState(false);
+  const [linkInitialText, setLinkInitialText] = useState("");
   /** 261104：分栏选择 = 贴着「分栏」条目弹出的**气泡**（用户口径：像对话框一样在原位置出气泡；不再用面板底部内联行）。 */
   const [columnsAnchor, setColumnsAnchor] = useState<{ left: number; top: number } | null>(null);
   const linkTargetRef = useRef<LinkEditorTarget>({ range: null, selected: "" });
@@ -287,6 +287,11 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   useEffect(() => () => setDockPanelPhase("closed"), []);
   const usable = surface.kbOffset;
   const keyboardOpen = surface.keyboardOpen;
+  const panelHeight = surface.panelHeight;
+  /** 261120：链接编辑搬进底部浮窗后，面板里不再有需要输入法的控件 ⇒ 原「面板抬到键盘上方」
+   *（linkKeyboard / data-link-kb）整段作废，--kb-offset 回到通用口径。 */
+  const dockOffset = usable;
+  void panelHeight;
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
@@ -308,16 +313,10 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
-    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); setColumnsAnchor(null); }
+    if (!panelMode) { setLinkSheetOpen(false); setColumnsAnchor(null); }
   }, [panelMode]);
-  // 261104：链接编辑行内联展开后可能落在面板可视区之外（+ 面板内容已满 312px）⇒ 滚进可视区。
-  //（分栏已改锚定气泡，不再需要这条；气泡自带定位、不会被面板裁掉。）
-  useEffect(() => {
-    if (!linkOpen) return;
-    const inner = dockRef.current?.querySelector<HTMLElement>(".med-panel-inner");
-    const row = inner?.lastElementChild as HTMLElement | null;
-    row?.scrollIntoView({ block: "nearest" });
-  }, [linkOpen]);
+  // 261120：链接编辑搬进浮窗后，面板里不再有内联输入行 ⇒ 原来给它做的 scrollIntoView 补偿一并删除
+  //（分栏早改成锚定气泡，也不依赖这条）。
 
   // 注：原先的「面板⇄输入法硬互斥兜底」已删除——那条规则是"面板占键盘区"时代的补丁
   // （键盘被顶回来会把面板压成细条）。新口径下面板挂在工具栏上沿、键盘本就常驻，
@@ -391,18 +390,16 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     runPanel(command, ...(arg === undefined ? [] : [arg]));
   };
 
-  /** 展开/收起链接编辑行：打开时捕获当前选区（我们自己的输入框会抢走内核选区，确认前必须还回去）。 */
-  const toggleLinkEditor = () => {
-    if (linkOpen) { setLinkOpen(false); return; }
+  /** 打开链接浮窗：先捕获当前选区（我们自己的输入框会抢走内核选区，确认前必须还回去）。 */
+  const openLinkSheet = () => {
     snapshotSelection();
     const captured = captureLinkTarget();
     linkTargetRef.current = captured.range
       ? captured
       : { range: savedRangeRef.current, selected: savedRangeRef.current ? savedRangeRef.current.toString().trim() : "" };
-    setLinkText(linkTargetRef.current.selected);
-    setLinkSrc("");
+    setLinkInitialText(linkTargetRef.current.selected);
     setColumnsAnchor(null);
-    setLinkOpen(true);
+    setLinkSheetOpen(true);
   };
   /**
    * 分栏 = 贴着「分栏」条目弹一个**气泡**（用户 261104：像对话框一样在原位置出气泡，不要面板底部内联行）。
@@ -417,7 +414,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     left = Math.max(8, Math.min(left, vw - COLUMN_POPOVER_WIDTH - 8));
     let top = rect ? rect.top - COLUMN_POPOVER_HEIGHT - 8 : 8;
     if (top < 8) top = rect ? Math.min(rect.bottom + 8, vh - COLUMN_POPOVER_HEIGHT - 8) : 8;
-    setLinkOpen(false);
+    setLinkSheetOpen(false);
     setColumnsAnchor({ left, top });
   };
 
@@ -430,12 +427,12 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
    * 内核要等一拍才认"刚从我们输入框交还回来的选区"。
    * 桌面浮栏不受影响、保持同步执行 ⇒ 这条重试只放在移动端这一侧。
    */
-  const confirmLink = () => {
+  const confirmLink = (value: { text: string; src: string }) => {
     const target = linkTargetRef.current;
-    const text = linkText;
-    const src = linkSrc;
+    const { text, src } = value;
     const finish = (applied: boolean) => {
-      if (applied) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); }
+      // 成功才关浮窗；失败保持打开（绝不假装成功，用户可改链接再试）。
+      if (applied) setLinkSheetOpen(false);
       snapshotSelection();
       dismissIme();
       refreshActive();
@@ -485,7 +482,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "分栏", Icon: Columns2, run: (anchor) => openColumnsChooser(anchor) },
       { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
       // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
-      { label: "链接", Icon: Link2, run: () => toggleLinkEditor() },
+      { label: "链接", Icon: Link2, run: () => openLinkSheet() },
       { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
       // 加密文本（261023）：自定义卡「lake-locked-text」，与桌面「+」面板同一张卡（卡值是密文，明文从不进正文）
       { label: "加密文本", Icon: Lock, run: () => runPanel("insertCard", "customBlock", { $name: "lake-locked-text", $htmlStr: "" }, true) },
@@ -669,7 +666,13 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   const aaCls = "med-btn med-toggle med-aa" + (panelMode === "font" ? " med-open" : "");
 
   return (
-    <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${Math.round(usable)}px` } as import("react").CSSProperties}>
+    <div
+      ref={dockRef}
+      className="mobile-editor-dock"
+      data-panel={panelMode ?? "none"}
+
+      style={{ ["--kb-offset" as string]: `${Math.round(dockOffset)}px` } as import("react").CSSProperties}
+    >
       {/* 主工具栏（悬浮输入法上方）；对齐 Lake 官方：类别(+/Aa)展开即变 ×，命令按钮实时高亮 */}
       <div className="med-toolbar mb-glass" data-prevent-swipe onMouseDown={(e) => { e.preventDefault(); snapshotSelection(); }}>
         {/* 中间按钮可左右滑动；键盘键**固定在最右**（261017 用户点单 B 方案） */}
@@ -752,23 +755,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
                   ))}
                 </div>
               )}
-              {/* 链接编辑：**在本面板内联展开**（用户 261012：链接融合到 + 号里）。
-                  复用内核 .ne-link-editor 的 UI + 共享判定 linkEditor.ts（与桌面浮栏同一份）。 */}
-              {linkOpen && (
-                <div className="med-f-row">
-                  <div className="med-f-card med-f-link">
-                    <KLinkEditor
-                      text={linkText}
-                      src={linkSrc}
-                      allowModifyText
-                      invalid={linkSrc.trim().length > 0 && !isValidLink(linkSrc.trim())}
-                      onChangeText={setLinkText}
-                      onChangeSrc={setLinkSrc}
-                      onConfirm={confirmLink}
-                    />
-                  </div>
-                </div>
-              )}
+              {/* 261120：链接编辑已改为底部浮窗（见组件底部 LinkEditorSheet），面板内不再内联输入行。 */}
             </>
           ) : (
             <div className="med-font-panel">
@@ -858,6 +845,13 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
         </div>
         </>
       )}
+      {/* 261120 用户点单：链接编辑 = 底部可拖动浮窗（面板内不再内联输入行）。 */}
+      <LinkEditorSheet
+        open={linkSheetOpen}
+        initialText={linkInitialText}
+        onConfirm={confirmLink}
+        onCancel={() => setLinkSheetOpen(false)}
+      />
     </div>
   );
 }

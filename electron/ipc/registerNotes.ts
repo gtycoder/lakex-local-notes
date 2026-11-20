@@ -23,6 +23,8 @@ import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../../src/
 
 /** 261117 用户点单「新建文档位置」：IPC 可选 position 参数（缺省 = 末尾追加，保持向后兼容）。 */
 const insertPosition = (value: unknown): NoteInsertPosition => normalizeNoteInsertPosition(value);
+/** 261120（目录右键「在上方/在下方新建」）：同父级锚点 sort_order；非整数一律当未指定（回落 position 口径）。 */
+const sortAnchor = (value: unknown): number | undefined => (Number.isInteger(value) ? (value as number) : undefined);
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
@@ -299,15 +301,17 @@ export function registerNotesIpc(
   // space（261109）= 日记本标记：只接受 "diary" / null，其余归一成 null（非日记）。
   // 261117 用户点单「新建文档位置」：分组/笔记本也跟随（根层同级 = 笔记本之间；子级 = 分组/文档下的分组）。
   ipc.handle("create_notebook", (title: unknown, space?: unknown, position?: unknown) => store.createNotebook(assertTitle(title), space === "diary" ? "diary" : null, undefined, insertPosition(position)));
-  ipc.handle("create_group", (parentId: string, title: unknown, position?: unknown) => store.createGroup(parentId, assertTitle(title), insertPosition(position)));
+  ipc.handle("create_group", (parentId: string, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createGroup(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
   ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
-  ipc.handle("create_note_in", (parentId: string | null, title: unknown, position?: unknown) => store.createNoteIn(parentId, assertTitle(title), insertPosition(position)));
+  // 261120 用户点单「在上方/在下方新建文档」：第 4 参 = 同父级锚点 sort_order（上方 = 锚点-1，下方 = 锚点）；
+  // 非法一律当"未指定"，回落到 position 口径（不因坏参数让新建失败）。
+  ipc.handle("create_note_in", (parentId: string | null, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createNoteIn(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
   // v6：新建表格文档（kind=usheet）；正文落 usheets/{id}.usheet.json，其余复用文档管线
-  ipc.handle("create_usheet_in", (parentId: string | null, title: unknown, position?: unknown) => store.createUsheetIn(parentId, assertTitle(title), insertPosition(position)));
-  ipc.handle("create_bitable_in", (parentId: string | null, title: unknown, position?: unknown) => store.createBitableIn(parentId, assertTitle(title), insertPosition(position)));
+  ipc.handle("create_usheet_in", (parentId: string | null, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createUsheetIn(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
+  ipc.handle("create_bitable_in", (parentId: string | null, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createBitableIn(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
   // v7：新建画板文档（kind=board）；正文落 boards/{id}.board.json，其余复用文档管线
-  ipc.handle("create_board_in", (parentId: string | null, title: unknown, position?: unknown) => store.createBoardIn(parentId, assertTitle(title), insertPosition(position)));
-  ipc.handle("create_ink_in", (parentId: string | null, title: unknown, position?: unknown) => store.createInkIn(parentId, assertTitle(title), insertPosition(position)));
+  ipc.handle("create_board_in", (parentId: string | null, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createBoardIn(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
+  ipc.handle("create_ink_in", (parentId: string | null, title: unknown, position?: unknown, afterSortOrder?: unknown) => store.createInkIn(parentId, assertTitle(title), insertPosition(position), sortAnchor(afterSortOrder)));
   ipc.handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
   ipc.handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));

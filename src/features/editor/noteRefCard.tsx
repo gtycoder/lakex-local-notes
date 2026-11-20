@@ -22,7 +22,7 @@
  *
  * 只存引用元数据、**不内嵌渲染**目标正文（内核只渲染 Lake 正文；表格/多维表/画板正文是各自的 JSON）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Check, Copy, Pencil, SquareArrowOutUpRight, Unlink } from "lucide-react";
 import { HoverPopover, Popover } from "../../components/ui/Overlay";
 import { captureModelRange, positionAfterModelRange } from "./selectionToolbar/aiModelSelection";
@@ -34,6 +34,7 @@ import {
   type NoteRefValue,
 } from "./noteRef";
 import { NoteRefIconSymbol } from "./noteRefIcon";
+import { noteRefMobileUi } from "./noteRefMobileUi";
 import "./noteRefCard.css";
 import "./noteRefCardActions.css";   // ⚠️ 必须由使用它的组件 import（漏 import 时元素在、样式空 —— 261008 踩过）
 
@@ -235,6 +236,8 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
   const noteId = parseNoteRef(value);
   const note = findNoteRef(noteId);
   const gone = isNoteRefGone(noteId);
+  /** 移动端 UI（底部 Sheet）是否已由入口注册过：注册了就把两个浮层换成 Sheet（桌面为 null，走原 Popover）。 */
+  const mobileUi = noteRefMobileUi();
   /**
    * **展示文本 = 卡里存的 `title`（用户在编辑浮层「文本」里填的），不是目标的实时标题**（用户 261008 八改定稿：
    * 「自动填充文本，改完了直接展示文本」）—— 否则改文本等于没改（显示永远被目标文档的标题覆写）。
@@ -263,7 +266,9 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
       if (cardEl && cardEl.isConnected && !autoOpenedCards.has(cardEl) && cardEl.classList.contains("ne-focused")) {
         autoOpenedCards.add(cardEl);
         window.clearInterval(timer);
-        setEditing(true);
+        // 261120 用户点单：移动端插入后**直接呈现全部文档**（选文档 Sheet），不再先弹桌面那套编辑浮层
+        // （浮层会 focus 输入框 ⇒ 默认拉起键盘 + 编辑区滚动）。桌面口径不变。
+        if (noteRefMobileUi()) setPicking(true); else setEditing(true);
         return;
       }
       if (tries >= 12) window.clearInterval(timer);
@@ -354,11 +359,16 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
       <div className="ne-note-ref ne-note-ref--plain" ref={titleRef}>
         {value?.title
           ? <span className="ne-note-ref__plain ln-ellipsis">{value.title}</span>
-          : <button type="button" className="ln-btn" onClick={() => setPicking(true)}>选择文档…</button>}
+          : <button type="button" className={mobileUi ? "mb-btn mb-btn--sm" : "ln-btn"} onClick={() => setPicking(true)}>选择文档…</button>}
         {actionsMenu}
-        {picking && <NoteRefPicker surfaceRef={plainPickPos.surfaceRef} style={plainPickPos.style ?? undefined}
-          onClose={() => setPicking(false)} onPick={(n) => { update({ noteId: n.id, title: n.title }); setPicking(false); }} />}
-        {editing && <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />}
+        {picking && (mobileUi
+          /* 移动端 Sheet 是 lazy chunk（注册表注入）⇒ 就近包 Suspense，别让整棵应用回退。 */
+          ? <Suspense fallback={null}><mobileUi.Picker open onPick={(n) => { update({ noteId: n.id, title: n.title }); setPicking(false); }} onClose={() => setPicking(false)} /></Suspense>
+          : <NoteRefPicker surfaceRef={plainPickPos.surfaceRef} style={plainPickPos.style ?? undefined}
+            onClose={() => setPicking(false)} onPick={(n) => { update({ noteId: n.id, title: n.title }); setPicking(false); }} />)}
+        {editing && (mobileUi
+          ? <Suspense fallback={null}><mobileUi.Editor open value={value ?? {}} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} /></Suspense>
+          : <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />)}
       </div>
     );
   }
@@ -380,7 +390,9 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
         )}
       <span className="ne-note-ref__kind">{gone ? "失效" : noteKindLabel(note?.kind)}</span>
       {actionsMenu}
-      {editing && <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />}
+      {editing && (mobileUi
+        ? <Suspense fallback={null}><mobileUi.Editor open value={value ?? {}} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} /></Suspense>
+        : <NoteRefEditPopover value={value ?? {}} anchor={anchor} onClose={() => setEditing(false)} onSave={(nextValue) => { update(nextValue); setEditing(false); }} />)}
     </div>
   );
 }

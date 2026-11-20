@@ -406,7 +406,7 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 2 个副本");
   });
 
-  it("单条右键按组加分隔线（文档 5 组 / 分组 3 组 / 笔记本 2 组）", () => {
+  it("单条右键按组加分隔线（261120：文档 = 上下方新建 + 新建子菜单 + 原有 5 组）", () => {
     render();
     const tokens = (): string[] => {
       // 只取最外层菜单：导出是子菜单，内层项不能算进主菜单分组。
@@ -415,13 +415,17 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
       return [...menu.querySelectorAll<HTMLElement>('button, [role="separator"]')]
         .filter((el) => el.closest('[role="menu"]') === menu)
         .map((el) => (el.getAttribute("role") === "separator" ? "---" : (el.textContent ?? "").trim()))
-        // 导出是子菜单（DOM 内联展开），其子项不计入主菜单分组。
-        .filter((label) => !/^导出为|^导出资料/.test(label));
+        // 子菜单（导出 / 上下方新建）在 jsdom 里内联展开，其子项不计入主菜单分组。
+        .filter((label) => !/^导出为|^导出资料/.test(label))
+        .filter((label) => !/^新建(文档|表格|多维表|画板|手写板|分组)$/.test(label));
     };
 
     rightClick("n1");
-    // 导出子菜单在 jsdom 里内联展开（真实 UI 是折叠子菜单）⇒ 只断言主菜单分组；分组 4 = 锁定 + 导出。
+    // 导出/新建两个子菜单在 jsdom 里内联展开（真实 UI 是折叠子菜单）⇒ 只断言主菜单分组；
+    // 两个「上下方新建」子菜单的触发器与子项都不在本 helper 的集合里，这里只剩它后面那条分割线。
+    // 261120 用户点单：顶部 = 在上方新建 / 在下方新建（各带我们自己的新建二级菜单），**没有**第三个「新建」。
     expect(tokens()).toEqual([
+      "---",
       "重命名", "置顶", "---",
       "创建副本", "移动…", "---",
       "历史版本", "标签…", "属性", "---",
@@ -431,6 +435,7 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
 
     rightClick("g1");
+    // 分组行没有"文档兄弟"语义 ⇒ 没有任何新建入口（第三个「新建」已按用户要求去掉）
     expect(tokens()).toEqual(["重命名", "置顶", "移动…", "---", "删除"]);
     act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
 

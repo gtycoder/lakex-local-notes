@@ -632,28 +632,42 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  /* 261120 用户点单（参照思源「图1」）：三角是一块**圆润 chip** —— 18×18 + 8 圆角（≈44%），
+     读作圆角方块而不是圆。**底色只在光标停到三角上时才出现**（用户 261120 复述：强调不是常驻的，
+     光标过去才强调 = 标识这个按钮被指向）。无子级（disabled）永远透明。 */
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
-  border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-4);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-3);
   background: transparent;
   cursor: pointer;
 
 }
-.tree-chevron:hover:not(:disabled) { color: var(--lake-text-2); background: var(--lake-bg-hover); }
-.tree-chevron:disabled { cursor: default; }
+/* 三角自身的 hover = chip 出现（press 一档，在白底与行 hover 底上都看得见）+ 字色升档。 */
+.tree-chevron:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-press); }
+.tree-chevron:disabled { background: transparent; cursor: default; }
 /* 目录行内动作钮（⋯ / ＋）**受行高约束固定 22×22**，不跟随 --lake-ctl-h-sm（26）。
    原因：.note-row = 27px 行 + 上下各 2px 内距 ⇒ 26px 按钮会把它撑成 30px；这两个按钮又是
    display:none → flex 的「hover 才显形」⇒ 鼠标划过整列上下跳 3px（261111 用户报「目录栏跳动」）。
    行内 affordance 属内容区例外（与「文档正文/编辑器内部不参与统一厚度」同一口径）。
    落点必须在 shell 层：app/shell.css 在 legacy 层，压不过 kit 的 .ln-iconbtn--compact。 */
-.tree-row .tree-row-action { width: 22px; height: 22px; }
+.tree-row .tree-row-action {
+  width: 22px;
+  height: 22px;
+  /* 261120 用户点单（参照思源「图2」）：⋮ / ＋ 各自一块**圆润 chip**（22×22 + 8 圆角 ≈36%），
+     但**底色同样只在光标停到该按钮上时才出现**（行 hover 只负责让按钮显形，不点亮的底）。
+     指向态取 --lake-bg-press：白底与行 hover 底上都与各自底色拉开一档。 */
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+}
+.tree-row .tree-row-action:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-press); }
 /* 笔记本行比文档行高 2px（min-height 29）⇒ 视口外占位也要按它算（25 + 上下内距 4 = 29），
    否则滚入视口时 27→29 还会跳 2px（261111 目录跳动修复的残余）。 */
 .tree-row.type-notebook { contain-intrinsic-size: auto 25px; }
-.tree-row-actions { display: none; }
+/* 261120：两块 chip 之间留 2px（--lake-space-xxs），否则 ⋮/＋ 粘连成一条长条、看不出是两个动作。 */
+.tree-row-actions { display: none; gap: var(--lake-space-xxs); }
 /* 只在行 hover / 键盘聚焦时显形（用 :has(:focus-visible) 而非 :focus-within ——
  * 后者会被鼠标点击后的残余 focus 钉住，导致选中行标题被 ⋯ 挤窄，用户 260914）。 */
 .note-row:hover .tree-row-actions,

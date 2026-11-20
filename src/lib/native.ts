@@ -247,17 +247,19 @@ export interface LakeNative {
   /** 日记转为小记（261112 task-92）：正文/媒体原样搬运，成功后日记进回收站（可恢复）。 */
   diaryToQuickNote(noteId: string): Promise<DiaryToQuickNoteResultShape>;
   /** @param position 261117 新建位置（顶部新增/末尾追加；缺省末尾）。 */
-  createGroup(parentId: string, title: string, position?: NoteInsertPosition): Promise<TreeNode>;
+  /** afterSortOrder（261120）= 同父级锚点（上下方新建）；非整数被主进程忽略。 */
+  createGroup(parentId: string, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
-  createNoteIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
+  /** afterSortOrder（261120）= 指定同父级锚点：新文档落在该 sort_order 之后（上方新建传锚点-1）。 */
+  createNoteIn(parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<NoteDocument>;
   /** 新建表格文档（kind=sheet，v6）。 */
-  createUsheetIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
+  createUsheetIn(parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<NoteDocument>;
   /** 新建多维表文档（kind=bitable，v6）。 */
-  createBitableIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
+  createBitableIn(parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<NoteDocument>;
   /** 新建画板文档（kind=board，v7）：正文是 Drawnix/Plait 场景 JSON。 */
-  createBoardIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
+  createBoardIn(parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<NoteDocument>;
   /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON。 */
-  createInkIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
+  createInkIn(parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number): Promise<NoteDocument>;
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
@@ -542,13 +544,13 @@ export const native = {
   createNotebook: (title: string, space?: "diary" | null, position?: NoteInsertPosition) => api().createNotebook(title, space, position),
   diaryOpenDate: (dateKey: string, mode?: "open" | "new") => api().diaryOpenDate(dateKey, mode),
   diaryToQuickNote: (noteId: string) => api().diaryToQuickNote(noteId),
-  createGroup: (parentId: string, title: string, position?: NoteInsertPosition) => api().createGroup(parentId, title, position),
+  createGroup: (parentId: string, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createGroup(parentId, title, position, afterSortOrder),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
-  createNoteIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createNoteIn(parentId, title, position),
-  createUsheetIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createUsheetIn(parentId, title, position),
-  createBitableIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createBitableIn(parentId, title, position),
-  createBoardIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createBoardIn(parentId, title, position),
-  createInkIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createInkIn(parentId, title, position),
+  createNoteIn: (parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createNoteIn(parentId, title, position, afterSortOrder),
+  createUsheetIn: (parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createUsheetIn(parentId, title, position, afterSortOrder),
+  createBitableIn: (parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createBitableIn(parentId, title, position, afterSortOrder),
+  createBoardIn: (parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createBoardIn(parentId, title, position, afterSortOrder),
+  createInkIn: (parentId: string | null, title: string, position?: NoteInsertPosition, afterSortOrder?: number) => api().createInkIn(parentId, title, position, afterSortOrder),
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
   moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),

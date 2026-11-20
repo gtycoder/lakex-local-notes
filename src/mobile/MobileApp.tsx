@@ -13,6 +13,7 @@ import { diaryNodesFrom } from "./diary/diaryNodes.js";
 import { libraryNotebooks } from "./notebook/libraryNotebooks";
 import { notebookSubtreeDocCounts } from "./notebook/notebookDocCounts";
 import { setNoteRefHost } from "../features/editor/noteRef";
+import { setNoteRefMobileUi } from "../features/editor/noteRefMobileUi";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
 import type { HomeTab } from "./home/tabPager";
@@ -22,6 +23,9 @@ import { readDefaultHomeTab } from "./settings/defaultSpace";
 import { useHiddenHomeTabs } from "./settings/useHiddenHomeTabs";
 import type { DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
 const DefaultNotebookPickerSheet = lazy(() => import("./settings/DefaultNotebookPickerSheet").then((m) => ({ default: m.DefaultNotebookPickerSheet })));
+/** 261120 用户点单：文档引用的移动端弹层 = 底部可拖动 Sheet（按需加载，不占入口 chunk）。 */
+const NoteRefPickerSheetLazy = lazy(() => import("./editor/NoteRefSheets").then((m) => ({ default: m.NoteRefPickerSheet })));
+const NoteRefEditorSheetLazy = lazy(() => import("./editor/NoteRefSheets").then((m) => ({ default: m.NoteRefEditorSheet })));
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
@@ -878,6 +882,13 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
   /** 「文档引用」卡（内核自定义卡）在移动端也要能选目标文档：注册宿主（与桌面 App.tsx 同一接口）。
    *  移动端摘要只有 id/title/parentId/updatedAt ⇒ 补默认 sortOrder/syncState/isConflict；
    *  成功态判定仍靠 parentId（回收站）兜底，不读 lake 正文。 */
+  /** 261120 用户点单：把「文档引用」的两个弹层换成移动端底部 Sheet（注册表注入，桌面侧不 import 移动端模块）。
+   *  组件是 lazy ⇒ 只有真正插入/编辑文档引用时才拉这个 chunk。 */
+  useEffect(() => {
+    setNoteRefMobileUi({ Picker: NoteRefPickerSheetLazy, Editor: NoteRefEditorSheetLazy });
+    return () => setNoteRefMobileUi(null);
+  }, []);
+
   useEffect(() => {
     setNoteRefHost({
       listNotes: () => notes.map((n) => ({

@@ -16,7 +16,7 @@ import { formatBytes } from "../../core/update/updateManifest";
 import { UPDATE_CHECK_INTERVAL_OPTIONS, type UpdateSettingsPatch, type UpdateState } from "../../core/update/updateTypes";
 import { formatDateTime } from "../../core/dateFormat";
 import { MarkdownView } from "../ui/markdown/MarkdownView";
-import RELEASE_NOTES from "../../../docs/RELEASE-NOTES.md?raw";
+import { loadReleaseNotesText } from "../../lib/releaseNotesText";
 
 /** 261116 用户点单：只留 24 小时 / 每周 / 每月（关闭由上方「自动检查」开关承担；0 只做历史兼容读取）。 */
 const INTERVAL_LABELS: Record<number, string> = { 24: "24 小时", 168: "每周", 720: "每月" };
@@ -39,6 +39,17 @@ export function UpdateCenterSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
+  /** 261120：发版说明按需加载（原 ?raw 静态导入会把 57KB 文本打进首屏资源图，见 lib/releaseNotesText.ts）。 */
+  const [notesText, setNotesText] = useState<string | null>(null);
+  const [notesError, setNotesError] = useState(false);
+  useEffect(() => {
+    if (!notesOpen || notesText !== null) return;
+    let alive = true;
+    void loadReleaseNotesText()
+      .then((text) => { if (alive) setNotesText(text); })
+      .catch(() => { if (alive) setNotesError(true); });
+    return () => { alive = false; };
+  }, [notesOpen, notesText]);
 
   useEffect(() => {
     let alive = true;
@@ -185,7 +196,13 @@ export function UpdateCenterSection() {
             {notesOpen ? "收起" : "查看更新日志"}
           </button>
         </Item>
-        {notesOpen && <Block><MarkdownView source={RELEASE_NOTES} /></Block>}
+        {notesOpen && (
+          <Block>
+            {notesText === null
+              ? <p className="config-note">{notesError ? "更新日志加载失败，可在 GitHub Releases 页面查看。" : "正在读取更新日志…"}</p>
+              : <MarkdownView source={notesText} />}
+          </Block>
+        )}
       </Group>
 
       {error && <p className="config-note" role="alert">{error}</p>}

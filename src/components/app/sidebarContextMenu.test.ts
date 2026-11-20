@@ -10,21 +10,32 @@ const SHELL = readFileSync(new URL("../../desktop/useDesktopShell.ts", import.me
 
 /**
  * 目录栏右键菜单（用户口径）：
- * 1) **261106：右键菜单不再有「新建」**（行内/头部的「＋」是唯一入口；此前 260930 曾收进子菜单，现整体撤掉）；
+ * 1) **261120：右键菜单顶部恢复创建入口**（用户点单，推翻 261106「右键不再提供新建」）——
+ *    最顶 = 在上方新建文档 / 在下方新建文档 + 分割线 + 「新建」二级菜单；
  * 2) 右键菜单去掉「打开文件位置」（属性弹窗 NoteInfoDialog 里仍保留）；
  * 3) 文档级锁定入口放这里（只读锁统一入口）；目录行显示小锁标识。
  * 这是结构护栏，真实鼠标操作/只读生效由 CDP 真实验收覆盖。
  */
 describe("目录栏右键菜单", () => {
-  it("右键菜单不再提供「新建」子菜单（创建入口只剩行内/头部 ＋）", () => {
+  it("顶部 = 两个二级菜单「在上方新建 / 在下方新建」，子项复用我们自己的新建清单", () => {
     const start = SRC.indexOf("const ContextMenu =");
     const end = SRC.indexOf("interface ConfirmDeleteProps");
     const menu = SRC.slice(start, end);
-    expect(menu).not.toContain("<Submenu");
-    expect(menu).not.toContain("CreateChildItems");
-    expect(menu).not.toContain("onNewChild");
-    expect(menu).not.toContain(">新建<");
-    // 创建动作仍只有一处声明（CreateChildItems / CREATE_CHILD_ITEMS），由「＋」菜单使用
+    // 两个二级菜单触发器（用户 261120：上方新建然后拉二级菜单，接入我们自己的新建）
+    const above = menu.indexOf("<span>在上方新建</span>");
+    const below = menu.indexOf("<span>在下方新建</span>");
+    expect(above).toBeGreaterThanOrEqual(0);
+    expect(below).toBeGreaterThan(above);
+    // 两个子菜单都用同一份 CREATE_CHILD_ITEMS（不复制第二套动作清单）
+    const childUses = menu.match(/<CreateChildItems onNewChild=/g) ?? [];
+    expect(childUses.length).toBe(2);
+    expect(menu).toContain('onCreateSibling("above", kind)');
+    expect(menu).toContain('onCreateSibling("below", kind)');
+    // 261120 用户点单：**不要第三个「新建」**（子菜单只有上下方两个）
+    expect(menu).not.toContain("<span>新建</span>");
+    expect(menu).not.toContain("onNewChild={onNewChild}");
+    // 只有文档行给「在上方/在下方新建」（分组/笔记本没有"文档兄弟"语义）
+    expect(menu).toContain('node.nodeType === "note"');
     expect(SRC).toContain("const CREATE_CHILD_ITEMS");
     // 261022 用户点单：创建项文案 = 文档类型名「多维表」（表内层级才叫「数据表」）
     expect(SRC).toContain('label: "新建多维表"');

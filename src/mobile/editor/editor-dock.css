@@ -289,10 +289,10 @@
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-/* 链接：内联展开的编辑行。约束内核 .ne-link-editor 的固定 365px 宽以适配手机面板宽度
-   （这是给内核组件做移动端布局适配，不改它的视觉语言）。 */
-.med-f-card.med-f-link { display: block; background: transparent; padding: 0; }
-.med-f-card.med-f-link .ne-link-editor { width: 100%; max-width: 100%; }
+/* 261120：链接编辑已移出面板（底部浮窗 LinkEditorSheet）⇒ 这里的内联行尺寸适配整段删除。 */
+
+/* 261120：链接编辑行搬进底部浮窗（LinkEditorSheet）⇒ 面板不再需要「抬到键盘上方」的 data-link-kb 几何，整段删除。
+   面板与工具栏继续走通用 --kb-offset 口径（useEditSurface）。 */
 
 /* 步进器「− 当前 +」（261104）：字号与行高共用同一件（.med-f-step，见 ui/ValueStepper.tsx）。
    字号原为「Aa」面板最底部一行 8 钮，但面板内容 354px > 可视 312px，被裁掉的正好是那行（点按落空）；

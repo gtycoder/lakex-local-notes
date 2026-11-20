@@ -64,7 +64,9 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
       expect(SIDEBAR, defaultName).toContain('defaultName: "' + defaultName + '"');
     }
     expect(SIDEBAR).toContain("initialValue={preset.defaultName}");
-    expect(SIDEBAR).toContain("const id = await Promise.resolve(props.onCreate(kind, parentId, title));");
+    // 261120：上下方新建带第 4 参锚点；无锚点仍走原 3 参调用（既有契约不变）
+    expect(SIDEBAR).toContain("? props.onCreate(kind, parentId, title)");
+    expect(SIDEBAR).toContain(": props.onCreate(kind, parentId, title, afterSortOrder)");
     // 261105 回归：只有文档类 onSelect 打开；笔记本/分组是树节点 id，不能当 note 打开（否则「笔记不存在」）。
     expect(SIDEBAR).toContain('if (kind !== "notebook" && kind !== "group") props.onSelect(id);');
     expect(SIDEBAR).toContain("window.requestAnimationFrame(() => revealNodeRef.current(id));");
@@ -94,13 +96,15 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
   });
 
   it("数据层：六 kind 收标题并回传 id；失败一律对弹窗抛出（就地显示）", () => {
-    expect(TREE_ACTIONS).toContain("return await createNoteIn(parentId, resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("return await createUsheetIn(parentId, resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("return await createBitableIn(parentId, resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("return await createBoardIn(parentId, resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("return await createInkIn(parentId, resolvedTitle);");
-    // 261117 新建位置：目录（分组）也跟随设置 ⇒ 第三个参数是 newNotePosition（不再是两参调用）
-    expect(TREE_ACTIONS).toContain("const node = await native.createGroup(parentId, resolvedTitle, newNotePosition);");
+    // 261120：文档创建透传 afterSortOrder（上下方新建的同父级锚点）
+    expect(TREE_ACTIONS).toContain("return await createNoteIn(parentId, resolvedTitle, afterSortOrder);");
+    // 261120：六种 kind 都透传锚点（目录右键「在上方/在下方新建」的二级菜单）
+    expect(TREE_ACTIONS).toContain("return await createUsheetIn(parentId, resolvedTitle, afterSortOrder);");
+    expect(TREE_ACTIONS).toContain("return await createBitableIn(parentId, resolvedTitle, afterSortOrder);");
+    expect(TREE_ACTIONS).toContain("return await createBoardIn(parentId, resolvedTitle, afterSortOrder);");
+    expect(TREE_ACTIONS).toContain("return await createInkIn(parentId, resolvedTitle, afterSortOrder);");
+    // 261117 新建位置：目录（分组）也跟随设置 ⇒ 第三参 = newNotePosition；261120 起第四参 = 锚点
+    expect(TREE_ACTIONS).toContain("const node = await native.createGroup(parentId, resolvedTitle, newNotePosition, afterSortOrder);");
     expect(TREE_ACTIONS).toContain("throw reason;");
     // 笔记类创建器收标题 + 回传 id（useNoteLifecycle）
     expect(NOTE_LIFECYCLE).toContain("async function createNoteIn(parentId: string | null, title = ");

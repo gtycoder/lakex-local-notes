@@ -9,15 +9,15 @@ import type { NoteInsertPosition } from "../core/treeRules";
 
 export interface UseTreeActionsOptions {
   /** 六个新建 kind 都收用户输入的名字，并回传新节点 id（统一弹窗 → 选中/滚动）。 */
-  createNoteIn: (parentId: string | null, title?: string) => Promise<string>;
+  createNoteIn: (parentId: string | null, title?: string, afterSortOrder?: number) => Promise<string>;
   /** 新建表格文档（kind=usheet）。 */
-  createUsheetIn: (parentId: string | null, title?: string) => Promise<string>;
+  createUsheetIn: (parentId: string | null, title?: string, afterSortOrder?: number) => Promise<string>;
   /** v6：新建多维表文档（kind=bitable）。 */
-  createBitableIn: (parentId: string | null, title?: string) => Promise<string>;
+  createBitableIn: (parentId: string | null, title?: string, afterSortOrder?: number) => Promise<string>;
   /** v7：新建画板文档（kind=board）。 */
-  createBoardIn: (parentId: string | null, title?: string) => Promise<string>;
+  createBoardIn: (parentId: string | null, title?: string, afterSortOrder?: number) => Promise<string>;
   /** 新建手写板文档（kind=ink）。 */
-  createInkIn: (parentId: string | null, title?: string) => Promise<string>;
+  createInkIn: (parentId: string | null, title?: string, afterSortOrder?: number) => Promise<string>;
   /** 261117 用户点单「新建文档位置」：目录（分组/笔记本）同样跟随（根层同级 = 笔记本之间）。 */
   newNotePosition: NoteInsertPosition;
   openNote: (id: string) => void;
@@ -43,23 +43,26 @@ export function useTreeActions({
   setPendingRenameId, setError,
 }: UseTreeActionsOptions) {
   /** 返回新节点 id（新建笔记本弹窗据此选中/滚动）；笔记类仍沿用各自「打开即选中」的行为。 */
-  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string): Promise<string | undefined> => {
+  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string, afterSortOrder?: number): Promise<string | undefined> => {
     try {
       // 所有「需要写名字」的新建都从统一弹窗来 ⇒ 用用户给的名字创建，并回传新节点 id（选中/滚动用）。
       const resolvedTitle = title?.trim();
       if (!resolvedTitle) return;
-      if (kind === "note") return await createNoteIn(parentId, resolvedTitle);
-      if (kind === "usheet") return await createUsheetIn(parentId, resolvedTitle);
-      if (kind === "bitable") return await createBitableIn(parentId, resolvedTitle);
-      if (kind === "board") return await createBoardIn(parentId, resolvedTitle);
-      if (kind === "ink") return await createInkIn(parentId, resolvedTitle);
+      // 261120（用户点单）：六种 kind 全部支持 afterSortOrder 锚点 —— 目录右键「在上方/在下方新建」的二级菜单
+      // 就是同一份 CREATE_CHILD_ITEMS，只是落位方式不同。无锚点时仍走设置里的「新建文档位置」。
+      if (kind === "note") return await createNoteIn(parentId, resolvedTitle, afterSortOrder);
+      if (kind === "usheet") return await createUsheetIn(parentId, resolvedTitle, afterSortOrder);
+      if (kind === "bitable") return await createBitableIn(parentId, resolvedTitle, afterSortOrder);
+      if (kind === "board") return await createBoardIn(parentId, resolvedTitle, afterSortOrder);
+      if (kind === "ink") return await createInkIn(parentId, resolvedTitle, afterSortOrder);
       if (kind === "notebook") {
+        // 笔记本是根层，没有"同级文档"语义 ⇒ 不接锚点（菜单里也不提供）。
         const node = await native.createNotebook(resolvedTitle, undefined, newNotePosition);
         setTreeNodes(await native.listTreeNodes());
         return node.id;
       }
       if (parentId) {
-        const node = await native.createGroup(parentId, resolvedTitle, newNotePosition);
+        const node = await native.createGroup(parentId, resolvedTitle, newNotePosition, afterSortOrder);
         setTreeNodes(await native.listTreeNodes());
         return node.id;
       }
@@ -126,9 +129,9 @@ export function useTreeActions({
   const sidebarSelect = useCallback((id: string) => {
     void openNote(id);
   }, [openNote]);
-  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string) => {
+  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string, afterSortOrder?: number) => {
     // 返回 promise：新建笔记本弹窗用它拿 id / 捕获错误（笔记类调用方仍然忽略返回值）。
-    return createTreeItem(kind, parentId, title);
+    return createTreeItem(kind, parentId, title, afterSortOrder);
   }, [createTreeItem]);
   const sidebarRename = useCallback((id: string, title: string) => {
     void renameTreeNode(id, title);

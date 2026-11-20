@@ -174,16 +174,18 @@ describe("Sidebar 六个 kind 统一新建弹窗", () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it("261106：右键菜单不再有「新建」（创建入口只剩目录行/头部 ＋）", () => {
+  // 注：文档行的「在上方/在下方新建」二级菜单由 sidebarContextMenu.test.ts 做结构护栏
+  //（这里只验笔记本行 —— 文档行还会渲染导出子菜单，需要原生桥 mock，与本测试目的无关）。
+  it("261120：笔记本行右键没有新建入口（上下方新建只给文档行，且已无独立「新建」）", () => {
     render();
-    const row = document.body.querySelector<HTMLElement>('[data-tree-node-id="book"]')!;
-    act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
+    const book = document.body.querySelector<HTMLElement>('[data-tree-node-id="book"]')!;
+    act(() => { book.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
     const menu = document.body.querySelector('[role="menu"]')!;
     expect(menu).not.toBeNull();
     expect(menu.textContent).not.toContain("新建");
-    // 其余动作仍在（重命名/删除）
     expect(menu.textContent).toContain("重命名");
     expect(menu.textContent).toContain("删除");
+    // 菜单只是列入口，不会自己弹新建弹窗
     expect(document.body.querySelector('input[aria-label="表格名称"]')).toBeNull();
   });
 });

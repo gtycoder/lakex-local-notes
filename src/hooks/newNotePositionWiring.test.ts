@@ -21,16 +21,18 @@ describe("新建文档位置：接线", () => {
   it("useNoteLifecycle 五种创建都透传 newNotePosition（含默认落点 createNote）", () => {
     const hook = read("./useNoteLifecycle.ts");
     expect(hook).toContain("native.createNote(title, newNotePosition)");
-    expect(hook).toContain("native.createNoteIn(parentId, title, newNotePosition)");
+    // 261120：createNoteIn 多一个可选锚点（上下方新建）；位置参数仍是第 3 个
+    expect(hook).toContain("native.createNoteIn(parentId, title, newNotePosition, afterSortOrder)");
+    // 261120：四个 kind 也透传锚点（上下方新建的二级菜单对六种 kind 都生效）
     for (const fn of ["createUsheetIn", "createBitableIn", "createBoardIn", "createInkIn"]) {
-      expect(hook, fn).toContain("native." + fn + "(parentId, title, newNotePosition)");
+      expect(hook, fn).toContain("native." + fn + "(parentId, title, newNotePosition, afterSortOrder)");
     }
   });
 
   it("目录创建（分组/笔记本）同样透传", () => {
     const tree = read("./useTreeActions.ts");
     expect(tree).toContain("native.createNotebook(resolvedTitle, undefined, newNotePosition)");
-    expect(tree).toContain("native.createGroup(parentId, resolvedTitle, newNotePosition)");
+    expect(tree).toContain("native.createGroup(parentId, resolvedTitle, newNotePosition, afterSortOrder)");
   });
 
   it("native 接口 / preload 8 个通道都带 position", () => {
@@ -43,7 +45,7 @@ describe("新建文档位置：接线", () => {
       expect(preload, "preload " + invoke).toContain('invoke("' + invoke + '"');
     }
     // 逐字断言两条最容易漏的透传（历史上就漏过 create_note）
-    expect(preload).toContain('createGroup: (parentId, title, position) => invoke("create_group", parentId, title, position)');
+    expect(preload).toContain('createGroup: (parentId, title, position, afterSortOrder) => invoke("create_group", parentId, title, position, afterSortOrder)');
     expect(preload).toContain('createNote: (title, position) => invoke("create_note", title, position)');
   });
 });

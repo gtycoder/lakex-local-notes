@@ -243,3 +243,9 @@
 /* 261110：下滑关闭的拖动态（禁过渡保跟手）与减少动效兜底。 */
 .mb-sheet.is-dragging { transition: none; }
 @media (prefers-reduced-motion: reduce) { .mb-sheet { transition: none; } }
+
+
+/* ── 261120 文档引用 Sheet（用户点单：移动端「＋ → 文档引用」）────────────────
+ * 弹层/行/输入全部复用既有原语（.mb-sheet / .mb-row / .mb-input）⇒ 这里只补 Sheet 内的两处间距/对齐。 */
+.mb-note-ref__search { margin-bottom: var(--lake-space-md); }
+.mb-note-ref__list .mb-row__title { flex: 1 1 auto; }

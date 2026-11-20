@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Copy, FolderInput, History, Info, Lock, LockOpen, Pencil, Pin, Tag as TagIcon, Trash } from "lucide-react";
-import { Menu } from "../../ui/Overlay";
+import { ArrowDownToLine, ArrowUpToLine, Copy, FolderInput, History, Info, Lock, LockOpen, Pencil, Pin, Tag as TagIcon, Trash } from "lucide-react";
+import { Menu, Submenu } from "../../ui/Overlay";
 import { ExportSubmenuItem, type ExportFormat } from "../../ui/ExportSubmenuItem";
+import { CreateChildItems, type CreateChildKind } from "./CreateChildItems";
 import type { TreeNode } from "../../../lib/types";
 
 export interface ContextMenuProps {
@@ -29,10 +30,13 @@ export interface ContextMenuProps {
   onTogglePin: () => void;
   /** 批量操作进行中：创建副本禁用（IPC 并发复制没有意义）。 */
   busy: boolean;
+  /** 261120：在上方 / 在下方新建（与当前文档同父级紧邻插入；只有文档行提供）。
+   *  kind = 我们自己的六种新建之一（CREATE_CHILD_ITEMS 单一来源，二级菜单直接复用）。 */
+  onCreateSibling: (position: "above" | "below", kind: CreateChildKind) => void;
   onClose: () => void;
 }
 
-export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, busy, onClose }: ContextMenuProps) => {
+export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, onCreateSibling, busy, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -57,8 +61,22 @@ export const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMark
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return (
     <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      {/* 261106 用户验收：右键菜单**不再提供「新建」**（行内/头部的「＋」已是唯一入口，
-          同一组创建动作只保留一处，菜单更短）。创建动作仍走 CREATE_CHILD_ITEMS 单一来源。 */}
+      {/* 261120 用户点单（**推翻 261106「右键菜单不再提供新建」**）：菜单最顶部 = 两个二级菜单
+          「在上方新建 / 在下方新建」，子项就是我们自己的新建清单（CREATE_CHILD_ITEMS 单一来源，含
+          文档/表格/多维表/画板/手写板/分组）；**不再有第三个「新建」**（用户 261120 明确去掉）。
+          落位 = 与当前文档同父级、紧邻上/下（afterSortOrder 锚点，同事务挪同级）；
+          点开二级菜单后仍走统一新建弹窗（要写名字），按文案规则二级菜单不加「…」。 */}
+      {node.nodeType === "note" && (
+        <>
+          <Submenu label={<><ArrowUpToLine size={15} aria-hidden="true" /><span>在上方新建</span></>}>
+            <CreateChildItems onNewChild={(kind) => onCreateSibling("above", kind)} onClose={onClose} />
+          </Submenu>
+          <Submenu label={<><ArrowDownToLine size={15} aria-hidden="true" /><span>在下方新建</span></>}>
+            <CreateChildItems onNewChild={(kind) => onCreateSibling("below", kind)} onClose={onClose} />
+          </Submenu>
+          <div className="context-menu-sep" role="separator" />
+        </>
+      )}
       {node.nodeType === "note" ? (
         <>
           {/* 分组 1：行本身的命名与固定 */}

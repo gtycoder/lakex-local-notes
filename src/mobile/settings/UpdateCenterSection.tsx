@@ -31,7 +31,7 @@ import {
 import { loadUpdateRuntimeState, UPDATE_CHECK_INTERVAL_OPTIONS, type UpdateSettings } from "../update/updateSettings";
 import { androidUpdateAsset, isVersionIgnored } from "../update/updatePolicy";
 import { parseReleaseNoteLines, parseReleaseNotes, type ReleaseNoteLine } from "../update/releaseNotes";
-import releaseNotesRaw from "../../../docs/RELEASE-NOTES.md?raw";
+import { loadReleaseNotesText } from "../../lib/releaseNotesText";
 
 /** 检查间隔的三档文案（261116 用户点单：24 小时 / 每周 / 每月；与桌面 UpdateCenter 同文案）。 */
 const INTERVAL_LABELS: Record<number, string> = { 24: "24 小时", 168: "每周", 720: "每月" };
@@ -105,7 +105,19 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
   const currentVersion = appInfo?.version ?? "";
   const manifest = snapshot.manifest;
   const asset = manifest ? androidUpdateAsset(manifest) : null;
-  const notesVersions = useMemo(() => parseReleaseNotes(releaseNotesRaw), []);
+  // 261120：发版说明按需加载（原 ?raw 静态导入会把 57KB 文本打进首屏资源图，见 lib/releaseNotesText.ts）。
+  const [releaseNotesText, setReleaseNotesText] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadReleaseNotesText()
+      .then((text) => { if (alive) setReleaseNotesText(text); })
+      .catch(() => { /* 读不到就只显示清单里的 notes（下方已有兜底） */ });
+    return () => { alive = false; };
+  }, []);
+  const notesVersions = useMemo(
+    () => (releaseNotesText ? parseReleaseNotes(releaseNotesText) : []),
+    [releaseNotesText],
+  );
   const manifestNotes = useMemo(
     () => (manifest ? parseReleaseNoteLines(manifest.notes) : []),
     [manifest],

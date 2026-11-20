@@ -1,0 +1,43 @@
+name: Budget gate（首屏资源图 / 双端入口预算）
+
+# 261120：这条门禁原先只挂在 pr.yml（**只在 pull_request 触发**）上，而本仓库是直接推 master ⇒
+# 首屏预算从 261119 起悄悄涨了 +2.1KB 没人发现：越线提交 534afa1a 往 docs/RELEASE-NOTES.md 加了 44 行，
+# 而更新中心用 `?raw` 把发版说明打进桌面入口 chunk（桌面首屏 +1,209B gzip 直接顶爆 602,000 预算）。
+# 所以把「纯构建 + 体积预算」拆成独立工作流，每次推 master 都跑：
+#   · 不加设备/视觉门禁（需要 AVD/GPU，按 AGENTS §3#21② 留在发版前人工跑）；
+#   · 不跑 vitest/tsc（pr.yml 的完整门禁仍在，这里只防体积漂移 + import 方向回退）；
+#   · 两个 build 必须先于 check:bundle / check:arch（两者都读 dist / dist-mobile 产物）。
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: budget-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  budget:
+    name: build ×2 + check:bundle + check:arch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # action 钉到不可变 commit SHA（与 pr.yml / release.yml 同版本，见 AGENTS SEC-12）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build desktop
+        run: npx vite build
+      - name: Build mobile
+        run: npx vite build -c vite.mobile.config.ts
+      - name: Bundle & vendor CSS audit（含脚本自检）
+        run: npm run check:bundle
+      - name: Arch gate（首屏资源图预算 + import 方向；check:bundle 已含，单独一步让日志可见）
+        run: npm run check:arch

@@ -32,6 +32,10 @@ const PORTAL_ALLOWLIST = [
   "features/editor/ImageLightbox.tsx",
   "features/attachment/AttachmentPreview.tsx",
   "features/editor/selectionToolbar/kernelUiAtoms.tsx",
+  // 261120：移动端浮层（文档引用 / 插入链接等）由**内核 React 树**或 dock 内渲染，正文区可能存在 transform
+  // 祖先（fixed 会以祖先为包含块）。移动端浮层原语是 MobileSheet（自带几何/手势/返回栈），不经 Overlay 转发；
+  // portal 收成**单一原语**，业务代码不各写 createPortal。
+  "mobile/ui/MobilePortal.tsx",
 ];
 
 describe("UI 原语门禁", () => {

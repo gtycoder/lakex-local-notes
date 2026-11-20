@@ -7,6 +7,20 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261120 · 目录行三件套 / 右键上下方新建 / 移动端文档引用（用户点单批，未发版）
+
+- **目录行三件套 = 悬停才强调的圆润 chip**（用户点单，参照思源图1/图2，随后复述「强调不是常驻的，光标过去才强调」）：`.tree-chevron` 16→18 且圆角 6→8（读作圆角方块），`.tree-row-action` 22×22 加 8 圆角；**底色只在按钮自身 hover 时出现**（`--lake-bg-press`），行 hover 只负责让 ⋮/＋ 显形、不点亮底色（第一版做成常驻块被用户当场纠正 ⇒ 已回退为指向态）。两块 chip 之间 `gap: 2px`。cssLayers `chrome.css` 533→539 已登记；stylesnap `hover-row:1315:{light,warm}` 两态已重烤（A/B 证伪「元素 +1」= 夹具/实例漂移，旧 CSS 同值 2524）。
+- **目录右键顶部 = 两个二级菜单「在上方新建 / 在下方新建」**（用户点单两轮定稿：① 推翻 261106「右键不再提供新建」；② 「上方新建然后拉二级菜单、接入我们自己的新建」；③ 「不要第三个新建」）：两个入口的**子项 = 我们自己的新建清单**（CREATE_CHILD_ITEMS 六项：文档/表格/多维表/画板/手写板/分组），选完走统一新建弹窗；**没有第三个独立「新建」**，分组/笔记本行也没有任何新建入口（无"文档兄弟"语义）。
+  落位 = 同父级锚点 `afterSortOrder`（上方 = 锚点 sortOrder−1、下方 = 锚点 sortOrder，store 在同一事务里挪开同级）：`createNoteIn` / `createUsheetIn` / `createBitableIn` / `createBoardIn` / `createInkIn` / `createGroup` 全链接通（store / noteMetadataRepository / registerNotes IPC（共享 `sortAnchor` 校验）/ preload / native / useNoteLifecycle / useTreeActions / Sidebar）；**无锚点仍走原调用形状**，既有契约不动；笔记本是根层、不接锚点。
+  桌面 CDP 实测：菜单头 = 在上方新建 / 在下方新建 / 分割线 / 重命名（无第三个新建）；「上方新建 → 新建表格」落成 usheet 且紧贴锚点上方；「下方新建 → 新建分组」落成 group 且紧贴锚点下方；护栏 `sidebarSiblingCreate.render.test`（3 例，含六 kind 锚点透传）+ sidebarContextMenu / sidebarNotebookDialog / sidebarMultiSelect 按新裁决改写。
+- **移动端「文档引用」三问题**（用户点单）：① 旧实现直接复用桌面锚定 Popover（`.ln-*` 外观 + 打开即 focus 搜索框 ⇒ 默认键盘）；② 插入后先弹桌面编辑浮层并 **focus 输入框**；③ 点击后编辑区滚动。改法 = 新增 `features/editor/noteRefMobileUi` 注册表（移动端注入，**桌面零变化**）+ `mobile/editor/NoteRefSheets.tsx`（`MobileSheet` 可拖动 + `mb-row`/`mb-input`/`mb-set-item` 原语；createPortal 到 body 规避 transform 祖先，已登记 uiPrimitives 白名单）；插入后**直接开「选择文档」Sheet 列出全部文档**、不聚焦任何输入。设备实测（emulator-5554）：旧实现点「文档引用」后 `activeElement=INPUT.ln-input__field`、scrollTop 1312→1362；新实现 `activeElement=mb-sheet`、scrollTop 1514→1514（**零位移**）、无键盘、12 篇文档一次列出；编辑 Sheet 文本/链接预填与底栏按钮正常。
+- **移动端「插入链接」= 底部可拖动浮窗**（261120 用户点单，接 mobile-link 的设备报障流）：原先链接编辑是 dock 面板里的**内联行**（复用内核 `.ne-link-editor`），而面板与键盘是「二选一」几何 ⇒ 键盘弹起后输入区被挤/被裁（设备实测面板塌成 0.38px、整行被 overflow 裁掉）。mobile-link 先用 `data-link-kb` 把面板抬到键盘上方救急（设备已验：键盘 530 时文本/链接/确定可见、可打字）；用户随后要求「直接复用可上下拖拽的浮窗、做得好看点」⇒ 改为 `MobileSheet` 浮窗 `mobile/editor/LinkEditorSheet.tsx`：文本 + 链接两个 `mb-set-item--field` 字段、`SheetFooter` 取消/确定、**回车即确定**（键盘盖住底栏时的最短出口）、失效提示走 `.mb-set-item__error`；**判定/选区还原/失败重试仍全走共享 `linkEditor.ts`**（桌面浮栏同一份）。原 `data-link-kb` 几何与 `.med-f-link` 内联行 CSS 一并删除（`editor-dock.css` 净减 8 条声明，ratchet 只降不上调）。设备验：插入→链接 打开「插入链接」浮窗 → 键盘弹起输入可见 → 回车落链为真实 `<ne-link>`；两次被内核拒绝时不关窗。
+- **移动端浮层 portal 收口**：`mobile/ui/MobilePortal.tsx` 成为移动端浮层的唯一 portal 原语（内核 React 树/正文 transform 祖先下 fixed 会失效）；`uiPrimitives` 白名单只放行这一个文件。
+- **首屏预算收口（用户批准 "A+C"）**：根因 = 更新中心用 `?raw` 把 `docs/RELEASE-NOTES.md`（57KB raw / 24.5KB gzip）静态打进桌面入口图 —— 所以"改发版说明"等于"改首屏体积"（越线提交 534afa1a 加 44 行 ⇒ 桌面首屏 +1,209B 直接顶爆 602,000）。
+  **A（瘦身）**：新增 `src/lib/releaseNotesText.ts`（动态 import + Promise 缓存），桌面 `UpdateCenter` 与移动 `UpdateCenterSection` 都改成按需加载 ⇒ 桌面首屏 **604,048 → 579,064B（−24,984B）**，桌面预算按"实测 +≈13KB"收紧 **602,000 → 592,000**；移动首屏 348,308/350,000。
+  **C（防再涨）**：新增 `.github/workflows/budget-gate.yml`（**push master 触发**：两个 build + check:bundle + check:arch）—— 原门禁只挂 `pr.yml`（仅 pull_request），而本仓库直接推 master ⇒ 首屏预算从 261119 起悄悄涨了 +2.1KB 没人发现。设备/视觉门禁仍按 AGENTS §3#21② 留在发版前人工。
+- **门禁**：tsc 0 / typecheck:electron 0；全量 vitest 见 §1；ui-metrics 0；check:core 181/0；check:mobileui 通过；check:bundle PASS（desktop 首屏 **579,064/592,000**、mobile entry **51,343/51,440（余 97B ⚠️）**、mobile CSS 140,239/141,312、preload 12/12）；cssLayers / mobileLayers / stylesnap 基线均按批登记。
+
 ### 261119 · v1.5.1 收口批（目录展开/行样式、封面隐藏、禁移动拖拽缩放、链接输入/面板跳变、清理批）（已发版）
 
 - **目录逐级展开**（点单）：收起清子树展开态、再展开只开一级（`toggleExpandedNode` 复用 core.tree.subtreeIds；无持久化并钉死）；**置顶区同款 bug 登记未修**（跨槽位置顶语义，需单独设计）。行样式：行间空隙 1px 思源式独立行块（3px+ 被护栏挡）+ 行文字试调**正文同款**（text-1 + 400 字重，推翻 260923 降档；选中仍 semibold；旋钮清单在 treeRowGeometry/DESIGN Rows）。
@@ -545,6 +559,18 @@
 - **打包产物**：本地 `release/` 已删（ignored 旧产物）；发版重建，瘦身基线仍为 v1.3.1（`.app` 393MB / `asar` 70MB / 依赖 9 个，见 `docs/BUILD-SIZE.md`）。
 - **视觉门禁**：本批无视觉变更，未跑 stylesnap/mobile-snap。
 
+**261120 · 点单批基线（未发版；v1.5.2 之后）**
+
+- `npx tsc --noEmit` = **0**；`typecheck:electron` = **0**。
+- 全量 vitest：**文件 1072 passed / 13 skipped（1085）**；**用例 6814 passed / 14 skipped（6828）/ 0 failed**（负载高时 `useKeyboardStableSheet`/`perf.integration` 类计时断言偶发 1 例红，单跑/复跑即过 —— 既有口径）。
+- `ui-metrics` 0（!important 9 = 允许清单 / 跨文件重复 45 / shadowedDecls 0 / 颜色 0 / 字号 0）。
+- `check:core` **181** 文件 0 违规；`check:mobileui` 通过。
+- `check:bundle` **PASS**：desktop 首屏 **579,064 / 592,000**（余 22,936B；预算按本批瘦身后收紧，见 §0「首屏预算收口」）、mobile 首屏 **348,308/350,000**（entry **51,343/51,440，余 97B ⚠️**、CSS **140,239/141,312**、preload 12/12）；vendor CSS 审计 OK、import 方向 0 违规。
+- 桌面超预算的旧欠账（本批前 HEAD 实测 603,695 > 602,000）已在 A 里清掉；**mobile entry 97B 余量仍需下一笔瘦身**（登记在 §3）。
+- 层围栏基线按批上调：`styles/chrome.css` 533→**539**（目录行三件套 chip）；`mobile/floating.css` 318→**320**（文档引用 Sheet 两处间距/对齐）；`mobile/editor/editor-dock.css` 305→**308**（链接行键盘让位，mobile-link 流）。
+- stylesnap：`hover-row:1315:{light,warm}` 两态重烤并复检 **0 差异**（42 态总数不变；n 2523→2524 经 A/B 证伪 = 夹具/实例漂移，非本次 CSS）；其余 40 态未跑（非本批改动面）。
+- Android：debug APK 已重建并安装 emulator-5554（`--sync`，41.6MB）；设备验收见 §0 两项（文档引用 / 链接输入）。真机（小米）未验。
+
 **261119 · 修复批基线（未发版；v1.4.0 之后）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` 未动 electron/。
@@ -634,7 +660,7 @@
 - **设备装置不进 CI**（无 AVD/GPU）：PR 门禁只覆盖 tsc/vitest/双 build/core/ui-metrics/bundle/arch；设备类验证必须人工跑。
 - **`npx cap sync` 会改写 `android/capacitor.settings.gradle`**（`../../lakex-local-notes/node_modules` → `../node_modules`，本机等价）⇒ 每次 android 构建后、提交前 `git checkout -- android/capacitor.settings.gradle`，生成文件不要提交。
 - **并行会话共用工作树**：提交前必须 `git status` 分辨；只 stage 本批文件；共享基线文件（如 `src/styles/cssLayers.test.ts`）被双方各改几行时，用 `git hash-object -w` + `git update-index --cacheinfo` 只提交本批版本；**绝不用 `git add -A`**。
-- **门禁预算现状**：`check:bundle` 的 mobile-entry 在目标附近，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。
+- **门禁预算现状**：`check:bundle` 的 mobile-entry 在目标附近，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。**261120 起 desktop 首屏已超预算 2,048B（HEAD 本身 603,689 > 602,000）**——判断「是不是这次改坏了」先 stash 本批改动重建对照，别把既有欠账算到新批头上。
 - **全量 vitest 的 `electron/s3v3/perf.integration.test.ts` 在「多模拟器 + 构建」并行时会因宿主负载误报**（261112 实测：全量跑 1 例红、单跑通过；它是 500/2000 文档的阶段耗时门禁）⇒ 见它红先看宿主负载/单跑。
 - **死代码/死 CSS 清理的常踩假阳性**：`SplitHandle` 的 `${className}-handle` 定位类是命中带的 `position: relative` 锚点（删了 = 「拖不动」，261110 真 bug）；移动大纲层级 `.lv1–3`、`.diary-split-handle` 同类动态类。判「没人用」先按 AGENTS §3#14 三排除；批量删样式/注释后必须核对 `mobile.css` 注释配平并跑一次视觉门禁自证。
 - **删文档/审计产物前先消引用**：例 = `audit-261027/` 4 份（5 处源码注释 + 4 处文档引用）：先把结论搬进 `RESILIENCE`/`SYNC-PROTOCOL` 并改注释再删（261112 Q16 做法），否则出处断链、后续会话只能去 git 里捞。
@@ -668,6 +694,15 @@
 ## 3. 待办（唯一待办清单）
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+
+**261120 批待办**
+
+- **mobile entry 预算余量仅 97B（51,343/51,440）**：下一笔移动端入口增量前**必须先瘦身**（或按 261119 先例重新论证上调并写进 check-bundle 注释）。候选方向：移动端设置抽屉/更新中心里剩下的静态重依赖按需化（`RELEASE-NOTES` 已按需，见 §0）；`LinkEditorSheet`/文档引用两个 Sheet 也可考虑并进同一个懒 chunk。
+- **首屏预算新防线待观察**：`budget-gate.yml` 首次在 push master 上跑要确认它真的红/绿（下一笔提交后看 Actions）；若 `npm ci` + 双 build 在 ubuntu 上超 20 分钟需调 timeout。
+- **移动端文档引用：真机（小米）未验**；另注意注册表是 `lazy` 组件，页面刚启动的极短窗口内若立刻插入文档引用会回落桌面浮层（理论窗口 < 一个 chunk 加载，实际未复现；要消掉就把 Sheet 改成静态 import，代价是 entry 预算）。
+- **文档引用 Sheet 的设备观感待用户点收**（标题/搜索/行高/拖动调高）；`mobilesnap` 基线未因本批重烤（本批未改既有屏几何，新增的是新弹层）。
+- **桌面右键菜单顶层新增两项**：其他入口（顶栏菜单/头部＋）未同步，若用户要求「所有入口一致」再评估（当前只按点单改目录右键）。
+- **stylesnap 其余 40 态**：本批只烤了目录行 hover 两态；发版前按 §3#21 跑一次全量确认无外溢。
 
 **261119 批待办**
 

@@ -1,18 +1,12 @@
 // @vitest-environment jsdom
 /**
- * 移动端 dock「＋ → 链接」内联链接编辑行的输入护栏（261119 设备报障复现）：
- * 点输入框能看到聚焦态（蓝框）但打字进不去、软键盘不出。
+ * 移动端「插入链接」浮窗（261120 用户点单：从 dock 面板内联行改成**底部可拖动浮窗** LinkEditorSheet）。
  *
- * 钉三件事（render + 事件序列）：
- * ① **点按输入框的 mousedown 默认动作不许被 cancel** —— 真机契约（Chromium 触摸合成鼠标事件）：
- *    mousedown 默认动作 = 聚焦 + 落光标 + 唤起软键盘，被 preventDefault ⇒ 三样全无（label 激活兜出的
- *    程序化 focus 只有蓝框、不弹键盘，见 AGENTS §7#17「程序化 focus 不弹软键盘」）。jsdom 不实现该默认，
- *    这里按契约模拟：只有未被 cancel 的 mousedown 才聚焦（= 键盘能出）；
- * ② 聚焦后打字必须进 value（键盘事件只进聚焦元素 —— 没聚焦就是真机的"打字进不去"）；
- * ③ 「确定」仍走共享 linkEditor.ts：先还原内核选区（execCommand("focus")）再落链，
- *    「失败重试一次」口径不变（桌面浮栏同一份实现，零变化）。
- * 反向钉死：面板条目（按钮）的 mousedown 仍要 preventDefault —— 保内核选区的原语义不许破
- *（与桌面 SelectionToolbar 容器 260924 的豁免口径同源：input/textarea/.ne-link-editor 放行，其余照旧）。
+ * 钉四件事（render + 事件序列）：
+ * ① 点「插入 → 链接」打开的是**浮窗**（.mb-sheet + 标题「插入链接」），面板里不再有内联输入行；
+ * ② 「文本」初值 = 打开时捕获的选中文字（与桌面浮栏同口径）；
+ * ③ 链接地址为空 / 非法时「确定」禁用；合法才可提交；
+ * ④ 确认仍走共享 linkEditor.ts：先还原内核选区再落链；**失败重试一次**，两次都失败浮窗保持打开（不假装成功）。
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,11 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorDock } from "./EditorDock";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 
-/**
- * 内核 UI 原语桩：KLinkEditor 用 Doc.FrameworkUiLib.Input/Button（AU/antd 原语）。
- * Input 按内核实测契约（lakex.js 的 AU = 受控原生 input，onChange 传事件对象）用原生 input 代替，
- * 受控 value/onChange 的接线保持真实；Button 同理。
- */
 vi.mock("@dlient/lakex-doc-react", async () => {
   const { createElement } = await import("react");
   return {
@@ -33,10 +22,7 @@ vi.mock("@dlient/lakex-doc-react", async () => {
         Input: (props: Record<string, unknown>) =>
           createElement("input", {
             value: props.value as string,
-            disabled: props.disabled as boolean | undefined,
-            placeholder: props.placeholder as string | undefined,
             onChange: props.onChange as never,
-            onKeyDown: props.onKeyDown as never,
           }),
         Button: (props: Record<string, unknown>) =>
           createElement("button", { onClick: props.onClick as never, disabled: props.disabled as boolean | undefined }, props.children as never),
@@ -46,8 +32,6 @@ vi.mock("@dlient/lakex-doc-react", async () => {
 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-// jsdom 没有 Element.scrollIntoView（EditorDock 展开链接行后会滚进可视区）——测试只补空壳。
-if (typeof Element.prototype.scrollIntoView !== "function") Element.prototype.scrollIntoView = () => {};
 
 let host: HTMLDivElement;
 let root: Root;
@@ -55,63 +39,51 @@ let calls: { name: string; args: unknown[] }[];
 
 type FakeEditor = LakeEditorInstance & Record<string, unknown>;
 
-/** 挂 dock + 假内核实例（记录 execCommand 调用；link/insertLink 按 attempt 序号给返回值）。 */
+/** 挂 dock + 假内核实例（记录 execCommand；insertLink/link 按 attempt 序号给返回值）。 */
 function mount(linkResult: (attempt: number) => boolean = () => true): void {
   calls = [];
-  let linkAttempts = 0;
+  let attempts = 0;
   const fake = {
     execCommand: (name: string, ...args: unknown[]) => {
       calls.push({ name, args });
-      if (name === "insertLink" || name === "link") {
-        linkAttempts += 1;
-        return linkResult(linkAttempts);
-      }
+      if (name === "insertLink" || name === "link") { attempts += 1; return linkResult(attempts); }
       return true;
     },
     queryCommandEnabled: () => true,
     queryCommandState: () => 0,
     queryCommandValue: () => null,
   } as unknown as FakeEditor;
-  act(() => {
-    root.render(<EditorDock editor={fake} editing undoBackend="kernel" />);
-  });
+  act(() => { root.render(<EditorDock editor={fake} editing undoBackend="kernel" />); });
 }
 
-const q = (sel: string) => host.querySelector<HTMLElement>(sel);
-const must = (sel: string) => {
-  const el = q(sel);
+const q = <T extends HTMLElement>(sel: string): T | null => document.body.querySelector<T>(sel);
+const must = <T extends HTMLElement>(sel: string): T => {
+  const el = q<T>(sel);
   if (!el) throw new Error("找不到元素: " + sel);
   return el;
 };
 
-/** 点「＋」开插入面板 → 点「链接」展开链接编辑行。 */
-function openLinkRow(): void {
-  act(() => { must('button.med-toggle[aria-label="插入"]').click(); });
-  act(() => { must('button.med-ins-item[aria-label="链接"]').click(); });
+/** 打开「＋ → 链接」。 */
+function openLinkSheet(): void {
+  act(() => { must<HTMLButtonElement>('button.med-toggle[aria-label="插入"]').click(); });
+  act(() => { must<HTMLButtonElement>('button.med-ins-item[aria-label="链接"]').click(); });
 }
 
-/**
- * 真机点按契约：触摸点按合成的 mousedown 的**默认动作** = 聚焦 + 落光标 + 唤起软键盘；
- * 被 cancel ⇒ 三样全无（键盘不出 / 打字进不去）。jsdom 不实现该默认动作，这里按契约模拟，
- * 返回「本次点按能否聚焦（= 能否出键盘）」。
- */
-function tapFocus(el: HTMLElement): boolean {
-  const ev = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  el.dispatchEvent(ev);
-  if (ev.defaultPrevented) return false;
-  el.focus();
-  return true;
-}
+const rows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".mb-set-item")];
+const confirmBtn = (): HTMLButtonElement => {
+  const btns = [...document.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")];
+  const btn = btns.find((b) => (b.textContent ?? "").trim() === "确定");
+  if (!btn) throw new Error("找不到「确定」");
+  return btn;
+};
 
-/** 键盘打字只进**聚焦**元素：没聚焦 = 真机"打字进不去"。 */
-function typeIntoFocused(el: HTMLInputElement, text: string): boolean {
-  if (document.activeElement !== el) return false;
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+/** 受控输入写入（走 contenteditable 同款机制：覆盖 value + 派发 input）。 */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   act(() => {
-    setter?.call(el, el.value + text);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  return el.value === text;
 }
 
 /** 等真实定时器（confirmLink 的 attempt(0) / attempt(160) 重试）。 */
@@ -125,63 +97,78 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  document.body.innerHTML = "";
 });
 
-describe("dock 链接编辑行：输入必须能进（261119 设备报障）", () => {
-  it("点文本/链接输入框 → 聚焦出键盘 → 打字进 value → 确定落链接", async () => {
+describe("移动端插入链接 = 底部浮窗", () => {
+  it("点「＋ → 链接」打开浮窗（不再是面板内联行），文本预填选中文字，地址为空时确定禁用", () => {
     mount();
-    openLinkRow();
-    const textInput = must('input[placeholder="添加描述"]') as HTMLInputElement;
-    const srcInput = must('input[placeholder="链接地址"]') as HTMLInputElement;
-
-    // ① 点「文本」输入框：点按默认动作（聚焦 + 落光标 + 唤键盘）必须放行
-    expect(tapFocus(textInput), "文本输入框的点按聚焦被吃掉（键盘出不来）").toBe(true);
-    expect(document.activeElement).toBe(textInput);
-    // ② 打字进 value
-    expect(typeIntoFocused(textInput, "描述"), "聚焦后打字进不去 value").toBe(true);
-    expect(textInput.value).toBe("描述");
-
-    // ③ 「链接」输入框同样
-    expect(tapFocus(srcInput), "链接输入框的点按聚焦被吃掉（键盘出不来）").toBe(true);
-    expect(document.activeElement).toBe(srcInput);
-    expect(typeIntoFocused(srcInput, "https://example.com/a")).toBe(true);
-    expect(srcInput.value).toBe("https://example.com/a");
-
-    // ④ 确定：走共享 linkEditor.ts —— 先还原内核选区（focus）再落链（文本改过 ⇒ insertLink 优先）
-    act(() => { must(".ne-link-editor button").click(); });
-    await settle(20);
-    const names = calls.map((c) => c.name);
-    expect(names, "确认链接必须先还原内核选区").toContain("focus");
-    expect(calls.some((c) => c.name === "insertLink" && c.args.includes("https://example.com/a"))).toBe(true);
-    // 落链成功 ⇒ 编辑行收起
-    expect(q('input[placeholder="链接地址"]')).toBeNull();
+    openLinkSheet();
+    // 浮窗是 mb-sheet 原语，标题「插入链接」；面板里没有内联链接行
+    expect(q(".mb-sheet")).toBeTruthy();
+    expect(q(".mb-sheet__title")?.textContent).toBe("插入链接");
+    expect(q(".med-f-link, .ne-link-editor")).toBeNull();
+    // 两个字段：文本 / 链接
+    expect(rows().length).toBe(2);
+    const text = must<HTMLInputElement>('input[aria-label="文本"]');
+    const src = must<HTMLInputElement>('input[aria-label="链接地址"]');
+    expect(text.value).toBe(""); // jsdom 无真实选区 ⇒ 初值为空
+    expect(src.value).toBe("");
+    expect(confirmBtn().disabled).toBe(true);
+    // 非法链接也要禁用
+    typeInto(src, "not a link");
+    expect(q(".mb-set-item__error")?.textContent).toContain("请输入正确的链接");
+    expect(confirmBtn().disabled).toBe(true);
+    // 合法后可用
+    typeInto(src, "https://example.com");
+    expect(q(".mb-set-item__error")).toBeNull();
+    expect(confirmBtn().disabled).toBe(false);
   });
 
-  it("确认链接保留「失败重试一次」共享口径（选区还原语义不破）", async () => {
-    // 第一轮（focus 后同一 tick）内核拒绝（false）⇒ 160ms 后整组重试一次；第二轮成功。
+  it("确定 = 还原选区后走内核命令；成功后关闭浮窗", async () => {
+    mount();
+    openLinkSheet();
+    typeInto(must<HTMLInputElement>('input[aria-label="文本"]'), "示例");
+    typeInto(must<HTMLInputElement>('input[aria-label="链接地址"]'), "https://example.com");
+    act(() => { confirmBtn().click(); });
+    await settle(300);
+    // 至少命中一次 link / insertLink，且命中的参数里带链接地址
+    const hit = calls.find((c) => c.name === "link" || c.name === "insertLink");
+    expect(hit, "没调用内核链接命令").toBeTruthy();
+    expect(String(hit!.args.join(" "))).toContain("https://example.com");
+    expect(q(".mb-sheet"), "成功后浮窗应关闭").toBeNull();
+  });
+
+  it("第一次被内核拒绝 ⇒ 160ms 后重试一次并成功（移动端实测口径）", async () => {
+    // 共享实现里一次「尝试」内部会先 link 再 insertLink（两条都被拒才算失败）⇒ 前两次都返回 false。
     mount((attempt) => attempt > 2);
-    openLinkRow();
-    const srcInput = must('input[placeholder="链接地址"]') as HTMLInputElement;
-    tapFocus(srcInput);
-    typeIntoFocused(srcInput, "https://example.com/b");
-    act(() => { must(".ne-link-editor button").click(); });
-
-    await settle(30);
-    expect(calls.map((c) => c.name).filter((n) => n === "insertLink" || n === "link")).toHaveLength(2);
-    expect(q('input[placeholder="链接地址"]'), "第一轮失败不能假装成功收起").not.toBeNull();
-
-    await settle(250);
-    // 第二轮 insertLink 被接受即停（共享 applyTextLink「先 insertLink 后 link、被拒才换」的顺序不变）；不再有第三轮。
-    expect(calls.map((c) => c.name).filter((n) => n === "insertLink" || n === "link"), "只许失败重试一次").toEqual(["insertLink", "link", "insertLink"]);
-    expect(q('input[placeholder="链接地址"]')).toBeNull();
+    openLinkSheet();
+    typeInto(must<HTMLInputElement>('input[aria-label="链接地址"]'), "https://example.com");
+    act(() => { confirmBtn().click(); });
+    await settle(60);
+    expect(q(".mb-sheet"), "第一次失败时先别关").toBeTruthy();
+    await settle(400);
+    expect(calls.filter((c) => c.name === "link" || c.name === "insertLink").length).toBeGreaterThanOrEqual(2);
+    expect(q(".mb-sheet"), "重试成功后关闭").toBeNull();
   });
 
-  it("面板条目（按钮）的 mousedown 仍然 preventDefault —— 保内核选区原语义不许破", () => {
+  it("链接地址里按回车 = 确定（键盘盖住底栏时的最短出口）", async () => {
     mount();
-    openLinkRow();
-    const btn = must('button.med-ins-item[aria-label="引用"]');
-    const ev = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-    btn.dispatchEvent(ev);
-    expect(ev.defaultPrevented, "面板按钮点按仍须吃掉默认（防选区被按钮抢走）").toBe(true);
+    openLinkSheet();
+    const src = must<HTMLInputElement>('input[aria-label="链接地址"]');
+    typeInto(src, "https://example.com");
+    act(() => { src.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await settle(300);
+    expect(calls.some((c) => c.name === "link" || c.name === "insertLink")).toBe(true);
+    expect(q(".mb-sheet")).toBeNull();
+  });
+
+  it("两次都被拒 ⇒ 浮窗保持打开，绝不假装成功", async () => {
+    mount(() => false);
+    openLinkSheet();
+    typeInto(must<HTMLInputElement>('input[aria-label="链接地址"]'), "https://example.com");
+    act(() => { confirmBtn().click(); });
+    await settle(400);
+    expect(q(".mb-sheet"), "失败不关窗").toBeTruthy();
   });
 });

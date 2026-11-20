@@ -95,24 +95,51 @@ describe("创建类 IPC：position 透传与归一", () => {
     expect(lastCall("createNote")).toEqual(["标题", "bottom"]);
 
     await callHandler("create_note_in", null, "标题", "top");
-    expect(lastCall("createNoteIn")).toEqual([null, "标题", "top"]);
+    expect(lastCall("createNoteIn")).toEqual([null, "标题", "top", undefined]);
 
     await callHandler("create_note_in", "parent-1", "标题", "garbage");
-    expect(lastCall("createNoteIn")).toEqual(["parent-1", "标题", "bottom"]);
+    expect(lastCall("createNoteIn")).toEqual(["parent-1", "标题", "bottom", undefined]);
+  });
+
+  // 261120 用户点单「在上方/在下方新建文档」：第 4 参 = 同父级锚点 sort_order。
+  // 上方新建传锚点 - 1（可能是 -1 = 插到同级首位），下方新建传锚点本身；非整数一律当未指定。
+  it("create_note_in：afterSortOrder 整数透传，非法值当未指定", async () => {
+    await callHandler("create_note_in", "p", "标题", "bottom", 3);
+    expect(lastCall("createNoteIn")).toEqual(["p", "标题", "bottom", 3]);
+
+    await callHandler("create_note_in", "p", "标题", undefined, -1);
+    expect(lastCall("createNoteIn")).toEqual(["p", "标题", "bottom", -1]);
+
+    await callHandler("create_note_in", "p", "标题", undefined, "2");
+    expect(lastCall("createNoteIn")).toEqual(["p", "标题", "bottom", undefined]);
+  });
+
+  // 261120（目录右键「在上方/在下方新建」二级菜单）：六种 kind 都能带同父级锚点（非整数当未指定）。
+  it("四个 kind + 分组：afterSortOrder 锚点整透传（含 -1 = 插到同级首位）", async () => {
+    await callHandler("create_usheet_in", "p", "表格", "bottom", 3);
+    expect(lastCall("createUsheetIn")).toEqual(["p", "表格", "bottom", 3]);
+    await callHandler("create_bitable_in", "p", "多维表", "bottom", -1);
+    expect(lastCall("createBitableIn")).toEqual(["p", "多维表", "bottom", -1]);
+    await callHandler("create_board_in", "p", "画板", "bottom", "2");
+    expect(lastCall("createBoardIn")).toEqual(["p", "画板", "bottom", undefined]);
+    await callHandler("create_ink_in", "p", "手写板", "bottom", 0);
+    expect(lastCall("createInkIn")).toEqual(["p", "手写板", "bottom", 0]);
+    await callHandler("create_group", "p", "分组", "bottom", 5);
+    expect(lastCall("createGroup")).toEqual(["p", "分组", "bottom", 5]);
   });
 
   it("四个 kind + 分组 + 笔记本：全部透传 position", async () => {
     await callHandler("create_usheet_in", "p", "表格", "top");
-    expect(lastCall("createUsheetIn")).toEqual(["p", "表格", "top"]);
+    expect(lastCall("createUsheetIn")).toEqual(["p", "表格", "top", undefined]);
     await callHandler("create_bitable_in", "p", "多维表", "top");
-    expect(lastCall("createBitableIn")).toEqual(["p", "多维表", "top"]);
+    expect(lastCall("createBitableIn")).toEqual(["p", "多维表", "top", undefined]);
     await callHandler("create_board_in", "p", "画板", "top");
-    expect(lastCall("createBoardIn")).toEqual(["p", "画板", "top"]);
+    expect(lastCall("createBoardIn")).toEqual(["p", "画板", "top", undefined]);
     await callHandler("create_ink_in", "p", "手写板", "top");
-    expect(lastCall("createInkIn")).toEqual(["p", "手写板", "top"]);
+    expect(lastCall("createInkIn")).toEqual(["p", "手写板", "top", undefined]);
 
     await callHandler("create_group", "p", "分组", "top");
-    expect(lastCall("createGroup")).toEqual(["p", "分组", "top"]);
+    expect(lastCall("createGroup")).toEqual(["p", "分组", "top", undefined]);
 
     await callHandler("create_notebook", "笔记本", "diary", "top");
     expect(lastCall("createNotebook")).toEqual(["笔记本", "diary", undefined, "top"]);

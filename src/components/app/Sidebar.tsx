@@ -67,6 +67,7 @@ import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { TreeRow } from "./sidebar/TreeRow";
 import { TreeRenameDialog } from "./sidebar/TreeRenameDialog";
 import { CreateMenu } from "./sidebar/CreateMenu";
+import type { CreateChildKind } from "./sidebar/CreateChildItems";
 import { ContextMenu } from "./sidebar/ContextMenu";
 import type { DropPosition } from "./sidebar/treeRowProps";
 /** 兼容导出：DesktopOverlays 仍从 Sidebar 取它（组件本体在 ./sidebar/ConfirmDelete，单一实现）。 */
@@ -91,7 +92,8 @@ interface SidebarProps {
   onRefreshTree: () => void | Promise<void>;
   onSelect: (id: string) => void;
   /** 返回新节点 id（弹窗据此选中/滚动）；失败可抛错（弹窗内显示）。 */
-  onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void | Promise<string | void>;
+  /** afterSortOrder（261120）= 目录右键「在上方/在下方新建文档」的同父级锚点（上方 = 锚点 sort_order - 1）。 */
+  onCreate: (kind: CreateKind, parentId: string | null, title?: string, afterSortOrder?: number) => void | Promise<string | void>;
   onRename: (id: string, title: string) => void;
   onMoveNode: (id: string, targetId: string, position: DropPosition) => void;
   onRequestDelete: (node: TreeNode) => void;
@@ -151,7 +153,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
    * 新建（全部 kind）= 同一个弹窗（261105 用户验收：所有「需要写名字」的新建统一体验）。
    * 内联创建行与「创建后自动打开重命名」都已移除，避免二次弹窗。
    */
-  const [createDialog, setCreateDialog] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
+  const [createDialog, setCreateDialog] = useState<{ kind: CreateKind; parentId: string | null; afterSortOrder?: number } | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -530,9 +532,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const groupParent = context?.id ?? defaultNotebookId;
   const noteParent = context?.id ?? defaultNotebookId;
 
-  const openCreateDialog = useCallback((kind: CreateKind, parentId: string | null) => {
+  const openCreateDialog = useCallback((kind: CreateKind, parentId: string | null, afterSortOrder?: number) => {
     setCreateError(null);
-    setCreateDialog({ kind, parentId });
+    setCreateDialog({ kind, parentId, afterSortOrder });
   }, []);
 
   const create = (kind: CreateKind) => {
@@ -550,7 +552,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     try {
       const kind = createDialog.kind;
       const parentId = createDialog.parentId;
-      const id = await Promise.resolve(props.onCreate(kind, parentId, title));
+      const afterSortOrder = createDialog.afterSortOrder;
+      // 261120：显式锚点（在上方/在下方新建）优先于设置里的「新建文档位置」；
+      // 没有锚点时仍按原 3 参契约调用（既有调用方/护栏都按 3 参断言，不制造无意义的 undefined 实参）。
+      const id = await Promise.resolve(afterSortOrder === undefined
+        ? props.onCreate(kind, parentId, title)
+        : props.onCreate(kind, parentId, title, afterSortOrder));
       setCreateDialog(null);
       if (typeof id === "string" && id) {
         // 只有文档类新节点能以 noteId 打开；笔记本/分组返回的是树节点 id，
@@ -703,6 +710,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setContextMenu(null);
     setCreateMenu(null);
     openCreateDialog(kind, parentId);
+  };
+
+  /** 261120 用户点单：目录右键「在上方新建 / 在下方新建」= 与当前**文档**同父级、紧邻上/下插入；
+   *  二级菜单的六种子项复用我们自己的新建清单（CREATE_CHILD_ITEMS）。落位靠 afterSortOrder 锚点
+   *  （上方 = 锚点 sortOrder-1，下方 = 锚点 sortOrder），由 store 在同一事务里挪开同级条目；
+   *  显式锚点优先于设置里的「新建文档位置」。分组/笔记本行不提供（没有"文档兄弟"语义）。 */
+  const createSibling = (node: TreeNode | null, position: "above" | "below", kind: CreateChildKind) => {
+    if (!node || node.nodeType !== "note" || !node.parentId) return;
+    const parentId = node.parentId;
+    setExpanded((current) => expandAncestors(current, props.nodes, parentId));
+    setContextMenu(null);
+    setCreateMenu(null);
+    openCreateDialog(kind, parentId, position === "above" ? node.sortOrder - 1 : node.sortOrder);
   };
 
   // ---- Markdown 导入（261106 task-85）----
@@ -1330,7 +1350,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onClose={() => setBatchMenu(null)}
         />
       )}
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} onCreateSibling={(position, kind) => createSibling(contextNode, position, kind)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId, kind) => void startImport(targetId, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {

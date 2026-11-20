@@ -90,9 +90,12 @@ export function useNoteLifecycle({
     // 261105 用户验收：新建改弹窗后不再「创建即打开重命名弹窗」（普通重命名入口不受影响）。
   }
 
-  async function createNoteIn(parentId: string | null, title = "无标题文档"): Promise<string> {
+  async function createNoteIn(parentId: string | null, title = "无标题文档", afterSortOrder?: number): Promise<string> {
     // 261117：parentId=null（无父）落到默认笔记本时同样按设置落位；有父（分组/文档下）也按同一规则。
-    const note = parentId === null ? await native.createNote(title, newNotePosition) : await native.createNoteIn(parentId, title, newNotePosition);
+    // 261120 用户点单：afterSortOrder 显式给锚点时按锚点落位（目录右键「在上方/在下方新建文档」）。
+    const note = parentId === null
+      ? await native.createNote(title, newNotePosition)
+      : await native.createNoteIn(parentId, title, newNotePosition, afterSortOrder);
     await openCreatedNote(note, "doc");
     return note.id;
   }
@@ -103,29 +106,29 @@ export function useNoteLifecycle({
   }
 
   /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createUsheetIn(parentId: string | null, title = "无标题表格"): Promise<string> {
-    const note = await native.createUsheetIn(parentId, title, newNotePosition);
+  async function createUsheetIn(parentId: string | null, title = "无标题表格", afterSortOrder?: number): Promise<string> {
+    const note = await native.createUsheetIn(parentId, title, newNotePosition, afterSortOrder);
     await openCreatedNote(note, "usheet");
     return note.id;
   }
 
   /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createBitableIn(parentId: string | null, title = "无标题多维表"): Promise<string> {
-    const note = await native.createBitableIn(parentId, title, newNotePosition);
+  async function createBitableIn(parentId: string | null, title = "无标题多维表", afterSortOrder?: number): Promise<string> {
+    const note = await native.createBitableIn(parentId, title, newNotePosition, afterSortOrder);
     await openCreatedNote(note, "bitable");
     return note.id;
   }
 
   /** 新建画板文档（kind=board）：正文是 Drawnix/Plait 场景 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createBoardIn(parentId: string | null, title = "无标题画板"): Promise<string> {
-    const note = await native.createBoardIn(parentId, title, newNotePosition);
+  async function createBoardIn(parentId: string | null, title = "无标题画板", afterSortOrder?: number): Promise<string> {
+    const note = await native.createBoardIn(parentId, title, newNotePosition, afterSortOrder);
     await openCreatedNote(note, "board");
     return note.id;
   }
 
   /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createInkIn(parentId: string | null, title = "无标题手写板"): Promise<string> {
-    const note = await native.createInkIn(parentId, title, newNotePosition);
+  async function createInkIn(parentId: string | null, title = "无标题手写板", afterSortOrder?: number): Promise<string> {
+    const note = await native.createInkIn(parentId, title, newNotePosition, afterSortOrder);
     await openCreatedNote(note, "ink");
     return note.id;
   }
