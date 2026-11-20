@@ -12,8 +12,8 @@ import { loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
 import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
 // 261115 A21：老 Android WebView 没有 toSorted/toReversed/Promise.withResolvers —— 第一行先补，再跑业务。
 import { installEs2024Fallbacks } from "../lib/es2024Fallback";
-import { clearCrashLog, readCrashLog } from "./lib/crashLog";
-import { consumeNativeCrashLog } from "./native/crashLog";
+// 261120 首屏瘦身：崩溃记录/原生崩溃诊断只在「出错时」和 dev 调试里用 ⇒ 改成用时动态 import
+// （两个模块 ≈3KB gz，以前静态在入口 chunk 里）。
 
 installEs2024Fallbacks();
 import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
@@ -76,11 +76,18 @@ if (loadSettings().clearTabsOnExit) clearPersistedNotebookTabs();
 installGlobalErrorHandlers();
 // 上一条原生未捕获异常（MainActivity 的 UncaughtExceptionHandler 落盘）→ 并入崩溃记录并清掉文件；
 // 纯诊断动作，任何失败都静默（web 预览/无该插件时正常跳过）。
-void consumeNativeCrashLog();
+// 261120：改成**首屏之后空闲时**再动态加载诊断模块（不占入口图；它本来也不参与首帧）。
+const runNativeCrashImport = () => {
+  void import("./native/crashLog").then((m) => m.consumeNativeCrashLog()).catch(() => undefined);
+};
+if (typeof requestIdleCallback === "function") requestIdleCallback(runNativeCrashImport, { timeout: 4000 });
+else window.setTimeout(runNativeCrashImport, 2000);
 // dev 调试：console 里 __lakeCrashLog() 取最近崩溃记录、__lakeCrashLogClear() 清空。
 if (import.meta.env.DEV) {
-  (window as unknown as Record<string, unknown>).__lakeCrashLog = () => readCrashLog();
-  (window as unknown as Record<string, unknown>).__lakeCrashLogClear = () => clearCrashLog();
+  // dev-only：同样按需加载（生产构建里整段被摇掉，不因静态 import 把模块留在入口图）。
+  const loadCrashLog = () => import("./lib/crashLog");
+  (window as unknown as Record<string, unknown>).__lakeCrashLog = () => loadCrashLog().then((m) => m.readCrashLog());
+  (window as unknown as Record<string, unknown>).__lakeCrashLogClear = () => loadCrashLog().then((m) => m.clearCrashLog());
 }
 
 // 261022：冷启动首帧路由 —— 原生同步 hint 在 React 首帧前给出 launch URL，

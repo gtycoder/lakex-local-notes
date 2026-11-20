@@ -44,7 +44,9 @@ describe("坏库页（261105）", () => {
 describe("崩溃隔离 + 全局异常（261105）", () => {
   it("根入口：装全局 handler + 读原生崩溃记录 + 根 ErrorBoundary", () => {
     expect(MAIN).toContain("installGlobalErrorHandlers();");
-    expect(MAIN).toContain("void consumeNativeCrashLog();");
+    // 261120 首屏瘦身：原生崩溃记录读取改成首屏后空闲时动态 import（不再静态在入口图里）
+    expect(MAIN).toContain('import("./native/crashLog")');
+    expect(MAIN).toContain("consumeNativeCrashLog()");
     expect(MAIN).toContain('<MobileErrorBoundary scope="app">');
     expect(MAIN).toContain("MobileApp initialCapture");
   });
@@ -57,7 +59,9 @@ describe("崩溃隔离 + 全局异常（261105）", () => {
   });
 
   it("诊断复制带上最近崩溃记录与日记告警；设置页也有导出入口", () => {
-    expect(APP).toContain("formatCrashEntries(readCrashLog(10))");
+    // 261120：崩溃记录模块改成用时动态 import（不占入口 chunk）
+    expect(APP).toContain('import("./lib/crashLog")');
+    expect(APP).toContain("crashLog.formatCrashEntries(crashLog.readCrashLog(10))");
     const ABOUT = readFileSync(new URL("./settings/BasicSettingsSections.tsx", import.meta.url), "utf8");
     expect(ABOUT).toContain("复制诊断信息");
     expect(ABOUT).toContain("formatCrashEntries(readCrashLog(10))");

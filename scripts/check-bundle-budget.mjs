@@ -73,7 +73,10 @@ const MOBILE_ENTRY_PRELOAD_BUDGET = 12;
 // （F-B/C/H 防跳变，占位与富预览同槽）+ capture 返回判据（softKeyboardVisible 双通道）+ 首屏预热接线；
 // 同批已做瘦身：拍照 takeCameraPhoto 改动态 import（-255B，HomePage/MobileAiPage 两处）。
 // 实测 51,359B ⇒ 预算留 81B 余量。**再涨必须重新论证**，不得回退到「冻结现状值」口径。
-const MOBILE_ENTRY_JS_GZIP_BUDGET = 51_440;
+// 261120 移动端入口瘦身（用户点单「先尝试推进瘦身」）：小记时间线的虚拟行窗口拆成懒组件
+// （QuickNotesVirtualList，@tanstack/virtual-core+react-virtual 不再进入口）+ 启动期后台维护与崩溃诊断
+// 改用时动态 import ⇒ **实测 42,603B（−8,727B）** ⇒ 预算按「实测 + ≈3.4KB」收紧 51,440 → 46,000B。
+const MOBILE_ENTRY_JS_GZIP_BUDGET = 46_000;
 // 入口 CSS 不在本轮目标内（首屏 ≤360KB 由 check-arch 守）；维持 261103 的现状冻结值。
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 

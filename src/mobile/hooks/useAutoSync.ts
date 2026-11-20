@@ -24,8 +24,9 @@ import { readSyncSettings, subscribeSyncSettings } from "../sync/syncSettingsSto
 import { whenQuickNoteLaunchResolved } from "../native/quickNoteShortcut";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { hasInterruptedSync } from "../sync/syncResumeMarker";
-import { runScheduledHistoryCleanup } from "../sync/historyCleanupScheduler";
-import { runScheduledTrashPurge, TRASH_AUTO_PURGE_DAYS } from "../sync/trashAutoPurge";
+// 261120 首屏瘦身：两个定时维护任务（历史清理 / 回收站过期）都是「就绪之后才跑」的后台活，
+// 以前静态 import 会把它们的实现（≈6KB gz）打进入口 chunk。改成任务真正要跑时再动态 import
+// —— 语义不变（仍在本就绪/回前台时机触发），只是那次 import 的几百字节换成后续 chunk 加载。
 import { ensureDb } from "../bridge/context";
 import { dismissNoteTabs } from "../notebook/tabDismissal";
 
@@ -86,11 +87,12 @@ export function useAutoSync(ready = true): void {
       // 就绪空闲与回前台可能同时触发：在途去重，别叠两次清理。
       if (historyCleanupRunning) return;
       historyCleanupRunning = true;
-      void runScheduledHistoryCleanup({
-        readSettings: () => bridge.getHistorySettings(),
-        cleanup: () => bridge.cleanupHistory(),
-        db: async () => { try { return await ensureDb(); } catch { return null; } },
-      })
+      void import("../sync/historyCleanupScheduler")
+        .then(({ runScheduledHistoryCleanup }) => runScheduledHistoryCleanup({
+          readSettings: () => bridge.getHistorySettings(),
+          cleanup: () => bridge.cleanupHistory(),
+          db: async () => { try { return await ensureDb(); } catch { return null; } },
+        }))
         .catch((error) => console.warn("[history] 定期清理失败（下次到期再试）", error))
         .finally(() => { historyCleanupRunning = false; });
     };
@@ -104,19 +106,19 @@ export function useAutoSync(ready = true): void {
      * 下次正常启动/回前台会补上（回收站条目不会因此提前/延后到期，只是晚一次扫描）。
      */
     const runTrashPurgeOnce = () => {
-      void runScheduledTrashPurge({
-        listTrash: () => bridge.listTrashTree(),
-        // 自动过期/远端删除后的彻底删除也可能让「仍开着的回收站标签」失效 ⇒ 按返回的 ids 收掉（G3）。
-        purge: async (root, expiredBefore) => {
-          const result = await bridge.purgeTreeItem(root.id, root.kind, { expiredBefore });
-          dismissNoteTabs(result.noteIds);
-          return result.purged;
-        },
-      })
-        .then((result) => {
+      void import("../sync/trashAutoPurge")
+        .then(({ runScheduledTrashPurge, TRASH_AUTO_PURGE_DAYS }) => runScheduledTrashPurge({
+          listTrash: () => bridge.listTrashTree(),
+          // 自动过期/远端删除后的彻底删除也可能让「仍开着的回收站标签」失效 ⇒ 按返回的 ids 收掉（G3）。
+          purge: async (root, expiredBefore) => {
+            const result = await bridge.purgeTreeItem(root.id, root.kind, { expiredBefore });
+            dismissNoteTabs(result.noteIds);
+            return result.purged;
+          },
+        }).then((result) => {
           if (result.purged > 0) console.info(`[trash] 自动过期 purge ${result.purged} 项（>${TRASH_AUTO_PURGE_DAYS} 天）`);
           if (result.failed > 0) console.warn(`[trash] 自动过期有 ${result.failed} 项失败（下次回前台再试）`);
-        })
+        }))
         .catch((error) => console.warn("[trash] 自动过期失败（下次回前台再试）", error));
     };
 

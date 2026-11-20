@@ -59,7 +59,7 @@ import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
 import { subscribeQuickNoteShortcut, type QuickNoteCaptureMode } from "./native/quickNoteShortcut";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
-import { formatCrashEntries, readCrashLog } from "./lib/crashLog";
+// 261120 首屏瘦身：崩溃记录只在「出错页 / 复制诊断」用 ⇒ 用时动态 import（不占入口 chunk）。
 import { ensureDb } from "./bridge/context";
 import { showToast } from "./ui/toastBus";
 import { QUICK_NOTE_PREPARE_FAILED_TEXT } from "./ui/toastCopy";
@@ -378,7 +378,8 @@ export function MobileApp({ initialCapture = false, initialCaptureMode = null }:
       lines.push("诊断：数据库未打开，读取失败");
     }
     // 261105：带上最近崩溃/异常记录（全局 handler + 错误边界 + 上一条原生崩溃都在同一份环形缓冲里）。
-    const crashes = formatCrashEntries(readCrashLog(10));
+    const crashLog = await import("./lib/crashLog").catch(() => null);
+    const crashes = crashLog ? crashLog.formatCrashEntries(crashLog.readCrashLog(10)) : [];
     if (crashes.length > 0) lines.push("", "最近崩溃记录：", ...crashes);
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
@@ -1133,7 +1134,7 @@ function MobileBootErrorPage(props: {
               <div className="mb-card__body">
                 <p className="mb-form__desc">{props.message}</p>
                 <p className="mb-form__desc">数据仍在本机：重试不会改动正文、附件或未同步的修改。</p>
-                <p className="mb-form__desc">最近崩溃记录：{readCrashLog(10).length} 条（「复制诊断信息」可导出，含上一条原生崩溃）。</p>
+                <p className="mb-form__desc">「复制诊断信息」可一并导出最近的崩溃记录（含上一条原生崩溃）。</p>
               </div>
             </div>
             <div className="mb-set-items">
@@ -1179,7 +1180,7 @@ function MobileDatabaseProblemPage(props: {
               <div className="mb-card__body">
                 <p className="mb-form__desc">{props.reason}</p>
                 <p className="mb-form__desc">正文、附件与历史快照都在本机文件里，不会被这一步删除。</p>
-                <p className="mb-form__desc">最近崩溃记录：{readCrashLog(10).length} 条。本机数据库文件暂不支持导出，请先「复制诊断信息」留存。</p>
+                <p className="mb-form__desc">本机数据库文件暂不支持导出，请先「复制诊断信息」留存（会一并带上最近的崩溃记录）。</p>
               </div>
             </div>
             <div className="mb-set-items">

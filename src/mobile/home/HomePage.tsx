@@ -7,9 +7,10 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { useVirtualizer } from "@tanstack/react-virtual";
+// 261120 首屏瘦身：虚拟行窗口拆成懒组件（@tanstack ≈8.2KB gzip 不再进入口 chunk）。
+const QuickNotesVirtualList = lazy(() => import("./QuickNotesVirtualList").then((m) => ({ default: m.QuickNotesVirtualList })));
 import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, ListFilter, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
@@ -384,42 +385,13 @@ export function HomePage(props: HomePageProps) {
         ? (quickTagIndex.tags.find((tag) => tag.id === quickTagFilter.id)?.name ?? "标签")
         : "已选筛选";
   const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
-  const [quickScrollMargin, setQuickScrollMargin] = useState(0);
   const [quickScrollElement, setQuickScrollElement] = useState<HTMLDivElement | null>(null);
+  /** 外部要求滚到某条（全局搜索命中）：交给懒组件去 scrollToIndex，消费后清空。 */
+  const [quickVirtualScrollIndex, setQuickVirtualScrollIndex] = useState<number | null>(null);
   const setQuickScrollNode = useCallback((node: HTMLDivElement | null) => {
     quickScrollRef.current = node;
     setQuickScrollElement(node);
   }, []);
-  const getQuickScrollElement = useCallback(() => quickScrollElement, [quickScrollElement]);
-  const getQuickItemKey = useCallback((index: number) => sortedQuickNotes[index]?.id ?? index, [sortedQuickNotes]);
-  const quickVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: quickVirtualEnabled ? sortedQuickNotes.length : 0,
-    getScrollElement: getQuickScrollElement,
-    estimateSize: () => 168,
-    getItemKey: getQuickItemKey,
-    overscan: 6,
-    initialRect: { width: 390, height: 800 },
-    scrollMargin: quickScrollMargin,
-    scrollPaddingStart: quickScrollMargin,
-    enabled: quickVirtualEnabled,
-  });
-  useLayoutEffect(() => {
-    if (!quickVirtualEnabled) return;
-    const update = () => {
-      const scroller = quickScrollRef.current;
-      const cards = quickCardsRef.current;
-      if (!scroller || !cards) return;
-      setQuickScrollMargin(cards.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);
-    };
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(update);
-    if (quickScrollRef.current) ro.observe(quickScrollRef.current);
-    return () => ro.disconnect();
-  }, [quickVirtualEnabled, sortedQuickNotes.length, quickTagIndex.tags.length]);
-  useLayoutEffect(() => {
-    if (quickVirtualEnabled) quickVirtualizer.measure();
-  }, [quickVirtualEnabled, sortedQuickNotes, quickVirtualizer]);
 
   /** v2（261107）：共享元素转场 —— 卡片 → 目标容器（FLIP 克隆）。
    *  克隆按卡片当前矩形浮起，扩到目标矩形后淡出；真实目标视图随后挂载/切换。
@@ -502,7 +474,7 @@ export function HomePage(props: HomePageProps) {
     setQuickTagFilter({ kind: "all" });
     setRevealedQuickNoteId(pendingQuickNoteId);
     const index = displayedQuickNotes.findIndex((note) => note.id === pendingQuickNoteId);
-    if (quickVirtualEnabled && index >= 0) quickVirtualizer.scrollToIndex(index, { align: "center" });
+    if (quickVirtualEnabled && index >= 0) setQuickVirtualScrollIndex(index);
     let second = 0;
     const frame = window.requestAnimationFrame(() => {
       second = window.requestAnimationFrame(() => {
@@ -515,7 +487,7 @@ export function HomePage(props: HomePageProps) {
       window.cancelAnimationFrame(frame);
       if (second) window.cancelAnimationFrame(second);
     };
-  }, [displayedQuickNotes, onPendingQuickNoteConsumed, pendingQuickNoteId, quickVirtualEnabled, quickVirtualizer]);
+  }, [displayedQuickNotes, onPendingQuickNoteConsumed, pendingQuickNoteId, quickVirtualEnabled]);
 
   useEffect(() => {
     if (!revealedQuickNoteId) return;
@@ -926,26 +898,22 @@ export function HomePage(props: HomePageProps) {
             {sortedQuickNotes.length === 0 ? (
               <EmptyState enter>{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</EmptyState>
             ) : quickVirtualEnabled ? (
-              <div
-                ref={quickCardsRef}
-                className="mobile-quick-cards"
-                style={{ display: "block", position: "relative", height: Math.max(0, quickVirtualizer.getTotalSize() - quickScrollMargin), padding: 0 }}
+              /* 261120：虚拟行窗口在懒 chunk 里（@tanstack 不进入口）；chunk 未就绪时先画前 12 条同构卡片
+                 （长列表冷启动只多一帧，短列表根本走不到这里）。 */
+              <Suspense fallback={(
+                <div className="mobile-quick-cards">
+                  {sortedQuickNotes.slice(0, 12).map(renderQuickNoteCard)}
+                </div>
+              )}
               >
-                {quickVirtualizer.getVirtualItems().map((item) => {
-                  const note = sortedQuickNotes[item.index];
-                  if (!note) return null;
-                  return (
-                    <div
-                      key={item.key}
-                      ref={quickVirtualizer.measureElement}
-                      data-index={item.index}
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "6px 14px", transform: `translateY(${item.start - quickScrollMargin}px)` }}
-                    >
-                      {renderQuickNoteCard(note)}
-                    </div>
-                  );
-                })}
-              </div>
+                <QuickNotesVirtualList
+                  items={sortedQuickNotes}
+                  renderCard={renderQuickNoteCard}
+                  scrollElement={quickScrollElement}
+                  scrollToIndex={quickVirtualScrollIndex}
+                  onScrollToIndexDone={() => setQuickVirtualScrollIndex(null)}
+                />
+              </Suspense>
             ) : (
               <div ref={quickCardsRef} className="mobile-quick-cards">
                 {sortedQuickNotes.map(renderQuickNoteCard)}
