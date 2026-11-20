@@ -85,7 +85,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     childrenOf,
     itemById,
     visibleRows,
-    firstNote,
     loadTree,
     notebookSpace,
   } = useNotebookTreeData(notebookId);
@@ -243,7 +242,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 261103 P11-②：初次进入/再次指定文档/活动页懒读 → useWorkspaceAssemble（三个 effect 顺序与依赖逐字保留）。
   useWorkspaceAssemble({
     tree,
-    firstNote,
     savedTabIds,
     savedTabActiveId,
     initialNoteId,

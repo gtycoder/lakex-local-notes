@@ -83,11 +83,11 @@ describe("useNotebookTreeData", () => {
     expect(child?.depth).toBe(1);
   });
 
-  it("itemById 走索引（替代 tree.find）；firstNote 深度优先取第一篇文档", async () => {
+  it("itemById 走索引（替代 tree.find）；不再计算 firstNote（261120：无标签页就空态）", async () => {
     await render();
     expect(data.itemById("n2")?.title).toBe("后");
     expect(data.itemById("missing")).toBeUndefined();
-    expect(data.firstNote?.id).toBe("n1");
+    expect("firstNote" in data).toBe(false);
   });
 
   it("loadTree 可重新读取并刷新笔记本元数据", async () => {

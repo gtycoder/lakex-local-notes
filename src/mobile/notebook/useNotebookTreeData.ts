@@ -4,7 +4,6 @@ import { bridge } from "../bridge";
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import {
   buildNotebookTreeIndex,
-  firstNoteInTree,
   flattenVisibleRows,
   type NotebookTreeRow,
 } from "./notebookTreeIndex";
@@ -57,8 +56,7 @@ export function useNotebookTreeData(notebookId: string) {
     () => flattenVisibleRows(index, notebookId, expanded),
     [index, notebookId, expanded],
   );
-  /** 进入工作区自动打开的第一篇文档：一次 O(n)，替代原递归 childrenOf。 */
-  const firstNote = useMemo(() => firstNoteInTree(index, notebookId), [index, notebookId]);
+  // 261120：进入工作区不再自动打开树中第一篇（用户点单：没有标签页就空态）⇒ 这里不再计算 firstNote。
 
   return {
     tree,
@@ -72,7 +70,6 @@ export function useNotebookTreeData(notebookId: string) {
     childrenOf,
     itemById,
     visibleRows,
-    firstNote,
     loadTree,
   };
 }

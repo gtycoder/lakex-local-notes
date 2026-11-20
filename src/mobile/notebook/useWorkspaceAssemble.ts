@@ -9,7 +9,6 @@ import type { NotebookTreeItem } from "./useNotebookTreeData";
  */
 export interface UseWorkspaceAssembleOptions {
   tree: NotebookTreeItem[];
-  firstNote: NotebookTreeItem | null;
   savedTabIds: string[];
   savedTabActiveId: string | null;
   initialNoteId?: string | null;
@@ -21,7 +20,7 @@ export interface UseWorkspaceAssembleOptions {
 }
 
 export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
-  const { tree, firstNote, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore, openTab, active, loadTabBody } = options;
+  const { tree, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore, openTab, active, loadTabBody } = options;
   /** 只做一次「初次进入」决策（显式文档 / 存档恢复 / 树中第一篇）。 */
   const autoOpenedRef = useRef(false);
 
@@ -30,7 +29,8 @@ export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
   //    其余上次已存的标签（不含它）按原顺序跟在后面，不覆盖它的激活态；
   //  - 否则恢复上次打开的标签（本地持久化 ids + companion active：优先回到**上次退出的活动页**，
   //    旧存档没有 active 时回落「列表最后一个」—— 261102 用户回归「退出停在画板，重进却回到表格」）；
-  //  - 否则开树中第一个。
+  //  - **否则保持空态**（261120 用户点单：打开笔记本时没有标签页就空着，不要自己开一个文档）。
+  //    空态界面由 NotePaneHost 提供（「暂无打开的文档，点底部『文档树』打开」）。
   // 这里只做「按目录已知 id 过滤」，顺序/上限/激活页全部交给 hook 的 restore()（一次 dispatch，
   // 不再靠 openTab 的调用顺序 + effect 执行顺序这种隐式协议）。
   useEffect(() => {
@@ -48,15 +48,12 @@ export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
       restore(saved, savedTabActiveId);
       return;
     }
-    if (firstNote) {
-      autoOpenedRef.current = true;
-      restore([firstNote.id], firstNote.id);
-      return;
-    }
-    // 目录里没有任何可用文档：把存档里已失效的占位清掉（hook 的 initial state 可能还带着它们）。
+    // 没有显式文档、也没有可恢复的标签页 ⇒ **保持空态**（261120 用户点单：不再自动开树中第一篇）。
+    // 只把存档里已失效的占位清掉（hook 的 initial state 可能还带着它们）。
+    autoOpenedRef.current = true;
     if (savedTabIds.length > 0) restore([], null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, firstNote, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
+  }, [tree, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
