@@ -634,7 +634,10 @@
 - `git diff --check` = 0。kind 触点登记：NotePaneSkeleton.tsx = 3（骨架形态分派）。
 - 设备（模拟器 lake_mobile，本批已装包）：5 项交互验收 PASS（速记返回/表单焦点/拍照相机/头部恒定/查找条）+ 多维表 7 屏探针 7/7；标签长按菜单与桌面视频弹窗目视待用户点收。
 
-**261120 · v1.5.4 基线（点单批 + 首屏瘦身收口，tag 待打）**
+**v1.5.4 已发**（261120 晚）：`package.json 1.5.4`（Android versionCode **11504** 由根 package.json 派生）；注解 tag **v1.5.4**（commit `c14ef73c` = release 提交，产品提交 `7c325c66`/`193b34aa`/`c4a89b9e`…）双推 Gitee+GitHub；GitHub **Release workflow 由 tag 触发**：macOS/Windows/Android 三个构建 job **全 success**，GitHub Release **v1.5.4** 已发布（8 资产，安卓 APK 32,711KB），**Gitee 已镜像 APK**（source zip/tar + apk）。**Budget gate** 对该 master push = success。
+  **安卓产物独立复验（261120）**：从 Gitee 下载 `LakexLocalNotes-1.5.4-android-release.apk`（33,496,104B）⇒ `unzip -t` ZIP_OK；sha256 **ce026d82…0656a2** 与 GitHub 资产 `latest.json` 的 android 条目逐字节一致；`aapt` = com.lakexlocalnotes.android / versionCode **11504** / versionName **1.5.4** / targetSdk 36；`apksigner` = v2 通过、证书 CN=LakexLocalNotes, OU=Release、SHA-256 `a8ba87f7…212e35`（**与 v1.5.2/v1.5.3 同一个 release keystore ⇒ 可覆盖升级**）、四套 ABI。**并在一次性干净 AVD（API 36）真装真跑**：install Success → 启动 PID 存活、crash buffer 空、首页欢迎小记正常（验证后已删该 AVD）。
+  **本批内容**（用户点单 261120）：笔记本「已收起」（桌面置底区 + 移动折叠分组，设备本地/不进 S3；分区内子树默认收起；桌面分区可上下拖拽调高度、双击复位；修复分区内点行不展开）、桌面目录行与多维表内容 15px、移动知识库书架卡 3 列改版、启动页统一白底 + 只留透明绿折纸（删 328KB APNG + 11 张带圆盘 splash.png）、移动入口 −8,727B（虚拟行窗口懒加载 + 启动期维护/诊断按需）、移动端打开笔记本无标签页保持空态。
+**261120 · v1.5.4 基线（点单批 + 首屏瘦身收口，tag **v1.5.4**）**
 
 - `npx tsc --noEmit` = **0**；`typecheck:electron` = **0**。
 - 全量 vitest：**文件 1079 passed / 13 skipped（1092）**；**用例 6847 passed / 14 skipped（6861）/ 0 failed**。
