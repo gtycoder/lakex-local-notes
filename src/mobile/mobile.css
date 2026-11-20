@@ -301,10 +301,12 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    用户 260914：改 3 列（名称更完整）。
    **封面保持竖版书形（3:3.8）**——曾试过压扁成 3:2.7 来省高度，被用户否掉（"太丑，不能为了放下就做这么丑"）；
    宁可一行更高、列表多滚一点，也不改封面形状。 */
-.nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 10px; padding: 4px var(--mb-page-pad) 22px; }
+/* 261120 用户点单（两轮）：书卡最终**一行 3 个**；封面从 3:3.8 压扁到 3:3.1（去掉大片空白）、图标适当放大（34→40）、
+   间距收紧。整卡 ≈120×169（原 ≈120×218）。 */
+.nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 10px; padding: 4px var(--mb-page-pad) 18px; }
 .nb-shelf-card { display: flex; flex-direction: column; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nb-shelf-cover {
-  position: relative; aspect-ratio: 3 / 3.8; border-radius: var(--mb-radius-card);
+  position: relative; aspect-ratio: 3 / 3.1; border-radius: var(--mb-radius-card);
   /* 封面保持中性卡（深色下把饱和色混进近黑会变成土黄/橄榄，观感发脏）；
      每个笔记本的色相只保留在图标底色与序号上——身份仍在，纸面干净。 */
   background: var(--lake-bg-panel);
@@ -322,15 +324,15 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .nb-shelf-card:active .nb-shelf-cover { transform: scale(.965); }
 /* 封面左上角的「01/02…」编号已按用户要求去掉（260915）；色相只留在图标徽章上。 */
 .nb-shelf-glyph {
-  display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: var(--lake-radius-lg);
+  display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--lake-radius-md);
   /* 色相只以「淡填充 + 描边 + 图标」三层透出：直接把饱和色混进深底会变成土黄/橄榄 */
   background: color-mix(in srgb, var(--nb-accent) 10%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nb-accent) 26%, transparent);
 }
-.nb-shelf-emoji { font-size: var(--lake-font-size-display); line-height: 1; }
+.nb-shelf-emoji { font-size: var(--lake-font-size-title); line-height: 1; }
 .nb-shelf-line { color: color-mix(in srgb, var(--nb-accent) 82%, var(--lake-text-2)); }
-.nb-shelf-line > svg { width: 22px; height: 22px; }
-.nb-shelf-name { margin-top: 8px; font-size: var(--lake-font-size-micro); font-weight: 500; line-height: 1.35; color: var(--lake-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; min-height: 2.7em; }
+.nb-shelf-line > svg { width: 21px; height: 21px; }
+.nb-shelf-name { margin-top: 7px; font-size: var(--lake-font-size-micro); font-weight: 500; line-height: 1.3; color: var(--lake-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; min-height: 2.6em; }
 .nb-shelf-count { margin-top: 2px; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 .nb-shelf-card:nth-child(6n+1) { --nb-accent: var(--mb-nb-accent-1); }
 .nb-shelf-card:nth-child(6n+2) { --nb-accent: var(--mb-nb-accent-2); }
