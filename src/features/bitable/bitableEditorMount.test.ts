@@ -1095,19 +1095,19 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
     expect(offenders).toEqual([]);
   });
 
-  it("表正文一律 body；表头与内容**同级**、展开面板正文大半档（261008 用户口径）", () => {
+  it("表内容一律 bodyMd(15px)；表头与内容同级、展开面板同一档（261008 口径 + 261120 用户点单）", () => {
     const ED = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
     const FIELD_CELLS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
     const MARKDOWN = readFileSync(new URL("../../components/ui/markdown/markdown.css", import.meta.url), "utf8");
     const EXPAND = readFileSync(new URL("./bitableExpandPreview.css", import.meta.url), "utf8");
     // 单元格内容：文本 / 选项 chip / 附件名 / 关联回退 / 系统时间 全部同号
-    expect(ED).toMatch(/\.bt-cell-input \{[^}]*font-size: var\(--lake-font-size-body\)/);
-    expect(ED).toMatch(/\.bt-option-chip \{[^}]*font-size: var\(--lake-font-size-body\)/);
-    expect(ED).toMatch(/\.bt-attachment-name \{[^}]*font-size: var\(--lake-font-size-body\)/);
-    expect(ED).toMatch(/\.bt-cell-unknown, \.bt-cell-relation, \.bt-cell-muted \{[^}]*font-size: var\(--lake-font-size-body\)/);
-    expect(FIELD_CELLS).toMatch(/\.bt-link-text \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).toMatch(/\.bt-cell-input \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(ED).toMatch(/\.bt-option-chip \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(ED).toMatch(/\.bt-attachment-name \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(ED).toMatch(/\.bt-cell-unknown, \.bt-cell-relation, \.bt-cell-muted \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(FIELD_CELLS).toMatch(/\.bt-link-text \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
     // 表头与内容**同级**（用户 261008：表头缩小到和内容一致）
-    expect(ED).toMatch(/\.bt-th-inner \{[^}]*font-size: var\(--lake-font-size-body\)/);
+    expect(ED).toMatch(/\.bt-th-inner \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);
     expect(ED).not.toMatch(/\.bt-th-inner \{[^}]*font-size: var\(--lake-font-size-bodyLg\)/);
     // 展开面板：容器（文本展开 textarea / MD·AI 展开编辑）与 MD 预览都大半档（+0.5px）
     expect(ED).toMatch(/\.bt-text-expand-body \{[^}]*font-size: var\(--lake-font-size-bodyMd\)/);

@@ -61,7 +61,7 @@ button.bt-gallery-cover { cursor: pointer; }
 }
 
 .bt-gallery.is-compact .bt-gallery-body { padding: 6px 8px; }
-.bt-gallery-title { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
+.bt-gallery-title { font-size: var(--lake-font-size-bodyMd); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-gallery-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: var(--lake-font-size-small); }
 .bt-gallery-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
 .bt-gallery-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

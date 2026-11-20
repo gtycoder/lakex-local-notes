@@ -206,6 +206,13 @@ components:
 - **Label**（500，13px）：控件标签、菜单项、列表行。
 - **Micro**（500，11px）：徽标、计数、元信息。
 
+### 多维表内容字号（261120 用户点单）
+
+- **内容 = 15px（`--lake-font-size-bodyMd`），UI = 14px（`--lake-font-size-body`）**：表头、行号、单元格输入、选项 chip、附件名、关联/未知单元格、三种视图（表格/卡片/日历）的记录标题都走 15px；工具栏、按钮、字段面板/表单控件仍 14px（层级照旧 = 内容比 UI 大半档）。
+- 行高 `--bt-row-h` 36px **不动**（15px 字在 36px 行内居中，密度与虚拟窗口估算都不变）。
+- 展开面板正文同为 15px（261008 起就是 bodyMd，本批与表内容对齐，不再有「表里 14 / 展开 15」的跳变）。
+- 落点：`src/features/bitable/*.css`（护栏 `bitableEditorMount.test`）；移动端共用同一份 CSS，基线见 `scripts/mobile-audit/baseline/bitable-snap.json`。
+
 ### Named Rules
 
 **The Tabular Rule.** 一切会变化的数字（计数、字数、进度、表格数值）必须 `font-variant-numeric: tabular-nums`，否则切换时整行会抖。

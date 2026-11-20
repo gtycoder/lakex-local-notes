@@ -51,12 +51,16 @@ describe("桌面目录树行几何（261119 行间隙微调）", () => {
     expect(CHROME).toContain("contain-intrinsic-size: auto 25px;");
   });
 
-  it("字号 = 14.5px 试档（body 与 bodyMd 的中间值，令牌求均、不写字面量）", () => {
+  it("字号 = --lake-font-size-bodyMd（15px 档，不派生、不跟随设置里的正文字号）", () => {
     const body = ruleBody(CHROME, ".note-row-copy strong");
-    // 261120 用户点单第二轮：16px（正文字号默认）太大、14px 偏小 ⇒ 试 14.5px。
-    // 用相邻两档令牌求均值（calc），不引入字号字面量、也不新增档位令牌。
-    expect(body).toMatch(/font-size: calc\(\(var\(--lake-font-size-body\) \+ var\(--lake-font-size-bodyMd\)\) \/ 2\)/);
+    // 261120 用户点单第二轮：目录要「像正文」，但 16px（正文字号设置默认）太大、14px 偏小 ⇒ 15px。
+    // 单一来源 = 档位令牌 bodyMd；**不许** calc 派生（会被别的档位带着漂），
+    // 也**不许**回落到 body 档（14px，就是最初「和正文不一样」的成因）。
+    expect(body).toMatch(/font-size: var\(--lake-font-size-bodyMd\)/);
+    expect(body).not.toMatch(/calc\(/);
     expect(body).not.toMatch(/font-size: var\(--lake-font-size-body\);/);
+    // 档位值钉住：15px（设置里没有入口，也不许被 app 运行时改写）
+    expect(BASE).toMatch(/--lake-font-size-bodyMd:\s*0\.9375rem;/);
   });
 
   it("选中块与 hover 同几何：状态规则只换色（无 margin/padding/圆角/尺寸/过渡声明）", () => {

@@ -2,6 +2,10 @@
  * 多维表编辑器样式（v1）。
  * 视觉只走 --lake-* 令牌（深浅主题跟得上）；结构类用 bt- 前缀。
  * 本文件已纳入 src/styles/cssLayers.test.ts 围栏（只允许变小）。
+ *
+ * 261120 用户点单：多维表**内容字号**统一 15px（--lake-font-size-bodyMd，与桌面目录同档、与展开预览一致）——
+ * 覆盖表头/行号/单元格/选项 chip/附件名/关联回退/三种视图的卡片标题；工具栏、按钮、面板表单等 UI 仍 14px
+ * （内容 15 / UI 14 的层级照旧）。行高 --bt-row-h 36px 未动。护栏 bitableEditorMount.test。
  */
 .bitable-editor {
   grid-area: 1 / 1;
@@ -155,7 +159,7 @@
 
 .bt-grid thead th { position: sticky; top: 0; z-index: 2; height: 36px; background: var(--lake-bg-panel); font-weight: 500; border-bottom: 1px solid var(--lake-border-2); }
 
-.bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: var(--lake-font-size-body); }
+.bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: var(--lake-font-size-bodyMd); }
 .bt-th-inner > svg { flex: 0 0 auto; margin-right: 6px; color: var(--lake-text-3); }
 .bt-th-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 显形用 visibility 而不是 display：它是绝对定位（不占标题宽度），但 display:none 时量出来的 rect 恒为
@@ -172,7 +176,7 @@
 .bt-th-index, .bt-td-index { width: 80px; background: var(--lake-bg-panel); }
 .bt-th-index { text-align: center; }
 .bt-td-index { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; height: var(--bt-row-h, 36px); }
-.bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: var(--lake-font-size-body); }
+.bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: var(--lake-font-size-bodyMd); }
 .bt-row-handle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 2px 0 4px; opacity: 0; pointer-events: none; }
 .bt-row-grip, .bt-row-expander { flex: 0 0 auto; }   /* 盒子/配色走 kit 的 .ln-iconbtn */
 .bt-row-grip { cursor: grab; }
@@ -206,7 +210,7 @@
 .bt-add-row td { padding: 4px; }
 
 /* `text-overflow: ellipsis`：列窄了文本格出省略号（input 默认是硬裁；用户 260930「展示不下就截断省略」）。 */
-.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: var(--lake-font-size-body); color: inherit; box-sizing: border-box; text-overflow: ellipsis; }
+.bt-cell-input { width: 100%; height: 100%; min-height: 26px; border: 0; background: transparent; padding: 4px 8px; font: inherit; font-size: var(--lake-font-size-bodyMd); color: inherit; box-sizing: border-box; text-overflow: ellipsis; }
 /* Scalar presentation shares every visual input rule; only text alignment differs from native input layout. */
 .bt-cell-input--display { display: flex; align-items: center; }
 .bt-cell-input:focus { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
@@ -214,7 +218,7 @@
    否则就是「两层边框」（用户 260929 报的链接格 2 层边框；文本框同理）。多格选区只有外缘画环，
    内层格里仍保留输入框自己的焦点环，不丢可访问性。 */
 .bt-td.cell-selected.sel-top.sel-bottom.sel-left.sel-right .bt-cell-input:focus { outline: 0; }
-.bt-cell-unknown, .bt-cell-relation, .bt-cell-muted { padding: 4px 8px; font-size: var(--lake-font-size-body); color: var(--lake-text-3); }
+.bt-cell-unknown, .bt-cell-relation, .bt-cell-muted { padding: 4px 8px; font-size: var(--lake-font-size-bodyMd); color: var(--lake-text-3); }
 
 .bt-option-cell { position: relative; }
 .bt-option-trigger { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; text-align: left; color: inherit; }
@@ -222,7 +226,7 @@
 .bt-option-label { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-width: 0; }
 .bt-option-placeholder { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .bt-option-caret { color: var(--lake-text-3); }
-.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: var(--lake-font-size-body); background: var(--lake-accent-tint); color: var(--lake-accent-text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-option-chip { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: var(--lake-font-size-bodyMd); background: var(--lake-accent-tint); color: var(--lake-accent-text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-option-search { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--lake-border-1); }
 .bt-option-search input { flex: 1; border: 0; background: transparent; font: inherit; color: inherit; outline: none; }
 .bt-option-list { max-height: 240px; overflow: auto; padding: 4px; }
@@ -237,7 +241,7 @@
 /* 光标统一为手型（260928 用户报：图片是放大镜、其他文件是手型，看着不一致）——缩略图点开=预览，
    与文件名 chip 同一动作，手势必须一致。 */
 .bt-attachment-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: var(--lake-radius-2xs); cursor: pointer; }
-.bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: var(--lake-radius-2xs); padding: 2px 6px; font: inherit; font-size: var(--lake-font-size-body); cursor: pointer; color: inherit; }
+.bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: var(--lake-radius-2xs); padding: 2px 6px; font: inherit; font-size: var(--lake-font-size-bodyMd); cursor: pointer; color: inherit; }
 .bt-hidden-input { display: none; }
 
 .bt-panel { padding: 6px; display: flex; flex-direction: column; gap: 2px; }

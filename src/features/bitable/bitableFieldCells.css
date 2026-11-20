@@ -17,7 +17,7 @@
 .bt-bool-cell input { width: 15px; height: 15px; margin: 0; cursor: pointer; }
 
 .bt-link-cell { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
-.bt-link-text { flex: 1 1 auto; padding: 0 8px; font-size: var(--lake-font-size-body); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
+.bt-link-text { flex: 1 1 auto; padding: 0 8px; font-size: var(--lake-font-size-bodyMd); color: var(--lake-text-1); }   /* 截断走 .ln-ellipsis */
 .bt-link-open { display: inline-flex; align-items: center; border: 0; background: transparent; padding: 2px; color: var(--lake-text-3); cursor: pointer; }
 .bt-link-open:hover { color: var(--lake-accent-text); }
 

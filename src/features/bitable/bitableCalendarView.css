@@ -20,7 +20,7 @@
   padding-bottom: 8px;
 }
 
-.bt-calendar-title { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }
+.bt-calendar-title { font-size: var(--lake-font-size-bodyMd); color: var(--lake-text-1); }
 .bt-calendar-week { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); padding-bottom: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); text-align: center; }
 
 .bt-calendar-grid {
