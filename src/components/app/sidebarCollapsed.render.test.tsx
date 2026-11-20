@@ -96,10 +96,10 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     expect(header()).not.toBeNull();
     expect(document.querySelector(".sidebar-collapsed__count")?.textContent).toBe("1");
     expect(collapsedBodyRow("nb")).toBeNull();
-    // 展开：同一份 TreeRow（含子文档行），且展开态写入本地
+    // 展开分区：先只出笔记本行 —— 261120 追加口径「已收起里的子级默认也收起」
     act(() => { header()?.click(); });
     expect(collapsedBodyRow("nb")).not.toBeNull();
-    expect(collapsedBodyRow("n1")).not.toBeNull();
+    expect(collapsedBodyRow("n1")).toBeNull();
     expect(localStorage.getItem("lakex-local-notes-v3.sidebar-collapsed-open")).toBe("1");
   });
 
@@ -114,6 +114,27 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     expect(navRow("nb")).not.toBeNull();
     expect(header()).toBeNull();
     expect(localStorage.getItem("lakex-local-notes-v3.sidebar-collapsed-notebooks")).toBe("[]");
+  });
+
+  it("已收起里的子级默认收起：分区内可手动逐级展开，且不回写主列表展开态", () => {
+    render();
+    // 主列表默认展开笔记本（treeExpandState：启动默认展开笔记本/分组）⇒ 子文档可见
+    expect(navRow("n1")).not.toBeNull();
+    // 收起它：主列表消失，分区默认展开状态 = 收起（即使主列表刚才是展开的）
+    rightClick("nb");
+    clickMenu("收起");
+    act(() => { header()?.click(); });
+    expect(collapsedBodyRow("nb")).not.toBeNull();
+    expect(collapsedBodyRow("n1")).toBeNull();
+    expect(collapsedBodyRow("n3")).toBeNull();
+    // 分区内手动展开：只开一级（子文档出现）
+    const zoneChevron = collapsedBodyRow("nb")?.querySelector<HTMLButtonElement>(".tree-chevron");
+    act(() => { zoneChevron?.click(); });
+    expect(collapsedBodyRow("n1")).not.toBeNull();
+    // 取消收起：回主列表，主列表记住的展开态仍是展开（分区操作没污染它）
+    rightClick("nb");
+    clickMenu("取消收起");
+    expect(navRow("n1")).not.toBeNull();
   });
 
   it("特殊本逻辑排除：回收站/未分类/日记本连菜单项都没有", () => {

@@ -4,6 +4,7 @@ import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { escapeId } from "../../lib/cssEscape";
 import type { TreeNode } from "../../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
+import { subtreeIds } from "../../core/tree";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "../model/treeDrag";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
@@ -1186,8 +1187,23 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     if (!canCollapseNotebook(node)) return;
     const nowCollapsed = toggleCollapsedNotebook(node.id);
     setCollapsedNotebookIds(readCollapsedNotebookIds());
+    // 收起那一刻把该子树在分区内的展开记录清掉 ⇒ 下次进分区还是「默认收起」。
+    setCollapsedZoneExpanded((current) => {
+      const next = new Set(current);
+      for (const id of subtreeIds(props.nodes, node.id)) next.delete(id);
+      return next;
+    });
     setBatchNotice((nowCollapsed ? "已收起《" : "已取消收起《") + node.title + "》");
   }, []);
+  /**
+   * 「已收起」分区内的子树展开态（261120 用户追加口径：**分区里的笔记本子级默认收起**）。
+   * 与主列表的 expanded **完全隔离** ⇒ 收起前在主列表展开过的层级，进分区后不会自动摊开；
+   * 分区内可手动逐级展开（复用同一套语义：展开只开一级、收起清整棵子树），但**不落盘、不回写主列表**。
+   */
+  const [collapsedZoneExpanded, setCollapsedZoneExpanded] = useState<Set<string>>(() => new Set());
+  const toggleCollapsedZoneNode = useCallback((id: string) => {
+    setCollapsedZoneExpanded((current) => toggleExpandedNode(current, id, props.nodes));
+  }, [props.nodes]);
   const toggleCollapsedSection = useCallback(() => {
     setCollapsedOpen((open) => {
       writeCollapsedOpen(!open);
@@ -1302,6 +1318,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     selectedIds: selectedIdSet,
     onRowClick: handleRowClick,
   }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
+  /** 「已收起」分区的行 props：只把展开态/切换换成**分区自己那份**（默认空 = 子级默认收起）。 */
+  const collapsedZoneRowProps = useMemo(
+    () => ({ ...treeRowProps, expanded: collapsedZoneExpanded, onToggle: toggleCollapsedZoneNode }),
+    [treeRowProps, collapsedZoneExpanded, toggleCollapsedZoneNode],
+  );
 
   return (
     <aside
@@ -1382,7 +1403,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       </nav>
       {collapsedRoots.length > 0 && (
         <SidebarCollapsedSection open={collapsedOpen} count={collapsedRoots.length} onToggle={toggleCollapsedSection}>
-          {collapsedRoots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
+          {collapsedRoots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...collapsedZoneRowProps} />)}
         </SidebarCollapsedSection>
       )}
       {batchMenu && (

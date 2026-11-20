@@ -13,6 +13,7 @@
 - **实现（单一来源）**：core/notebookCollapse.ts = canCollapseNotebook（三类特殊本逻辑排除）+ pruneCollapsedNotebookIds + splitCollapsedNotebooks + normalize；桌面 store features/sidebar/collapsedNotebooks.ts（lakex-local-notes-v3.sidebar-collapsed-notebooks / -open）、移动 store mobile/data/collapsedNotebooks.ts（lakex-local-notes-mobile.collapsed-notebooks / collapsedOpen），两端各自 localStorage、不写库。
 - **桌面**：Sidebar 把 roots 用 splitCollapsedNotebooks 切两份；底部 SidebarCollapsedSection（同一份 TreeRow ⇒ 子树/右键/拖拽全同款），max-height 33.333% + 区内滚动；右键菜单「收起/取消收起」（canCollapseNotebook 决定是否给入口）；搜索/标签筛选期间不做收纳（与置顶区同口径）；全部收起时主列表给提示。
 - **移动**：HomePage 知识库书架/列表共用切分；底部 home-collapsed 分割 + 折叠分组（默认收起），展开内联渲染 NotebookGrid；长按菜单加「收起/取消收起」（逻辑排除的本不出现该项）；全部收起时主列表提示「笔记本都在下方「已收起」里」（不再显示「暂无知识库」）。
+- **追加口径**（用户同日补充）：已收起分区里的**子级默认也保持收起** —— 分区用独立展开态（session 内、不落盘、不回写主列表），收起那一刻清掉该子树在分区里的展开记录；分区内可手动逐级展开。实机复验：收起「个人笔记」后分区只显示本行，点三角才展开子文档（内部滚动）。
 - **验证**：桌面 dev 实测（5 本 → 收起「测试本」后主列表 4 本、底部「已收起 1」默认折叠；展开后 3 行 = 本 + 2 篇子文档、分区高 91px < 792/3；展开态落盘；恢复：取消收起后分区消失）；移动端实测（长按「个人笔记」→ 菜单含「收起」→ 主列表清空 + 提示 + 「已收起 1」；展开后卡片出现、展开态落盘）。护栏：core/notebookCollapse.test（含 split）、两端 store 测试（localStorage-only）、sidebarCollapsed.render.test（7 例：收起/取消/默认折叠/特殊本排除/历史残留清理/全部收起提示）、mobile collapsedNotebooks.render.test（5 例）。
 ### 261120 之后 · 多维表内容字号 15px（用户点单）
 
