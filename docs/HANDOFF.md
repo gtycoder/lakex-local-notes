@@ -594,7 +594,9 @@
 
 **v1.1.4 已发**（261114）：tag `v1.1.4`（注解，tag object `de37abe6` → commit `f2c44c1b`）已双推 Gitee/GitHub；release workflow run **43564917249** 由 tag 触发：Windows/Android/macOS 三个构建 job **全 success**；GitHub Release **v1.1.4** 已发布（2026-11-14T06:15:35Z），8 资产：`LakexLocalNotes-1.1.4-android-release.apk` / `-arm64.dmg` / `-x64.dmg` / `-arm64.zip` / `-x64.zip` / `LakexLocalNotes.Setup.1.1.4.exe` / `latest.json` / `release-body.md`；`latest.json.version = 1.1.4`。`Publish Release` job 在 GitHub Release 发布后仍进行（Gitee 镜像/收尾，可能耗时），不影响 GitHub 产物。Android 本机 debug APK 已装 `lake_mobile`（versionName 1.1.4 / versionCode 11104）并启动。
 
-**v1.5.1 已发**（261119）：`package.json 1.5.1`（Android versionCode 11501 派生）；注解 tag **v1.5.1**（commit `b5ecf605`）双推 Gitee+GitHub；release workflow 触发（内容 = 修复批二 + 修复批三 + 目录/封面/禁缩放收口批，发布说明 = RELEASE-NOTES v1.5.1 段；无数据/协议迁移）。
+**v1.5.2 已发**（261120）：`package.json 1.5.2`；注解 tag **v1.5.2**（commit `d1aabe33`）双推，release workflow run **44654490804** 触发。背景：用户 261120 晨清理全部 GitHub Releases/Runs 历史并手建轻量 tag v1.5.2（指 `f6397eca`，package.json 1.5.1 ⇒ release.yml 版本一致性守卫必然失败）⇒ 发版工程重建：登记 1.5.2 + 发布说明（**v1.5.1 未对外发布、内容由 v1.5.2 承载**），**删除并重打 v1.5.2 tag**（⚠️ AGENTS「已发 tag 不可移动」红线**例外一次**：该 tag 为用户手建草稿态、无发布物/无消费者/无下载方，处置经自主授权并在此亮牌登记；下不为例，已发 tag 仍不可移动）。
+
+**v1.5.1 已发**（261119，未对外发布——GitHub Releases 261120 被清理，内容由 v1.5.2 承载）：`package.json 1.5.1`（Android versionCode 11501 派生）；注解 tag **v1.5.1**（commit `b5ecf605`）双推 Gitee+GitHub；release workflow 触发（内容 = 修复批二 + 修复批三 + 目录/封面/禁缩放收口批，发布说明 = RELEASE-NOTES v1.5.1 段；无数据/协议迁移）。
 
 **v1.5.0 已发**（261119）：`package.json 1.5.0`（Android versionName 1.5.0 / versionCode 11500 由根 package.json 派生）；注解 tag **v1.5.0**（commit `23492cc9`）双推 Gitee+GitHub（origin 第二 pushurl 一次推两边）；release workflow run **44490098568** 由 tag 触发（Release，构建 macOS/Windows/Android + packaged smoke 内联兜底 + 发布 GitHub Releases/Gitee 镜像）。发版内容 = 261119 各批（快捷菜单两项/拍照直出相机/速记返回链/多维表四项/标签长按菜单/跳变八项/选项色板两行/表格取色合规/视频宽高弹窗合流）+ 261117 随下版两笔（text_cache 保存即建、更新中心版本标签），发布说明 = RELEASE-NOTES v1.5.0 段。发版前评审 = 双只读评审流（P0×0 / P1×4 / P2×11 全闭环，见 release 前两笔修补提交）。
 
