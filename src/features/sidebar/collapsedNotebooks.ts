@@ -46,6 +46,30 @@ export function toggleCollapsedNotebook(id: string): boolean {
   return !has;
 }
 
+const HEIGHT_KEY = "lakex-local-notes-v3.sidebar-collapsed-height";
+
+/** 「已收起」分区的手动高度（px；null/缺省 = 自适应，最高 1/3 目录栏）。 */
+export function readCollapsedHeight(): number | null {
+  try {
+    const raw = localStorage.getItem(HEIGHT_KEY);
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入手动高度；null = 复位成自适应（双击分隔条）。 */
+export function writeCollapsedHeight(height: number | null): void {
+  try {
+    if (height == null) localStorage.removeItem(HEIGHT_KEY);
+    else localStorage.setItem(HEIGHT_KEY, String(Math.round(height)));
+  } catch {
+    /* localStorage 不可用 ⇒ 本次不记忆，拖拽仍即时生效 */
+  }
+}
+
 /** 「已收起」分区展开态（默认收起）。 */
 export function readCollapsedOpen(): boolean {
   try {

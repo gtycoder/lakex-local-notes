@@ -98,6 +98,24 @@
   transform: translate(-50%, -50%);
 
 }
+/* 261120：上下分栏（同一实现，只换轴向）—— 目录底部「已收起」分区的可拖拽分隔条。
+   横向命中区：上下各扩 4px、整宽；视觉标记：居中 48×2 短横。几何由调用方给（position: relative）。 */
+.ln-split-handle--horizontal { cursor: row-resize; }
+.ln-split-handle--horizontal::before {
+  top: -4px;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  width: auto;
+  transform: none;
+}
+.ln-split-handle--horizontal::after {
+  top: 50%;
+  left: 50%;
+  width: 48px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+}
 .ln-split-handle:hover::after,
 .ln-split-handle:focus-visible::after { background: var(--lake-accent); }
 .ln-split-handle:focus-visible { outline: none; }

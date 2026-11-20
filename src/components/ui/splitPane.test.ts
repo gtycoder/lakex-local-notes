@@ -33,7 +33,10 @@ describe("左右分栏（可拖动）", () => {
     expect(KIT).toContain(".ln-split-handle {");
     expect(KIT).toContain(".ln-split-handle::before {");   // 命中带
     expect(KIT).toContain(".ln-split-handle::after {");    // 药丸
-    expect(HANDLE).toContain("ln-split-handle ${className}"); // 基础视觉类 + 站点定位类
+    // 基础视觉类 + 站点定位类（261120：加 y 轴变体后 class 由模板串拼出，仍是同一处实现）
+    expect(HANDLE).toContain("ln-split-handle--horizontal");
+    expect(HANDLE).toContain("ln-split-handle");
+    expect(HANDLE).toContain("className");
     expect(HANDLE).toContain('role="separator"');
     expect(SRC).toContain("<SplitHandle");
     expect(SRC).not.toContain('className="ln-split-handle"');   // SplitPane 不再自己写一份

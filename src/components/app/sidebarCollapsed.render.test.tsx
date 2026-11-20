@@ -127,7 +127,12 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     expect(collapsedBodyRow("nb")).not.toBeNull();
     expect(collapsedBodyRow("n1")).toBeNull();
     expect(collapsedBodyRow("n3")).toBeNull();
-    // 分区内手动展开：只开一级（子文档出现）
+    // 分区内**点行**就要展开（与主列表一致；261120 报障：此前只有三角生效）
+    act(() => { collapsedBodyRow("nb")?.click(); });
+    expect(collapsedBodyRow("n1")).not.toBeNull();
+    // 再点一次收起（三角同理仍可用）
+    act(() => { collapsedBodyRow("nb")?.click(); });
+    expect(collapsedBodyRow("n1")).toBeNull();
     const zoneChevron = collapsedBodyRow("nb")?.querySelector<HTMLButtonElement>(".tree-chevron");
     act(() => { zoneChevron?.click(); });
     expect(collapsedBodyRow("n1")).not.toBeNull();
@@ -135,6 +140,30 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     rightClick("nb");
     clickMenu("取消收起");
     expect(navRow("n1")).not.toBeNull();
+  });
+
+  it("分区可上下拖拽：高度从本地恢复、双击分隔条复位成自适应", () => {
+    localStorage.setItem("lakex-local-notes-v3.sidebar-collapsed-notebooks", JSON.stringify(["nb"]));
+    localStorage.setItem("lakex-local-notes-v3.sidebar-collapsed-open", "1");
+    localStorage.setItem("lakex-local-notes-v3.sidebar-collapsed-height", "220");
+    render();
+    const section = document.querySelector<HTMLElement>(".sidebar-collapsed");
+    expect(section?.classList.contains("is-manual")).toBe(true);
+    expect(section?.style.height).toBe("220px");
+    const splitter = document.querySelector<HTMLElement>(".sidebar-collapsed__splitter");
+    expect(splitter).not.toBeNull();
+    expect(splitter?.getAttribute("aria-orientation")).toBe("horizontal");
+    // 双击 = 复位成自适应（删掉本地高度，恢复 1/3 上限）
+    act(() => { splitter?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    expect(localStorage.getItem("lakex-local-notes-v3.sidebar-collapsed-height")).toBeNull();
+    expect(document.querySelector<HTMLElement>(".sidebar-collapsed")?.classList.contains("is-manual")).toBe(false);
+  });
+
+  it("分区收起时不渲染分隔条（没有可调的高度）", () => {
+    localStorage.setItem("lakex-local-notes-v3.sidebar-collapsed-notebooks", JSON.stringify(["nb"]));
+    render();
+    expect(header()).not.toBeNull();
+    expect(document.querySelector(".sidebar-collapsed__splitter")).toBeNull();
   });
 
   it("特殊本逻辑排除：回收站/未分类/日记本连菜单项都没有", () => {

@@ -85,19 +85,32 @@ export interface SplitHandleProps {
   stopPropagation?: boolean;
   /** 拖拽结束（松手/取消）回调，带原始指针坐标（大纲栏据此关闭悬停预览）。 */
   onDragEnd?: (point: { clientX: number; clientY: number }) => void;
+  /** 轴向（默认 x = 左右分栏）。y = 上下分栏（调高度），用于目录底部「已收起」这类纵向分区。 */
+  axis?: "x" | "y";
+  /** 纵向轴的最大占比（相对容器高度，默认 1）：y 轴时用它替代 minRight 夹取上限。 */
+  maxRatio?: number;
 }
 
 export function SplitHandle({
   ariaLabel, minWidth = 240, maxWidth = 960, minRight = 240,
   containerRef, width, measureLeft, onPreview, onCommit, onResizingChange,
   className, invert = false, softClamp, keyStep = STEP, keyStepLarge = STEP_LARGE,
-  stopPropagation = false, onDragEnd,
+  stopPropagation = false, onDragEnd, axis = "x", maxRatio = 1,
 }: SplitHandleProps) {
   const dragRef = useRef<SplitDragState | null>(null);
+  const isY = axis === "y";
+  /** 指针在该轴上的位置（x = clientX / y = clientY）。 */
+  const pos = (ev: PointerEvent) => (isY ? ev.clientY : ev.clientX);
+  /** 容器在该轴上的尺寸（x = 宽 / y = 高）。 */
+  const containerSize = (): number => {
+    const rect = containerRef?.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    return isY ? rect.height : rect.width;
+  };
 
-  const clamp = (w: number, containerWidth: number) => {
-    const upper = Math.min(maxWidth, containerWidth > 0 ? containerWidth - minRight : maxWidth);
-    return Math.max(minWidth, Math.min(Math.max(minWidth, upper), w));
+  const clamp = (value: number, size: number) => {
+    const upper = size > 0 ? (isY ? size * maxRatio : size - minRight) : (isY ? maxWidth * maxRatio : maxWidth);
+    return Math.max(minWidth, Math.min(Math.max(minWidth, Math.min(maxWidth, upper)), value));
   };
   const leftWidth = () => (width != null ? width : (measureLeft?.() ?? minWidth));
 
@@ -109,18 +122,16 @@ export function SplitHandle({
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch { /* 合成鼠标/无活动指针：不依赖 capture，下面走 window 监听 */ }
     const start = leftWidth();
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: start, current: start, engaged: false };
+    dragRef.current = { pointerId: event.pointerId, startX: pos(event.nativeEvent), startWidth: start, current: start, engaged: false };
     onResizingChange?.(true);
     const onMove = (ev: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const step = nextSplitDrag(drag, ev.clientX, invert);
+      const step = nextSplitDrag(drag, pos(ev), invert);
       drag.engaged = step.engaged;
       drag.startX = step.startX;
       if (!step.engaged) return; // 死区内：不预览、不落盘
-      const next = softClamp
-        ? softClamp(step.current)
-        : clamp(step.current, containerRef?.current?.getBoundingClientRect().width ?? 0);
+      const next = softClamp ? softClamp(step.current) : clamp(step.current, containerSize());
       drag.current = next;
       onPreview(next);
     };
@@ -140,24 +151,33 @@ export function SplitHandle({
   };
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? keyStepLarge : keyStep;
-    const container = containerRef?.current?.getBoundingClientRect().width ?? 0;
+    const container = containerSize();
     const current = leftWidth();
     let next: number;
-    if (event.key === "ArrowLeft") next = clamp(current + (invert ? step : -step), container);
-    else if (event.key === "ArrowRight") next = clamp(current + (invert ? -step : step), container);
-    else if (event.key === "Home") next = clamp(minWidth, container);
-    else if (event.key === "End") next = clamp(maxWidth, container);
-    else return;
+    if (isY) {
+      // 纵向：ArrowUp 增大「下方分区高度」（= 分隔条向上拖）；invert 语义与 x 轴一致（取反）。
+      if (event.key === "ArrowUp") next = clamp(current + (invert ? step : -step), container);
+      else if (event.key === "ArrowDown") next = clamp(current + (invert ? -step : step), container);
+      else if (event.key === "Home") next = clamp(minWidth, container);
+      else if (event.key === "End") next = clamp(maxWidth, container);
+      else return;
+    } else {
+      if (event.key === "ArrowLeft") next = clamp(current + (invert ? step : -step), container);
+      else if (event.key === "ArrowRight") next = clamp(current + (invert ? -step : step), container);
+      else if (event.key === "Home") next = clamp(minWidth, container);
+      else if (event.key === "End") next = clamp(maxWidth, container);
+      else return;
+    }
     event.preventDefault();
     onCommit(next);
   };
 
   return (
     <div
-      className={className ? `ln-split-handle ${className}` : "ln-split-handle"}
+      className={`ln-split-handle${isY ? " ln-split-handle--horizontal" : ""}${className ? " " + className : ""}`}
       role="separator"
       aria-label={ariaLabel}
-      aria-orientation="vertical"
+      aria-orientation={isY ? "horizontal" : "vertical"}
       aria-valuemin={minWidth}
       aria-valuemax={maxWidth}
       aria-valuenow={width != null ? Math.round(width) : undefined}

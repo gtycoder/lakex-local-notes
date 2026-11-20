@@ -34,9 +34,11 @@ import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
 import { SidebarCollapsedSection } from "./SidebarCollapsedSection";
 import {
+  readCollapsedHeight,
   readCollapsedNotebookIds,
   readCollapsedOpen,
   toggleCollapsedNotebook,
+  writeCollapsedHeight,
   writeCollapsedNotebookIds,
   writeCollapsedOpen,
 } from "../../features/sidebar/collapsedNotebooks";
@@ -201,6 +203,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   /** 桌面「已收起」笔记本：纯设备本地的归纳状态（默认收起；收起后从主列表消失，只在底部置底区出现）。 */
   const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<string[]>(() => readCollapsedNotebookIds());
   const [collapsedOpen, setCollapsedOpen] = useState<boolean>(() => readCollapsedOpen());
+  /** 分区手动高度（px；null = 自适应、最高 1/3 目录栏）。拖分隔条改高度，双击复位。 */
+  const [collapsedHeight, setCollapsedHeight] = useState<number | null>(() => readCollapsedHeight());
+  const sidebarRef = useRef<HTMLElement | null>(null);
   /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
   const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
   /** 批量「添加标签…」：只追加，可现场新建；id 快照与标签目录在打开时现读。 */
@@ -956,7 +961,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
    *  · Shift = 以锚点为界按**可见顺序**取区间（可见顺序里本就没有笔记本 ⇒ 自动跳过）；
    *  · 普通点击 = 退出多选（记下锚点，方便紧接着 Shift），并保持原有单行行为。
    */
-  const handleRowClick = useCallback((event: React.MouseEvent, node: TreeNode) => {
+  const handleRowClick = useCallback((event: React.MouseEvent, node: TreeNode, toggleExpand: (id: string) => void = toggleNode) => {
     setBatchNotice(null);
     // 笔记本在多选语义里是「不可选」：带 ⌘/Shift 点它直接忽略（避免多选途中的一次误触把笔记本收起）。
     if (!isSelectableTreeNode(node) && (event.metaKey || event.ctrlKey || event.shiftKey)) {
@@ -976,7 +981,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setSelection(isSelectableTreeNode(node) ? plainClickSelection(node.id) : clearTreeSelection());
     setContextId(node.id);
     if (node.nodeType === "note") props.onSelect(node.id);
-    else toggleNode(node.id);
+    else toggleExpand(node.id);
   }, [visibleSelectableOrder, props.onSelect, toggleNode]);
 
   /** 批量执行（桌面 batch_notes）：成功 ⇒ 刷新 + 清空；失败 ⇒ 失败项保持选中 + 可见提示。 */
@@ -1318,14 +1323,27 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     selectedIds: selectedIdSet,
     onRowClick: handleRowClick,
   }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
-  /** 「已收起」分区的行 props：只把展开态/切换换成**分区自己那份**（默认空 = 子级默认收起）。 */
+  /**
+   * 「已收起」分区的行 props：把展开态/切换换成**分区自己那份**（默认空 = 子级默认收起）。
+   * ⚠️ 三角（onToggle）和**行点击**（onRowClick）都要换 —— 目录里点笔记本行本身就是展开/收起，
+   * 只换三角会导致「点行没反应」（261120 用户报障）。其余行为（选择/右键/拖拽/多选语义）与主列表一致。
+   */
+  const handleCollapsedZoneRowClick = useCallback((event: React.MouseEvent, node: TreeNode) => {
+    handleRowClick(event, node, toggleCollapsedZoneNode);
+  }, [handleRowClick, toggleCollapsedZoneNode]);
   const collapsedZoneRowProps = useMemo(
-    () => ({ ...treeRowProps, expanded: collapsedZoneExpanded, onToggle: toggleCollapsedZoneNode }),
-    [treeRowProps, collapsedZoneExpanded, toggleCollapsedZoneNode],
+    () => ({
+      ...treeRowProps,
+      expanded: collapsedZoneExpanded,
+      onToggle: toggleCollapsedZoneNode,
+      onRowClick: handleCollapsedZoneRowClick,
+    }),
+    [treeRowProps, collapsedZoneExpanded, toggleCollapsedZoneNode, handleCollapsedZoneRowClick],
   );
 
   return (
     <aside
+      ref={sidebarRef}
       className={`sidebar sidebar-${props.mode}`}
       onPointerEnter={props.onPreviewEnter}
       onPointerLeave={() => {
@@ -1402,7 +1420,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         }</div>}
       </nav>
       {collapsedRoots.length > 0 && (
-        <SidebarCollapsedSection open={collapsedOpen} count={collapsedRoots.length} onToggle={toggleCollapsedSection}>
+        <SidebarCollapsedSection
+          open={collapsedOpen}
+          count={collapsedRoots.length}
+          onToggle={toggleCollapsedSection}
+          height={collapsedHeight}
+          containerRef={sidebarRef}
+          onPreviewHeight={setCollapsedHeight}
+          onCommitHeight={(height) => { setCollapsedHeight(height); writeCollapsedHeight(height); }}
+        >
           {collapsedRoots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...collapsedZoneRowProps} />)}
         </SidebarCollapsedSection>
       )}
