@@ -622,6 +622,8 @@
 
 **v1.5.2 已发**（261120）：`package.json 1.5.2`；注解 tag **v1.5.2**（commit `d1aabe33`）双推，release workflow run **44654490804** 触发。背景：用户 261120 晨清理全部 GitHub Releases/Runs 历史并手建轻量 tag v1.5.2（指 `f6397eca`，package.json 1.5.1 ⇒ release.yml 版本一致性守卫必然失败）⇒ 发版工程重建：登记 1.5.2 + 发布说明（**v1.5.1 未对外发布、内容由 v1.5.2 承载**），**删除并重打 v1.5.2 tag**（⚠️ AGENTS「已发 tag 不可移动」红线**例外一次**：该 tag 为用户手建草稿态、无发布物/无消费者/无下载方，处置经自主授权并在此亮牌登记；下不为例，已发 tag 仍不可移动）。
 
+**v1.5.3 已发**（261120）：`package.json 1.5.3`（Android versionCode **11503** 由根 package.json 派生）；注解 tag **v1.5.3**（commit `236fba1b` = release 提交，产品提交 `ba08731a`）双推 Gitee+GitHub（push master 与 push tag 各自一次推两边）；GitHub **Release workflow 由 tag 触发**（构建 macOS/Windows/Android + packaged smoke 内联 + 发布 Releases + Gitee 镜像），**Budget gate（261120 新增）首次在 master push 上跑 = success**。发版内容 = 目录右键「在上方/在下方新建」二级菜单（六 kind 锚点落位）+ 目录行三件套指向态 chip + 移动端插入链接/文档引用改可拖动浮窗 + 桌面首屏 −24,984B（发版说明按需加载）+ 首屏预算收紧 602,000→592,000；无数据/协议迁移。
+
 **v1.5.1 已发**（261119，未对外发布——GitHub Releases 261120 被清理，内容由 v1.5.2 承载）：`package.json 1.5.1`（Android versionCode 11501 派生）；注解 tag **v1.5.1**（commit `b5ecf605`）双推 Gitee+GitHub；release workflow 触发（内容 = 修复批二 + 修复批三 + 目录/封面/禁缩放收口批，发布说明 = RELEASE-NOTES v1.5.1 段；无数据/协议迁移）。
 
 **v1.5.0 已发**（261119）：`package.json 1.5.0`（Android versionName 1.5.0 / versionCode 11500 由根 package.json 派生）；注解 tag **v1.5.0**（commit `23492cc9`）双推 Gitee+GitHub（origin 第二 pushurl 一次推两边）；release workflow run **44490098568** 由 tag 触发（Release，构建 macOS/Windows/Android + packaged smoke 内联兜底 + 发布 GitHub Releases/Gitee 镜像）。发版内容 = 261119 各批（快捷菜单两项/拍照直出相机/速记返回链/多维表四项/标签长按菜单/跳变八项/选项色板两行/表格取色合规/视频宽高弹窗合流）+ 261117 随下版两笔（text_cache 保存即建、更新中心版本标签），发布说明 = RELEASE-NOTES v1.5.0 段。发版前评审 = 双只读评审流（P0×0 / P1×4 / P2×11 全闭环，见 release 前两笔修补提交）。
@@ -660,7 +662,7 @@
 - **设备装置不进 CI**（无 AVD/GPU）：PR 门禁只覆盖 tsc/vitest/双 build/core/ui-metrics/bundle/arch；设备类验证必须人工跑。
 - **`npx cap sync` 会改写 `android/capacitor.settings.gradle`**（`../../lakex-local-notes/node_modules` → `../node_modules`，本机等价）⇒ 每次 android 构建后、提交前 `git checkout -- android/capacitor.settings.gradle`，生成文件不要提交。
 - **并行会话共用工作树**：提交前必须 `git status` 分辨；只 stage 本批文件；共享基线文件（如 `src/styles/cssLayers.test.ts`）被双方各改几行时，用 `git hash-object -w` + `git update-index --cacheinfo` 只提交本批版本；**绝不用 `git add -A`**。
-- **门禁预算现状**：`check:bundle` 的 mobile-entry 在目标附近，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。**261120 起 desktop 首屏已超预算 2,048B（HEAD 本身 603,689 > 602,000）**——判断「是不是这次改坏了」先 stash 本批改动重建对照，别把既有欠账算到新批头上。
+- **门禁预算现状（261120 更新）**：① 桌面首屏已瘦身并收紧到 **592,000**（实测 579,041，余 13KB），此前的「超预算 1.7KB 既有欠账」已清掉；② `check:bundle` 的 **mobile-entry 只剩约 0.1KB 余量**（51,330/51,440），脚本冻结的是「现状值」——不要把它当绿，也不要把冻结值当目标，移动端入口任何新增都要先瘦身；③ 判断「是不是这次改坏了」仍先 `git stash` 重建对照，别把既有欠账算到新批头上；④ **体积门禁已上 CI**（`.github/workflows/budget-gate.yml`，push master 触发），漂移会在下一次推送就红。
 - **全量 vitest 的 `electron/s3v3/perf.integration.test.ts` 在「多模拟器 + 构建」并行时会因宿主负载误报**（261112 实测：全量跑 1 例红、单跑通过；它是 500/2000 文档的阶段耗时门禁）⇒ 见它红先看宿主负载/单跑。
 - **死代码/死 CSS 清理的常踩假阳性**：`SplitHandle` 的 `${className}-handle` 定位类是命中带的 `position: relative` 锚点（删了 = 「拖不动」，261110 真 bug）；移动大纲层级 `.lv1–3`、`.diary-split-handle` 同类动态类。判「没人用」先按 AGENTS §3#14 三排除；批量删样式/注释后必须核对 `mobile.css` 注释配平并跑一次视觉门禁自证。
 - **删文档/审计产物前先消引用**：例 = `audit-261027/` 4 份（5 处源码注释 + 4 处文档引用）：先把结论搬进 `RESILIENCE`/`SYNC-PROTOCOL` 并改注释再删（261112 Q16 做法），否则出处断链、后续会话只能去 git 里捞。
