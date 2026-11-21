@@ -12,7 +12,7 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
               <>
                 <Group title="备份" icon={<Archive size={16} />}>
                   {/* 261116 用户验收：单动作行统一「说明在左、操作在右」（原 descAfter + 左起按钮会留一条空带）。 */}
-                  <Item itemId="backup-export" name="整库备份（完整目录）" desc="完整复制工作区：数据库快照 + 正文/资源/历史快照 + 小记，导出到所选空目录。用于整机迁移或归档；与下面的数据库快照互补，不能互相替代。">
+                  <Item itemId="backup-export" name="整库备份（完整目录）" desc="本机归档：完整复制工作区（数据库快照 + 正文/资源 + 历史快照 + 小记 + AI 会话）到所选空目录，无大小限制，含历史版本。用于同端换机/大库迁移/留档；跨端换机（手机或其它桌面）请用下方「迁移包（便携包）」。与「自动备份（仅数据库）」互补，不能互相替代。">
                     <button className="ln-btn ln-btn--outlined" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                   </Item>
                   <Block itemId="auto-backup" name="自动备份（仅数据库）" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。只备份数据库，不含正文/资源/历史快照；恢复用「从数据库快照恢复」。">
@@ -52,7 +52,7 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
 
                 <Group title="迁移包（便携包）" icon={<Download size={16} />}>
                   {/* 261116 用户验收：说明回位到标题下（descAfter 会把说明甩到最后，中间留空带）。 */}
-                  <Block itemId="backup-portable-export" name="导出便携包（全量迁移包）" desc="把本机全部跨端数据（正文/表格/多维表/画板/手写板/小记/标签/回收站/草稿/素材/同步基线；不含历史快照与 AI 会话）打成一个 .zip.lln（上限 4GiB），可在手机或其它桌面导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，包内带云端基线，导入端配好 S3 即增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                  <Block itemId="backup-portable-export" name="导出便携包（全量迁移包）" desc="跨端迁移：把本机全部跨端数据（正文/表格/多维表/画板/手写板/小记/标签/回收站/草稿/素材/同步基线）打成一个 .zip.lln（上限 4GiB），可在手机或其它桌面互导。与「整库备份」的分工：便携包**不含历史快照与 AI 会话**（仅本机数据，要用历史请走整库备份）、有 4GiB 上限，但任何端都能导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，包内带云端基线，导入端配好 S3 即增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
                     <div className="config-block__actions">
                       <button
                         className="ln-btn ln-btn--outlined"

@@ -91,17 +91,22 @@ export function collectPortableFiles(workspaceRoot: string): CollectedPortableFi
   return files;
 }
 
-/** 历史索引行的表（桌面主库；包恒不含历史，连索引行一起清掉，避免恢复后出现加载不到的历史条目）。 */
-const HISTORY_INDEX_TABLES = ["note_history", "history_fallback_state"] as const;
+/**
+ * 「仅本机数据」表（桌面主库）：**不随迁移包跨端**（261122 裁决）——
+ * 历史索引（history 是仅本机数据）、AI 会话（261116 本地专属）、同步记录账本 / GC 审计
+ * （设备本地审计，STORAGE-LAYERS §2.5）、孤儿资产派生表（可重算）。
+ * 整库备份**目录**不受影响（本机归档 = 原样镜像）；只清迁移包的 DB 快照。
+ */
+const LOCAL_ONLY_TABLES = ["note_history", "history_fallback_state", "ai_writing_conversations", "ai_writing_messages", "sync_conflicts", "s3_gc_log", "orphan_assets"] as const;
 
 /**
- * 清掉 DB 快照里的历史索引行（261122 裁决：历史快照不进导入导出）。
+ * 清掉 DB 快照里的「仅本机」行（包内自洽：恢复后不出现加载不到的历史条目/他端的 AI 会话与审计）。
  * 只动快照副本（VACUUM INTO 产物），不碰运行中的库；表不存在时跳过（兼容旧夹具/精简库）。
  */
-export function scrubHistoryRowsFromSnapshot(snapshotRoot: string): void {
+export function scrubLocalOnlyRowsFromSnapshot(snapshotRoot: string): void {
   const main = new Database(path.join(snapshotRoot, "metadata.sqlite3"));
   try {
-    for (const table of HISTORY_INDEX_TABLES) {
+    for (const table of LOCAL_ONLY_TABLES) {
       const exists = main.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) as { name?: string } | undefined;
       if (exists?.name) main.prepare("DELETE FROM " + table).run();
     }
@@ -234,8 +239,8 @@ export async function exportPortablePackage(options: PortableExportOptions): Pro
     const snapshotRoot = path.join(tempRoot, "snapshot");
     fs.mkdirSync(path.join(snapshotRoot, "quick-notes"), { recursive: true });
     options.snapshotDatabases(snapshotRoot);
-    // 261122：历史快照不进包 ⇒ 快照库连历史索引行一起清掉（包内自洽，无悬空条目）。
-    scrubHistoryRowsFromSnapshot(snapshotRoot);
+    // 261122：仅本机数据（历史/AI 会话/本地账本）不进包 ⇒ 快照库连索引行一起清掉（包内自洽）。
+    scrubLocalOnlyRowsFromSnapshot(snapshotRoot);
     const dbFiles = [
       { zipPath: "desktop/metadata.sqlite3", absPath: path.join(snapshotRoot, "metadata.sqlite3") },
       { zipPath: "desktop/quick-notes/metadata.sqlite3", absPath: path.join(snapshotRoot, "quick-notes", "metadata.sqlite3") },

@@ -54,8 +54,14 @@ mobile/databases/<主库及 wal/shm/journal>  # 关库后复制，保证一致�
 mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-journal,materials…}
 ```
 
-**恒排除**（两种布局一致）：`history/`（历史快照）、`logs/`、`backups/`、`settings.json`、`window-state.json`、
-`sync-v3/state.json`（设备同步意图账本）、S3/AI 密钥与任何设备本地 UI 状态、`ai-attachments/`。
+**恒排除**（两种布局一致；DB 快照在**导出端**连行清掉，包内自洽）：
+
+- 文件：`history/`（历史快照）、`logs/`、`backups/`、`settings.json`、`window-state.json`、
+  `sync-v3/state.json`（设备同步意图账本）、S3/AI 密钥与任何设备本地 UI 状态、`ai-attachments/`；
+- DB 行（仅本机数据，261122 裁决）：`note_history` / `history_fallback_state`（历史索引）、
+  `ai_writing_conversations` / `ai_writing_messages`（桌面 AI 会话）、`ai_conversations`（手机 AI 会话）、
+  `sync_conflicts`（同步记录账本，设备本地审计）、`s3_gc_*` / `orphan_assets`（GC 审计与派生表）。
+  （`settings`/`device_state` 保留：含 seed_initialized 等防复活标记；密钥本身是机器绑定密文，导不走。）
 
 ### 2.2 portable.json
 
@@ -77,6 +83,8 @@ mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-j
   `src/core/portable/portableFormat.ts`（两端共用一个 `parsePortableManifest`，不再有第二套方言）。
 - **无 hasHistory 字段**：v2 恒不含历史。
 - `baseline`：纯离线导出为 `null`（包内 baseline.json 此时只是内容哈希清单）；有云端基线则原样随包。
+- `counts` 六键（notes/folders/quickNotes/tags/assets/bytes）**必填整数**（core 严格校验；两端写方都给全）；
+  `bytes` = 白名单文件 + DB 快照 + 基线的内容字节（不含 portable.json）。
 - 导出端云同步已启用时，导出前自动 `syncNow` 一次（失败中止导出）；纯离线导出不联网。
 
 ## 3. 导入矩阵（每端全量导入）
@@ -95,7 +103,7 @@ mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-j
    回收站/日记（`space` 标记）/标签/小记语义两端对齐（判据见 AGENTS §3/§4、`docs/DIARY.md`）。
 4. **同步基线**：包内有 baseline ⇒ 转成本端形状写入（桌面 `sync-v3/baseline.json.gz` / 手机 `sync_v3_state.baseline`），
    intents/pending/assetsHash 置空；无 baseline ⇒ 不写（配 S3 后：空桶首传 / 已有数据先拉取）。
-   baseline 跨机 = 接管原设备同步身份（261109 裁决，沿用）。
+   baseline 跨机 = 接管原设备同步身份（261109 裁决，沿用）。**基线损坏 ⇒ 按「无基线」处理并在结果消息里明说，不阻断迁移**。
 5. 清派生缓存（text_cache / FTS）并后台重建；`note_history` 恒空（包内就没有）。
 6. 成功提示计数 + 「如需增量同步，请配置 S3（或导入迁移码）」。
 
@@ -128,9 +136,14 @@ mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-j
 
 ## 7. 实现落点
 
-- **格式单一来源**：`src/core/portable/portableFormat.ts`（manifest v2 / 布局配对 / 4GiB / counts / baseline ref / 可用性）。
-- **桌面导出**：`electron/portable/portableExport.ts`（快照 + 清历史行 + 白名单收集 + 写 zip）；`electron/portable/zipStore.ts`（store-only 写；读器同目录）。
-- **桌面导入**：`electron/portable/portableImport.ts`（选包/解包/分派/回滚）+ 目录模式恢复 + 反向映射（`electron/portable/mobileMapping.ts`）。
+- **格式单一来源**：`src/core/portable/portableFormat.ts`（manifest v2 / 布局配对 / 4GiB / counts / baseline ref / 可用性）
+  + `src/core/portable/portableRows.ts`（收窄助手与正文目录清单，正反向映射共用）。
+- **桌面导出**：`electron/portable/portableExport.ts`（快照 + 清「仅本机」行 + 白名单收集 + 写 zip）；
+  `electron/portable/zipStore.ts`（store-only 写）+ `electron/portable/zipRead.ts`（seek 读/流式解包，测试共用）。
+- **桌面导入**：`electron/portable/portableImport.ts`（选包/校验/解包/分派）+ `importMobileSnapshot.ts`（手机快照解包/建库/资产重建）
+  + 反向映射 `electron/portable/mobileToDesktopMapping.ts` + 目录模式恢复（`electron/workspaceBackup.ts`，
+  隔离→换位→回滚唯一实现 `replaceWorkspaceWith`）。手机小记图片元数据（quick_note_assets）在反向导入时
+  **从随包 .qnote 正文的资源清单重建**（width/height 不丢）。
 - **手机**：`src/mobile/portable/importPortable.ts`（编排）、`portableMapping.ts`（桌面行→手机行）、`exportPortable.ts`；
   原生 `android/.../PortablePackagePlugin.kt`（选包/解压/快照/恢复；v2 校验 + 500k 条目 + 清历史行）。
 - **测试**：format v2 校验、导出白名单/清历史、zip 往返、双向映射、回滚路径、IPC 门禁（`ipcChannelParity` 四面同步）。

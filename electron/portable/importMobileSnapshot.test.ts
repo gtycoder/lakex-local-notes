@@ -54,7 +54,7 @@ function makeMobileDb(file: string): void {
   db.close();
 }
 
-async function makeMobilePackage(target: string, opts: { withBaseline?: boolean } = {}): Promise<string> {
+async function makeMobilePackage(target: string, opts: { withBaseline?: boolean; corruptBaseline?: boolean } = {}): Promise<string> {
   fs.mkdirSync(target, { recursive: true });
   const tmp = tempDir("lakex-mob-db-");
   const dbFile = path.join(tmp, MOBILE_DB_NAME);
@@ -77,8 +77,16 @@ async function makeMobilePackage(target: string, opts: { withBaseline?: boolean 
     bufEntry("mobile/files/note-assets/n1/a.png", "PNG"),
     bufEntry("mobile/files/draft-journal/d1.json", "{}"),
     bufEntry("mobile/files/history/n1/h1.body.gz", "HISTORY-MUST-NOT-COPY"),
+    bufEntry("mobile/files/quick-notes/items/q1.qnote", JSON.stringify({
+      version: 3,
+      text: "速记",
+      body: "<p>速记</p>",
+      images: [{ id: "img1", filename: "a.png", mimeType: "image/png", width: 10, height: 20, size: 3, hash: "h-img" }],
+    })),
   ];
-  if (opts.withBaseline !== false) {
+  if (opts.corruptBaseline === true) {
+    entries.push(bufEntry("mobile/files/sync-v3/baseline.json.gz.b64", Buffer.from("NOT-BASE64-GZIP")));
+  } else if (opts.withBaseline !== false) {
     entries.push(bufEntry("mobile/files/sync-v3/baseline.json.gz.b64", gzipSync(Buffer.from(JSON.stringify(BASELINE))).toString("base64")));
   }
   const zipPath = path.join(target, "lakex-portable-mobile.zip.lln");
@@ -131,6 +139,10 @@ describe("importMobileSnapshot（手机快照包 → 桌面，反向映射）", 
     const quick = new Database(path.join(ws, "quick-notes", "metadata.sqlite3"), { readonly: true });
     try {
       expect((quick.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>).map((r) => r.id)).toEqual(["q1"]);
+      // quick_note_assets 从随包 .qnote 正文资源清单重建（width/height 不丢）
+      expect(quick.prepare("SELECT id,quick_note_id,filename,mime_type,width,height,size,content_hash FROM quick_note_assets").all()).toEqual([
+        { id: "img1", quick_note_id: "q1", filename: "a.png", mime_type: "image/png", width: 10, height: 20, size: 3, content_hash: "h-img" },
+      ]);
       expect((quick.prepare("SELECT id,purged_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>))
         .toEqual([{ id: "q2", purged_at: TS }]);
       expect((quick.prepare("SELECT name FROM tags").all() as Array<{ name: string }>).map((r) => r.name)).toEqual(["标签"]);
@@ -148,5 +160,15 @@ describe("importMobileSnapshot（手机快照包 → 桌面，反向映射）", 
     expect(result.ok, "导入失败原因：" + result.reason).toBe(true);
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json"))).toBe(false);
+  });
+
+  it("坏基线不阻断迁移：按无基线导入并在消息里明说", async () => {
+    const tmp = tempDir("lakex-mob-ws-");
+    const zipPath = await makeMobilePackage(path.join(tmp, "out"), { corruptBaseline: true });
+    const ws = makeWorkspace(tmp);
+    const result = importPortablePackageOnDesktop({ zipPath, workspaceRoot: ws, stagingParent: path.join(tmp, "portable-import") });
+    expect(result.ok, "导入失败原因：" + result.reason).toBe(true);
+    expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
+    expect(result.message).toContain("无基线");
   });
 });

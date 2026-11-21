@@ -72,11 +72,17 @@ let snapshotDbBytes = 0;
 function makeSnapshot(targetRoot: string): void {
   fs.mkdirSync(path.join(targetRoot, "quick-notes"), { recursive: true });
   const main = new Database(path.join(targetRoot, "metadata.sqlite3"));
-  main.exec("CREATE TABLE notes (id TEXT PRIMARY KEY); CREATE TABLE note_history (id TEXT PRIMARY KEY); CREATE TABLE history_fallback_state (id TEXT PRIMARY KEY);");
+  main.exec("CREATE TABLE notes (id TEXT PRIMARY KEY); CREATE TABLE note_history (id TEXT PRIMARY KEY); CREATE TABLE history_fallback_state (id TEXT PRIMARY KEY);"
+    + " CREATE TABLE ai_writing_conversations (id TEXT PRIMARY KEY); CREATE TABLE ai_writing_messages (id TEXT PRIMARY KEY);"
+    + " CREATE TABLE sync_conflicts (id TEXT PRIMARY KEY); CREATE TABLE orphan_assets (id TEXT PRIMARY KEY);");
   main.prepare("INSERT INTO notes (id) VALUES (?)").run("n-live");
   main.prepare("INSERT INTO note_history (id) VALUES (?)").run("h1");
   main.prepare("INSERT INTO note_history (id) VALUES (?)").run("h2");
   main.prepare("INSERT INTO history_fallback_state (id) VALUES (?)").run("f1");
+  main.prepare("INSERT INTO ai_writing_conversations (id) VALUES (?)").run("c1");
+  main.prepare("INSERT INTO ai_writing_messages (id) VALUES (?)").run("m1");
+  main.prepare("INSERT INTO sync_conflicts (id) VALUES (?)").run("sc1");
+  main.prepare("INSERT INTO orphan_assets (id) VALUES (?)").run("oa1");
   main.close();
   const quick = new Database(path.join(targetRoot, "quick-notes", "metadata.sqlite3"));
   quick.exec("CREATE TABLE quick_notes (id TEXT PRIMARY KEY);");
@@ -152,9 +158,10 @@ describe("portableExport（桌面导出大统一迁移包 v2）", () => {
     const main = new Database(mainDbPath, { readonly: true });
     try {
       expect((main.prepare("SELECT id FROM notes").all() as Array<{ id: string }>).map((r) => r.id)).toEqual(["n-live"]);
-      // 261122：历史快照不进包 ⇒ 快照库历史索引行必须清零（包内自洽，无悬空历史条目）
-      expect((main.prepare("SELECT COUNT(*) AS n FROM note_history").get() as { n: number }).n).toBe(0);
-      expect((main.prepare("SELECT COUNT(*) AS n FROM history_fallback_state").get() as { n: number }).n).toBe(0);
+      // 261122：仅本机数据不进包 ⇒ 历史/AI 会话/本地账本/派生表全部清零（包内自洽）
+      for (const table of ["note_history", "history_fallback_state", "ai_writing_conversations", "ai_writing_messages", "sync_conflicts", "orphan_assets"]) {
+        expect((main.prepare("SELECT COUNT(*) AS n FROM " + table).get() as { n: number }).n, table + " 应清零").toBe(0);
+      }
     } finally { main.close(); }
 
     // 进度：三个 phase 都出现，write 结束 filesDone = filesTotal

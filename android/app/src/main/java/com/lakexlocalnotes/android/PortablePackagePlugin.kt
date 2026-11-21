@@ -682,7 +682,15 @@ class PortablePackagePlugin : Plugin() {
                 SQLiteDatabase.openDatabase(
                     File(scrubDir, MOBILE_DB_FILE).absolutePath, null, SQLiteDatabase.OPEN_READWRITE
                 ).use { scrubDb ->
-                    scrubDb.execSQL("DELETE FROM note_history")
+                    // 仅本机数据不随包（261122 裁决）：历史索引、AI 会话、同步记录账本、GC 审计、孤儿资产派生表。
+                    for (table in listOf(
+                        "note_history", "ai_conversations", "sync_conflicts", "s3_gc_pending", "s3_gc_log", "orphan_assets",
+                    )) {
+                        val exists = scrubDb.rawQuery(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", arrayOf(table)
+                        ).use { c -> c.moveToFirst() }
+                        if (exists) scrubDb.execSQL("DELETE FROM $table")
+                    }
                 }
                 for (file in mainDbFiles(scrubDir)) {
                     bytes += writeZipFile(zos, "mobile/databases/" + file.name, file)
@@ -868,8 +876,22 @@ class PortablePackagePlugin : Plugin() {
                 db.close()
             }
         } catch (e: Exception) {
-            // 计数失败不影响导出（JSON 里 counts 可能为空）；不阻断。
+            // 计数失败不影响导出（缺键按 0 显示）；不阻断。
         }
+        // v2 清单 counts 六键齐全（core portableFormat 严格校验）：assets/bytes 按打包白名单同口径统计。
+        var assetFiles = 0
+        var totalBytes = 0L
+        for (relative in SNAPSHOT_DIRS) {
+            val dir = File(context.filesDir, relative)
+            if (!dir.isDirectory) continue
+            dir.walkTopDown().filter { it.isFile }.forEach { file ->
+                totalBytes += file.length()
+                if (relative == "note-assets" || relative == "quick-notes/assets") assetFiles += 1
+            }
+        }
+        for (file in mainDbFiles(dbDir)) totalBytes += file.length()
+        out.put("assets", assetFiles)
+        out.put("bytes", totalBytes)
         return out
     }
 

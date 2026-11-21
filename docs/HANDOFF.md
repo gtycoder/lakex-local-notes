@@ -14,7 +14,8 @@
   - **移动端**：Kotlin formatVersion 2 / MAX_ENTRIES 500k / SNAPSHOT_DIRS 去 history / 导出 staged 清 note_history / 清单带 baseline ref（JS readBaselineFile 透传）/ PAYLOAD_DIRS +staging·draft-journal·materials。**桌面设置入口**：「从整库备份恢复（完整目录）」+「从便携包导入（覆盖本机）」（迁移包组）；settingsSearch/settingsGroups 钉法同步。zip 读取器三合一 `portable/zipRead.ts`（zipTestReader 已删）。
   - **门禁**：全量 vitest **1089 文件 / 6913 例 0 failed**；ui-metrics 0；check:core 183/0；check:mobileui 过；check:arch/check:bundle PASS（desktop 582,297/592,000、mobile 340,800/345,000）；tsc 0；compileDebugKotlin 0。文档回填：PORTABLE-TRANSFER v2 / guide/18 重写 / README 换机三条路 / UNINSTALL-DATA / STORAGE-LAYERS sync-v3 位置校正。
   - **探针新坑（§7#21-22 同类）**：`"portable-import"` 字符串被 `SIDE_EFFECT_IMPORT_RE` 误抓（收紧行首语句位 + 自证用例）；`manifestV2` 函数名撞 versionLiterals「manifest v<数字>」正则（改名 buildManifest）。
-  - **已知边界**：小记图片元数据（quick_note_assets）不随包（文件随包，靠文件↔元数据扫描重建）；移动画板素材在 localStorage 不随快照；>4GiB 大库跨端无包（走整库目录/云拉）。
+  - **已知边界**：移动画板素材在 localStorage 不随快照；>4GiB 大库跨端无包（走整库目录/云拉）。
+  - **261122 review 补强（同日第二轮）**：① 仅本机行随包漏洞堵死——两端导出清 `ai_writing_*`/`ai_conversations`/`sync_conflicts`/`s3_gc_*`/`orphan_assets`（历史此前已清）；② **拒包级 bug**：Kotlin counts 只写 4 键而 v2 校验要六键 ⇒ 手机快照会被拒，已补齐 assets/bytes（校验保持严格）；③ 坏基线不再阻断迁移（按无基线 + 明示）；④ 手机快照库改可写打开（自动合并包内 wal/journal）；⑤ **quick_note_assets 图片元数据随包重建**（从 .qnote 正文资源清单，width/height 不丢，原「已知边界」关闭）；⑥ 残余清理 + 设置文案分家（整库备份=本机归档含历史、便携包=跨端迁移不含历史；两个导出保留、说明写清，用户 261122 裁决）。护栏 +5 例。
 
 - **261123 · 复制入口全覆盖（⌘C + 块菜单）**：
   - `attachBlockCopyBridge(container, getBody?)` 新增「单块表格」分支：块菜单「复制 / 复制表格」不再交回内核（内核只写第一格文字），改为从**内核正文**取整表（`tableClipboardModel`）直写剪贴板；`mountBlockHoverHandle` 传入 `editor.getDocument("text/lake")`。
@@ -849,7 +850,7 @@
 **261122 大统一迁移包批待办**
 
 - **设备/人工点收（装包已完成）**：① 手机「导出便携包到文件」→ 桌面「从便携包导入」走一遍；② 桌面「导出便携包」→ 手机导入走一遍；③ 桌面「从整库备份恢复（完整目录）」点收；④ 导入后配 S3 确认只做增量（基线随包）。
-- **可选优化**：跨端导入后小记图片元数据（quick_note_assets）为空，靠「重建数据 → 扫描」回填；可考虑导入完成后自动触发一次文件↔元数据扫描。
+- ~~quick_note_assets 元数据回填~~（review 补强已关闭：反向导入从 .qnote 正文资源清单重建）。
 - **登记边界**：移动画板素材在 localStorage，不随手机快照（桌面↔桌面走包/目录可带）。
 
 **261122 批待办**

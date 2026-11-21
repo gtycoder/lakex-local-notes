@@ -86,7 +86,7 @@ export function importPortablePackageOnDesktop(options: PortableImportOptions): 
 
 /** desktop-workspace 包：staging 解包 → baseline 转换 → 校验 → 换位（原子 rename，失败回滚）。 */
 export function importDesktopWorkspacePackage(options: PortableImportOptions, inspection?: PortablePackageInspection): PortableImportResult {
-  const checked = inspection ?? (() => { try { return inspectPortablePackage(options.zipPath); } catch (error) { throw error; } })();
+  const checked = inspection ?? inspectPortablePackage(options.zipPath);
   const stamp = new Date().toISOString().replace(/[:T.]/g, "-").slice(0, 19);
   const stagingRoot = path.join(options.stagingParent, "import-" + stamp);
   try {
@@ -106,10 +106,18 @@ export function importDesktopWorkspacePackage(options: PortableImportOptions, in
     // 2) baseline 转换：有云端基线 ⇒ JSON 解开后重新 gz 为 baseline.json.gz；
     //    纯离线包（manifest.baseline=null）的 baseline.json 只是内容哈希清单 ⇒ 不写桌面基线。
     const baselineJson = path.join(stagingDesktop, "sync-v3", "baseline.json");
+    let baselineWarning = "";
     if (checked.manifest.baseline) {
-      fs.mkdirSync(path.dirname(baselineJson), { recursive: true });
-      fs.writeFileSync(baselineJson.replace(/\.json$/, ".json.gz"), gzipSync(fs.readFileSync(baselineJson)));
-      fs.rmSync(baselineJson, { force: true });
+      try {
+        const raw = fs.readFileSync(baselineJson);
+        JSON.parse(raw.toString("utf8")); // 自证可解析：坏基线按「无基线」处理，不把坏字节写进工作区
+        fs.mkdirSync(path.dirname(baselineJson), { recursive: true });
+        fs.writeFileSync(baselineJson.replace(/\.json$/, ".json.gz"), gzipSync(raw));
+        fs.rmSync(baselineJson, { force: true });
+      } catch {
+        fs.rmSync(baselineJson, { force: true });
+        baselineWarning = "（包内同步基线损坏，已按无基线导入：配好 S3 后会先拉取云端再增量）";
+      }
     } else {
       fs.rmSync(baselineJson, { force: true });
     }
@@ -139,7 +147,7 @@ export function importDesktopWorkspacePackage(options: PortableImportOptions, in
       quarantinePath: swapped.quarantinePath,
       quickNotesRestored: swapped.quickNotesRestored,
       requiresRestart: true,
-      message: swapped.message,
+      message: (swapped.message ?? "") + baselineWarning,
     };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };

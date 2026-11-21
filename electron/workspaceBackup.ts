@@ -81,9 +81,7 @@ export interface MirrorRestoreFsOps {
   existsSync: (target: string) => boolean;
   readdirSync: (target: string) => fs.Dirent[];
   mkdirSync: (target: string, options?: { recursive?: boolean }) => void;
-  renameSync: (from: string, to: string) => void;
   cpSync: (from: string, to: string) => void;
-  rmSync: (target: string, options?: { recursive?: boolean; force?: boolean }) => void;
 }
 
 export interface MirrorRestoreOptions {
@@ -159,9 +157,7 @@ export function restoreWorkspaceMirror(options: MirrorRestoreOptions): MirrorRes
     existsSync: fs.existsSync,
     readdirSync: (target) => fs.readdirSync(target, { withFileTypes: true }),
     mkdirSync: (target, opts) => { fs.mkdirSync(target, opts); },
-    renameSync: fs.renameSync,
     cpSync: (from, to) => { fs.cpSync(from, to, { recursive: true }); },
-    rmSync: (target, opts) => { fs.rmSync(target, opts); },
     ...options.fsOps,
   };
   const backupDir = path.resolve(options.backupDir);

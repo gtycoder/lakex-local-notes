@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { restoreWorkspaceMirror, type MirrorRestoreFsOps } from "./workspaceBackup.js";
+import { replaceWorkspaceWith, restoreWorkspaceMirror, type MirrorRestoreFsOps } from "./workspaceBackup.js";
 
 function makeMainDb(file: string): void {
   const db = new Database(file);
@@ -96,6 +96,21 @@ describe("restoreWorkspaceMirror（A3 整库导入：目录模式）", () => {
     // 三次失败都不动工作区
     expect(fs.readFileSync(path.join(ws, "notes", "old.lake"), "utf8")).toBe("<p>old</p>");
     expect(fs.readFileSync(path.join(ws, "metadata.sqlite3"), "utf8")).toBe("OLD-LIVE-DB");
+  });
+
+  it("replaceWorkspaceWith：materialize 抛错 ⇒ 回滚（旧工作区原样移回，rolledBack=true）", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lake-mirror-"));
+    const ws = makeWorkspace(tmp);
+    const result = replaceWorkspaceWith({
+      workspaceRoot: ws,
+      quickNotesRestored: true,
+      describe: "测试换位",
+      materialize: () => { throw new Error("staging 升格失败（模拟）"); },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.rolledBack).toBe(true);
+    expect(result.reason).toContain("staging 升格失败");
+    expect(fs.readFileSync(path.join(ws, "notes", "old.lake"), "utf8")).toBe("<p>old</p>");
   });
 
   it("拷贝中途中断 ⇒ 回滚：旧工作区原样移回", () => {

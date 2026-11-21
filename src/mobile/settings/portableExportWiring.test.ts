@@ -75,7 +75,13 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
     expect(plugin).toContain("MAX_ENTRIES = 500_000");
     // 历史快照不进导入导出（261122 裁决）：快照目录不含 history，导出端清 note_history 索引行
     expect(plugin).toContain('SNAPSHOT_DIRS = PAYLOAD_DIRS + listOf("sync-v3")');
-    expect(plugin).toContain("DELETE FROM note_history");
+    // 仅本机数据不随包：历史索引/AI 会话/同步记录账本/GC 审计/孤儿资产派生表（导出端逐表清行）
+    expect(plugin).toContain('scrubDb.execSQL("DELETE FROM $table")');
+    expect(plugin).toContain('"note_history", "ai_conversations", "sync_conflicts"');
+    expect(plugin).toContain('"s3_gc_pending", "s3_gc_log", "orphan_assets"');
+    // counts 六键齐全（core 严格校验；缺 assets/bytes 会被拒包）
+    expect(plugin).toContain('out.put("assets"');
+    expect(plugin).toContain('out.put("bytes"');
     // v2 清单：无 hasHistory 字段，带 layout 配对与 baseline ref
     expect(plugin).not.toContain('.put("hasHistory"');
     expect(plugin).not.toContain('optBoolean("hasHistory"');

@@ -15,9 +15,10 @@ import { migrateQuickNotesSchema } from "../quickNotes.js";
 import { QuickNoteTagsStore } from "../quickNoteTagsStore.js";
 import { QuickNoteTagLinksStore } from "../quickNoteTagLinksStore.js";
 import { TRASH_NOTEBOOK_ID } from "../../src/core/syncDecisions.js";
+import { quickNoteBodyRelativePath } from "../../src/core/noteBodyPaths.js";
 import { PORTABLE_BODY_DIRS } from "../../src/core/portable/portableRows.js";
 import { extractEntryToFile, readEntryData } from "./zipRead.js";
-import { mapMobileToDesktop, type MappedDesktopFromMobile, type DesktopQuickNoteDeletedRow } from "./mobileToDesktopMapping.js";
+import { mapMobileToDesktop, type MappedDesktopFromMobile } from "./mobileToDesktopMapping.js";
 import { replaceWorkspaceWith } from "../workspaceBackup.js";
 import type { PortableImportOptions, PortableImportResult, PortablePackageInspection } from "./portableImport.js";
 
@@ -72,15 +73,22 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
     // 3) baseline 反转：b64(gz(json)) → desktop sync-v3/baseline.json.gz（同一份 gz 字节）；
     //    解开自证可解析，坏基线直接失败（不能把坏字节当基线写进工作区）。
     const baselineEntry = entries.find((entry) => entry.name === BASELINE_B64_REL);
+    let baselineWarning = "";
     if (baselineEntry) {
-      const gz = Buffer.from(readEntryData(options.zipPath, baselineEntry).toString("utf8").trim(), "base64");
-      JSON.parse(gunzipSync(gz).toString("utf8"));
-      fs.mkdirSync(path.join(stagingWorkspace, "sync-v3"), { recursive: true });
-      fs.writeFileSync(path.join(stagingWorkspace, "sync-v3", "baseline.json.gz"), gz);
+      try {
+        const gz = Buffer.from(readEntryData(options.zipPath, baselineEntry).toString("utf8").trim(), "base64");
+        JSON.parse(gunzipSync(gz).toString("utf8"));
+        fs.mkdirSync(path.join(stagingWorkspace, "sync-v3"), { recursive: true });
+        fs.writeFileSync(path.join(stagingWorkspace, "sync-v3", "baseline.json.gz"), gz);
+      } catch {
+        // 坏基线不阻断迁移：按「无基线」处理（与纯离线包同语义），在结果里明说。
+        baselineWarning = "（包内同步基线损坏，已按无基线导入：配好 S3 后会先拉取云端再增量）";
+      }
     }
 
     // 4) 读手机行 → 映射成桌面行（纯逻辑；表缺失按空集处理）。
-    const mobileDb = new Database(path.join(mobileDbDir, MOBILE_DB_NAME), { readonly: true });
+    // staging 副本上用可写方式打开：让 SQLite 自动合并/回滚包里带来的 -wal/-journal（只读打开 WAL 库可能失败）。
+    const mobileDb = new Database(path.join(mobileDbDir, MOBILE_DB_NAME));
     let mapped: MappedDesktopFromMobile;
     try {
       const rows = (table: string): Array<Record<string, unknown>> => {
@@ -129,7 +137,7 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
       // 标签域（tags/tag_links/tag_link_versions）由各自的 store 建表（quickNotes/schema 只建小记表）。
       new QuickNoteTagsStore(quickDb);
       new QuickNoteTagLinksStore(quickDb);
-      insertDesktopQuickRows(quickDb, mapped);
+      insertDesktopQuickRows(quickDb, mapped, stagingWorkspace);
     } finally {
       quickDb.close();
     }
@@ -149,7 +157,7 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
       quarantinePath: swapped.quarantinePath,
       quickNotesRestored: true,
       requiresRestart: true,
-      message: swapped.message,
+      message: (swapped.message ?? "") + baselineWarning,
     };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
@@ -188,10 +196,17 @@ function insertDesktopMainRows(db: Database.Database, mapped: MappedDesktopFromM
   })();
 }
 
-/** 小记库灌行（单事务：quick_notes / quick_note_deleted / tags / tag_links / tag_link_versions）。 */
-function insertDesktopQuickRows(db: Database.Database, mapped: MappedDesktopFromMobile): void {
+/**
+ * 小记库灌行（单事务：quick_notes / quick_note_deleted / tags / tag_links / tag_link_versions）。
+ * 并从随包 .qnote 正文重建 quick_note_assets（图片/附件元数据清单就在正文里，与 savePipeline 同口径
+ * —— width/height 由正文携带，不丢；坏正文跳过该条资产行、小记行照常）。
+ */
+function insertDesktopQuickRows(db: Database.Database, mapped: MappedDesktopFromMobile, stagingWorkspace: string): void {
   const insertQuick = db.prepare(
     "INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict,cloud_deleted) VALUES(?,?,?,?,?,?,?,?,?)",
+  );
+  const insertAsset = db.prepare(
+    "INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)",
   );
   const insertLedger = db.prepare(
     "INSERT INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync,purged_at,cloud_deleted) VALUES(?,?,?,?,?,?,?,?)",
@@ -203,8 +218,22 @@ function insertDesktopQuickRows(db: Database.Database, mapped: MappedDesktopFrom
     for (const row of mapped.quickNotes) {
       insertQuick.run(row.id, row.created_at, row.updated_at, row.preview_text, row.image_count, row.content_hash,
         row.is_dirty, row.is_conflict, row.cloud_deleted);
+      // quick_note_assets 从正文资源清单重建（正文 = StoredQuickNoteContent JSON：{ text, body, images[] }）。
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(stagingWorkspace, quickNoteBodyRelativePath(row.id)), "utf8")) as { images?: unknown };
+        for (const image of Array.isArray(raw.images) ? raw.images : []) {
+          const img = image as Record<string, unknown>;
+          const id = typeof img.id === "string" ? img.id : null;
+          const filename = typeof img.filename === "string" ? img.filename : null;
+          const mime = typeof img.mimeType === "string" ? img.mimeType : null;
+          const hash = typeof img.hash === "string" ? img.hash : null;
+          if (!id || !filename || !mime || !hash) continue;
+          const intOr = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value)) ? Math.trunc(value) : null;
+          insertAsset.run(id, row.id, filename, mime, intOr(img.width), intOr(img.height), intOr(img.size) ?? 0, hash);
+        }
+      } catch { /* 正文缺失/损坏：资产行跳过（文件在时仍可被扫描重建），不阻断导入 */ }
     }
-    for (const row of mapped.quickNoteDeleted as DesktopQuickNoteDeletedRow[]) {
+    for (const row of mapped.quickNoteDeleted) {
       insertLedger.run(row.id, row.created_at, row.updated_at, row.deleted_at, row.conversion_target_note_id,
         row.ready_to_sync, row.purged_at, row.cloud_deleted);
     }

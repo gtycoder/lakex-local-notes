@@ -63,7 +63,7 @@ function buildManifest(overrides: Partial<PortableManifest> = {}): string {
 }
 
 /** 造一个 desktop-workspace v2 包（真 SQLite 两库 + 正文 + 基线 JSON）。 */
-async function makeDesktopPackage(target: string, opts: { baseline?: "cloud" | "offline" | "none"; withQuick?: boolean } = {}): Promise<string> {
+async function makeDesktopPackage(target: string, opts: { baseline?: "cloud" | "offline" | "none"; withQuick?: boolean; corruptBaseline?: boolean } = {}): Promise<string> {
   const tmp = tempDir("lakex-pkg-db-");
   const mainDb = path.join(tmp, "metadata.sqlite3");
   const quickDb = path.join(tmp, "quick-metadata.sqlite3");
@@ -81,7 +81,8 @@ async function makeDesktopPackage(target: string, opts: { baseline?: "cloud" | "
     entries.push({ name: "desktop/quick-notes/metadata.sqlite3", size: fs.statSync(quickDb).size, mtime: new Date(), read: () => fs.createReadStream(quickDb) as unknown as AsyncIterable<Uint8Array> });
   }
   entries.push(bufEntry("desktop/notes/n1.lake", "<p>pkg</p>"));
-  if (baselineMode === "cloud") entries.push(bufEntry("desktop/sync-v3/baseline.json", JSON.stringify(BASELINE)));
+  if (opts.corruptBaseline === true) entries.push(bufEntry("desktop/sync-v3/baseline.json", "NOT-JSON{{{"));
+  else if (baselineMode === "cloud") entries.push(bufEntry("desktop/sync-v3/baseline.json", JSON.stringify(BASELINE)));
   if (baselineMode === "offline") entries.push(bufEntry("desktop/sync-v3/baseline.json", JSON.stringify({ localOnly: true, notes: { n1: "h" }, quickNotes: {} })));
   fs.mkdirSync(target, { recursive: true });
   const zipPath = path.join(target, "lakex-portable-20261122-020000.zip.lln");
@@ -145,6 +146,16 @@ describe("portableImport（桌面导入大统一迁移包 v2）", () => {
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json"))).toBe(false);
+  });
+
+  it("坏基线不阻断迁移：按无基线导入并在消息里明说", async () => {
+    const tmp = tempDir("lakex-pkg-ws-");
+    const zipPath = await makeDesktopPackage(path.join(tmp, "out"), { corruptBaseline: true });
+    const ws = makeWorkspace(tmp);
+    const result = importPortablePackageOnDesktop({ zipPath, workspaceRoot: ws, stagingParent: path.join(tmp, "portable-import") });
+    expect(result.ok, "导入失败原因：" + result.reason).toBe(true);
+    expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
+    expect(result.message).toContain("无基线");
   });
 
   it("包损坏（CRC 不符）⇒ 失败且本机数据未动；staging 清理", async () => {

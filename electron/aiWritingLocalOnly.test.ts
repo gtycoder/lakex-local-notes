@@ -36,6 +36,10 @@ const AI_TABLE_ALLOWED = new Set([
   "electron/ipc/registerAiWriting.append.test.ts",
   // schema 迁移测试：断言 ai_writing_messages 旧库缺列 → ALTER 补齐，不参与同步/上传。
   "electron/schemaInit.test.ts",
+  // 261122 review：迁移包导出的「仅本机行」清零清单（删除语义 —— 把 AI 会话搬出包，不是搬进；
+  // 断言见「便携包收集白名单」用例：收集面无 AI，且 LOCAL_ONLY_TABLES 必须清 ai 行）。
+  "electron/portable/portableExport.ts",
+  "electron/portable/portableExport.test.ts",
 ]);
 
 /** 这些文件/目录一旦出现 AI 本地数据的引用就是「可能上云」的红线面。 */
@@ -73,15 +77,23 @@ describe("AI 写作数据本地专属（不进 S3）", () => {
   it("同步 / 便携包 / store 里不得出现 AI 会话或 AI 附件目录", () => {
     const forbidden = files.filter((file) => SYNC_FORBIDDEN_HINTS.some((hint) => file.rel.startsWith(hint)));
     expect(forbidden.length).toBeGreaterThan(10); // 扫描面非空（探针自证，避免目录改名后静默空跑）
-    const offenders = forbidden.filter((file) => /ai_writing|ai-attachments|ai-paste/i.test(file.text)).map((file) => file.rel);
+    // portableExport 的 AI 提及是「清零清单」（删除语义），由下面的用例专门钉；其余红线面不得出现。
+    const offenders = forbidden
+      .filter((file) => file.rel !== "electron/portable/portableExport.ts" && file.rel !== "electron/portable/portableExport.test.ts")
+      .filter((file) => /ai_writing|ai-attachments|ai-paste/i.test(file.text)).map((file) => file.rel);
     expect(offenders, "同步链路出现 AI 本地数据引用 ⇒ 会随同步上传，必须回退").toEqual([]);
   });
 
-  it("便携包收集白名单不含 AI 会话 / AI 附件目录", () => {
+  it("便携包收集白名单不含 AI 会话 / AI 附件目录，且导出快照显式清掉 AI 行（删除语义）", () => {
     const portable = files.find((file) => file.rel === "electron/portable/portableExport.ts")!;
     expect(portable).toBeTruthy();
-    expect(portable.text).not.toMatch(/ai_writing|ai-attachments|ai-paste/i);
-    // 现状白名单 = 正文 + note-assets + quick-notes；AI 粘贴图在 userData 顶层，天然不在其中。
+    // 收集面不得有 AI 目录（AI 粘贴图在 userData 顶层，天然不在白名单里）。
+    expect(portable.text).not.toMatch(/add\([^)]*ai-(attachments|paste)/i);
+    // 现状白名单 = 正文 + note-assets + quick-notes + 草稿/素材；AI 粘贴图在 userData 顶层，天然不在其中。
     expect(portable.text).toContain('add("asset", "note-assets", "note-assets")');
+    // 261122 review：AI 会话行必须在「仅本机行」清零清单里 —— 连 DB 行都不进包（不只是目录不收集）。
+    expect(portable.text).toContain("const LOCAL_ONLY_TABLES");
+    expect(portable.text).toContain("ai_writing_conversations");
+    expect(portable.text).toContain("ai_writing_messages");
   });
 });
