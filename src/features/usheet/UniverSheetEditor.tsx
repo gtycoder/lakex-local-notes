@@ -28,6 +28,7 @@ import { docBaselineSettled } from "../../core/docBaseline.js";
 import { rlog } from "../../lib/log";
 import { errorFields } from "../../core/logFormat";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
+import { clipboardTableFrom, isUniverInternalCopy } from "./usheetClipboardTable";
 import { registerUsheetActiveSheet } from "./usheetActiveSheet";
 import {
   UNIVER_COMMAND_IDS,
@@ -434,13 +435,57 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
       const commandService = univer.__getInjector().get(ICommandService) as unknown as {
         registerCommand: (command: { id: string; type: CommandType; handler: () => Promise<boolean> }) => { dispose: () => void };
       };
+      /** 活动单元格落点（粘贴/插图都以它为准）；FRange 的 getRow/getColumn 是 0 基。 */
+      type ActiveCellRange = {
+        insertCellImageAsync: (u: string) => unknown;
+        getRow: () => number;
+        getColumn: () => number;
+      };
       const activeSheet = () => (book as unknown as {
         getActiveSheet: () => {
           insertImage: (u: string) => unknown;
-          getActiveRange: () => { insertCellImageAsync: (u: string) => unknown } | null;
-          getRange: (a1: string) => { insertCellImageAsync: (u: string) => unknown };
+          getActiveRange: () => ActiveCellRange | null;
+          getRange: {
+            (a1: string): { insertCellImageAsync: (u: string) => unknown };
+            (row: number, column: number, numRows: number, numColumns: number): { setValues: (values: string[][]) => unknown };
+          };
+          getMaxRows: () => number;
+          getMaxColumns: () => number;
+          insertRowsAfter: (afterPosition: number, numRows: number) => unknown;
+          insertColumnsAfter: (afterPosition: number, numColumns: number) => unknown;
         };
       }).getActiveSheet();
+      /** 外部表格 → 从活动单元格开始写矩阵（行/列不足时由内核自动扩？不：按矩阵尺寸取 range）。 */
+      const writeClipboardTable = (matrix: string[][], at?: { row: number; column: number }) => {
+        if (matrix.length === 0) return;
+        const ws = activeSheet();
+        const range = ws.getActiveRange();
+        // ⌘V 纠正式覆盖会写多次：**锚点必须在按键时就固定**（内核粘贴后选区会移动，
+        // 每写一次都取当前选区会导致同一份表被写到不同行 = 数据翻倍，实测 115 行变 230 行）。
+        const row = at ? at.row : range ? range.getRow() : 0;
+        const column = at ? at.column : range ? range.getColumn() : 0;
+        const columns = Math.max(1, ...matrix.map((line) => line.length));
+        const values = matrix.map((line) => {
+          const next = line.slice();
+          while (next.length < columns) next.push("");
+          return next;
+        });
+        // 261122：粘贴矩阵超出当前行列数时先补行/列（默认表只有 35×16，116 行的表格会被裁成 35 行）。
+        const maxRows = ws.getMaxRows();
+        const maxColumns = ws.getMaxColumns();
+        let insertedRows = 0;
+        let insertedCols = 0;
+        try {
+          if (row + values.length > maxRows) { insertedRows = row + values.length - maxRows; ws.insertRowsAfter(maxRows - 1, insertedRows); }
+          if (column + columns > maxColumns) { insertedCols = column + columns - maxColumns; ws.insertColumnsAfter(maxColumns - 1, insertedCols); }
+        } catch (error) {
+          rlog.warn("usheet", "粘贴扩行失败", { ...errorFields(error), maxRows, maxColumns, need: row + values.length });
+        }
+        rlog.debug("usheet", "粘贴矩阵", { atRow: row, atCol: column, maxRows, maxColumns, rows: values.length, columns, insertedRows, insertedCols, afterRows: ws.getMaxRows(), first: values[0] && values[0][0] });
+        ws.getRange(row, column, values.length, columns).setValues(values);
+        contentInputRef.current = true; // 真改动：允许首次 flush 落盘（与输入同口径）
+        scheduleFlush();
+      };
       const registerUpload = (id: string, insert: (url: string) => unknown) => commandService.registerCommand({
         id,
         type: CommandType.COMMAND,
@@ -479,7 +524,10 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
         if (!isInsideHost(event.target) && !isInsideHost(document.activeElement)) return;
         const dt = event.clipboardData;
         if (!dt) return;
+        // 表格粘贴走 keydown 纠正式覆盖（见下方 onKeyDown）；这里不再处理表格，否则
+        // 默认粘贴事件会在内核粘完（选区已下移）之后再写一遍 ⇒ 同一张表被复制两份（实测 115→230 行）。
         const files = imageFilesFromClipboard(dt);
+        // 表格已在上面接管；这里只剩图片（纯图片粘贴）与其它内容：其它内容不拦，交回内核/浏览器默认行为。
         if (files.length === 0) return;
         if (!isPureImageClipboard((type) => dt.getData(type))) return;
         // 落点判据：单图 + 有活动单元格 ⇒ 我们自己插「单元格图片」；其余（无选中 / 多图）放行给内核默认
@@ -506,6 +554,69 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
       };
       window.addEventListener("paste", onPaste, true);
       disposables.push({ dispose: () => window.removeEventListener("paste", onPaste, true) });
+      /**
+       * ⌘V 的真正入口（261122 用户现场复现）：Univer 的快捷键服务在 **keydown** 里执行 paste 命令，
+       * 自己 `navigator.clipboard.read()` 再用它的 Excel 风格解析器解析外部 HTML —— Lake/语雀表格卡
+       * 只剩左上角一格。网格的焦点是 `div[contenteditable=true][data-u-comp=editor]`（不是可编辑文本区），
+       * 所以浏览器**不会派发 paste 事件** ⇒ 只能在 keydown 里自己读剪贴板。
+       *
+       * 守卫要点：`[data-u-comp="editor"]` 是网格代理，**不能**当成"编辑态"跳过（否则处理器永远不执行、
+       * 内核照旧只落一格）；真正的单元格编辑/输入框才跳过。
+       */
+      const readClipboard = async (): Promise<{ html: string; text: string; hasImage: boolean } | null> => {
+        try {
+          if (!navigator.clipboard?.read) return null;
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            const hasImage = item.types.some((type) => type.startsWith("image/"));
+            const html = item.types.includes("text/html") ? await (await item.getType("text/html")).text() : "";
+            const plain = item.types.includes("text/plain") ? await (await item.getType("text/plain")).text() : "";
+            if (html || plain || hasImage) return { html, text: plain, hasImage };
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+      /**
+       * ⌘V 的**纠正式**接管（261122 现场复现后的最终方案）。
+       *
+       * 为什么不能拦：Univer 的 ⌘V 是 keydown 快捷键；一旦我们 preventDefault/stopPropagation，
+       * 它就不再处理 ⇒ 内部复制（copyId）/图片/纯文本全废（实测）；而重放合成 keydown 也不被接受。
+       * 为什么还要管：它对外部 HTML 用 Excel 风格解析，Lake/语雀表格卡只剩左上角一格。
+       * ⇒ **不拦**，让内核照旧粘贴；随后读剪贴板，只有确认是「外部表格」时才用我们的矩阵覆盖
+       * （两次写入覆盖内核的异步粘贴窗口）。内部复制带 data-copy-id，不覆盖。
+       */
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (readOnlyRef.current) return;
+        if (event.key !== "v" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+        const host = hostRef.current;
+        if (!host) return;
+        const inside = (node: unknown): boolean => node instanceof Node && host.contains(node);
+        if (!inside(event.target) && !inside(document.activeElement)) return;
+        // 锚点必须在**按键当下**同步取：内核粘贴完成后会把选区移到粘贴块之后，
+        // 异步读剪贴板之后再取就会变成"在已粘好的表格下方再粘一遍"（实测 115 行 → 230 行）。
+        let anchor = { row: 0, column: 0 };
+        try {
+          const anchorRange = activeSheet().getActiveRange();
+          if (anchorRange) anchor = { row: anchorRange.getRow(), column: anchorRange.getColumn() };
+        } catch { /* 实例未就绪：按 A1 兜底 */ }
+        void (async () => {
+          const payload = await readClipboard();
+          if (!payload || payload.hasImage || isUniverInternalCopy(payload.html)) return;
+          const table = clipboardTableFrom({ html: payload.html, text: payload.text });
+          if (!table) return;
+          // 内核的粘贴是异步的（clipboard.read → 解析 → 命令）：三次同锚点写入覆盖它的落点（幂等）。
+          for (const delay of [80, 320, 700]) {
+            window.setTimeout(() => {
+              if (readOnlyRef.current) return;
+              try { writeClipboardTable(table.matrix, anchor); } catch (error) { rlog.warn("usheet", "外部表格粘贴失败", { ...errorFields(error) }); }
+            }, delay);
+          }
+        })();
+      };
+      window.addEventListener("keydown", onKeyDown, true);
+      disposables.push({ dispose: () => window.removeEventListener("keydown", onKeyDown, true) });
       // 单元格右键 →「插入」子菜单里补一项「插入单元格图片」（用户 261010）。走内核公开 facade：
       // `createMenu({ action: <命令 id> })` 的 action 传字符串 = **直接复用已注册的命令**（不会新建），
       // 所以这里指到我们自己的 usheet.insert-cell-image（文件选择器 → 上传成资产 → 单元格图片）。

@@ -11,6 +11,9 @@ import {
 /** 工作区目录的数据所有权：子树、笔记本标题/图标、展开集合与刷新入口。 */
 export function useNotebookTreeData(notebookId: string) {
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
+  /** 目录**首次加载完成**（261122）：工作区的「恢复上次标签」必须等它 —— 树还没到时按空树过滤
+   *  会把存档里的标签全判成"已删"、restore([]) 直接清空（用户报「每次打开笔记本标签都被清空」）。 */
+  const [treeReady, setTreeReady] = useState(false);
   const [title, setTitle] = useState("知识库");
   const [notebookIcon, setNotebookIcon] = useState<string | null>(null);
   /** 日记本标记（261110）：日记子树的显示顺序 = 时间倒序（判据在 core，不在这里重算）。 */
@@ -20,6 +23,7 @@ export function useNotebookTreeData(notebookId: string) {
   const loadTree = useCallback(async () => {
     const snapshot = await bridge.getWorkspaceSnapshot(notebookId);
     setTree(snapshot.tree);
+    setTreeReady(true);
     const notebook = snapshot.notebook;
     if (notebook) {
       setTitle(notebook.title);
@@ -60,6 +64,7 @@ export function useNotebookTreeData(notebookId: string) {
 
   return {
     tree,
+    treeReady,
     setTree,
     title,
     notebookIcon,

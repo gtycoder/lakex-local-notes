@@ -110,6 +110,22 @@ export const UNIVER_FEATURE_NAMES = [
    *  **不是我们的落点**（内核内部常量、升级可漂移），只作升级漂移哨兵；
    *  失效表现 = 升级后 usheetDefaults.test 的漂移哨兵报红，提醒复核默认字号链路。 */
   "DEFAULT_STYLES",
+  /** 表格粘贴（261122 现场）：Univer 的 ⌘V 是 keydown 快捷键，自己读剪贴板、用 Excel 风格解析外部 HTML
+   *  （Lake/语雀表格卡只剩左上角一格）且**不派发 paste 事件** ⇒ 宿主只能在 keydown 里做「纠正式覆盖」：
+   *  **不拦**（拦了内部复制/图片/纯文本全废），读出外部表格（无 data-copy-id）后用矩阵写回。
+   *  失效表现 = 从文档表格卡粘贴只落一格。 */
+  "sheet.command.paste",
+  /** 表格剪贴板（261121 现场）：Univer 1.0.3 的**外部** HTML 粘贴走它自己的 Excel 风格解析器（HtmlToUSMService），
+   *  Lake/语雀表格卡的 HTML（`<table class="ne-table">` + 单元格内嵌 div）只解析出左上角一格；
+   *  我们自己的复制带 `data-copy-id`（内部走 copyContentCache，保样式/合并）。
+   *  ⇒ 宿主在 window 捕获阶段接管「外部表格 / 多行 TSV」并用 facade `setValues` 写入
+   *  （src/features/usheet/usheetClipboardTable.ts）；**内部复制不接管**。
+   *  失效表现 = 从文档表格卡复制再粘进表格只剩一格。升级后先跑 usheetClipboardTable.test + 手工复验。 */
+  "HtmlToUSMService",
+  /** 自动行高字段（261121）：工作表快照 `rowData[row].ia = 1`（SetWorksheetRowIsAutoHeightMutation 的字段），
+   *  行高随后按换行内容自动撑开；`rowData[row].h` 是手动高度（我们不改已有 h 的行）。
+   *  失效表现 = 长文本只换行、行高不变（或被裁掉）。 */
+  "SetWorksheetRowIsAutoHeightMutation",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。

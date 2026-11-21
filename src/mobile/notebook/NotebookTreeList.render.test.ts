@@ -71,6 +71,7 @@ const renderList = async (props: Partial<Parameters<typeof NotebookTreeList>[0]>
     longPress,
     onPressRow: () => {},
     onActivate: () => {},
+    onToggleExpand: () => {},
     onOpenMenu: () => {},
     onOpenCreate: () => {},
   } satisfies Omit<Parameters<typeof NotebookTreeList>[0], "rows">;
@@ -241,6 +242,7 @@ describe("目录抽屉树窗口化", () => {
       longPress,
       onPressRow: () => {},
       onActivate: () => {},
+      onToggleExpand: () => {},
       onOpenMenu: () => {},
       onOpenCreate: () => {},
     })); });
@@ -309,5 +311,40 @@ describe("目录树多选模式（261106 task-8）", () => {
     expect(host.querySelectorAll("[data-selection-checkbox]")).toHaveLength(0);
     expect(host.querySelectorAll(".nb-tree-action")).toHaveLength(2);
     expect(host.querySelector('[data-node-id="n1"]')?.getAttribute("aria-selected")).toBeNull();
+  });
+});
+describe("文档行 vs 三角的命中语义（261121 用户点单：有子文档的文档行点击要能打开）", () => {
+  const tree = [
+    node("nb1", null, 0, { kind: "group", title: "笔记本" }),
+    node("d1", "nb1", 1, { kind: "note", title: "Mac训练模型" }),
+    node("d2", "d1", 2, { kind: "note", title: "三个硬核问题深挖" }),
+  ];
+
+  it("点文档行（有子文档）→ onActivate；点左侧三角 → 只 onToggleExpand", async () => {
+    const onActivate = vi.fn();
+    const onToggleExpand = vi.fn();
+    await renderList({ rows: rowsFor(tree, ["nb1", "d1"]), expanded: new Set(["nb1", "d1"]), onActivate, onToggleExpand });
+    const row = host.querySelector('[data-node-id="d1"]') as HTMLElement;
+    expect(row).not.toBeNull();
+
+    await act(async () => { row.click(); });
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(onActivate.mock.calls[0][0].id).toBe("d1");
+    expect(onToggleExpand).not.toHaveBeenCalled();
+
+    const chevron = row.querySelector(".mb-chevron-hit") as HTMLElement;
+    expect(chevron).not.toBeNull();
+    expect(chevron.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => { chevron.click(); });
+    expect(onToggleExpand).toHaveBeenCalledWith("d1");
+    // 三角不冒泡到整行：不额外触发一次激活
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有子文档的行不渲染三角命中区（只有占位）", async () => {
+    await renderList({ rows: rowsFor([node("n1", "nb1", 1)]) });
+    const row = host.querySelector('[data-node-id="n1"]') as HTMLElement;
+    expect(row.querySelector(".mb-chevron-hit")).toBeNull();
+    expect(row.querySelector(".mb-chevron-spacer")).not.toBeNull();
   });
 });

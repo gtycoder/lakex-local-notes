@@ -324,7 +324,10 @@ pre {
  * 只在「宽度变化时会移动的边」出边缘长条 + 角点；几何公式与把手清单单一来源 mediaResizeGeometry.ts。
  * 内核原生 .ne-ui-image-resizer 四角点/命中区由本模块接管（隐藏点与命中区，保留 selection box 描边）：
  * 旧把手是「画框预览 + 松手跳变」，且右缘把手命中带会盖住右上/右下角（261117「四角不能用」主因）。 */
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-box { position: absolute; z-index: 3; pointer-events: none; }
+/* 261122：把手盒必须**绝对定位**，否则它会以 inline-block 卡片的第二个子元素身份留在正常流里，
+   把图片高度再占一遍（用户报「图片上下都占空间、后面文字被推很远」；小记写作卡不在 .lake-editor-tab
+   作用域内，所以以前只有文档编辑器正常）。盒子只由我们的 mediaCardResize 挂载点创建 ⇒ 不分宿主。 */
+:is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-box { position: absolute; z-index: 3; pointer-events: none; }
 .lake-editor-tab ne-card[data-card-name="video"] > .lake-media-resize-box { inset: 0; }
 .lake-media-resize-box > .lake-media-resize-handle { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; }
 .lake-media-resize-box > .lake-media-resize-handle--edge-left,

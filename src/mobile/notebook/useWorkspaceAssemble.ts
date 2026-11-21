@@ -9,6 +9,8 @@ import type { NotebookTreeItem } from "./useNotebookTreeData";
  */
 export interface UseWorkspaceAssembleOptions {
   tree: NotebookTreeItem[];
+  /** 目录是否已加载完成（缺省 true = 老调用/测试语义不变）。**未就绪时不做任何恢复决策**。 */
+  treeReady?: boolean;
   savedTabIds: string[];
   savedTabActiveId: string | null;
   initialNoteId?: string | null;
@@ -20,7 +22,7 @@ export interface UseWorkspaceAssembleOptions {
 }
 
 export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
-  const { tree, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore, openTab, active, loadTabBody } = options;
+  const { tree, treeReady = true, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore, openTab, active, loadTabBody } = options;
   /** 只做一次「初次进入」决策（显式文档 / 存档恢复 / 树中第一篇）。 */
   const autoOpenedRef = useRef(false);
 
@@ -35,6 +37,10 @@ export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
   // 不再靠 openTab 的调用顺序 + effect 执行顺序这种隐式协议）。
   useEffect(() => {
     if (autoOpenedRef.current) return;
+    // 261122：**目录未就绪前不做决策**。启动首帧 tree=[]，此时按「已知 id」过滤会把存档标签全判成已删，
+    // 走到下面的"保持空态"分支 restore([], null) ⇒ 每进一次笔记本就把上次的标签清空。
+    // 等 treeReady 翻真后这个 effect 会再跑一次，那时才真正恢复。
+    if (!treeReady) return;
     const knownNoteIds = new Set(tree.filter((item) => item.kind === "note").map((item) => item.id));
     const saved = savedTabIds.filter((id) => knownNoteIds.has(id) || id === initialNoteId);
     if (initialNoteId) {
@@ -53,7 +59,7 @@ export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
     autoOpenedRef.current = true;
     if (savedTabIds.length > 0) restore([], null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
+  }, [tree, treeReady, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，

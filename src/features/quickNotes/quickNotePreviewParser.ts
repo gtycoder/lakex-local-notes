@@ -59,7 +59,15 @@ export type QuickNotePreviewNode =
    * 媒体卡：`filename`（= URL 末段，磁盘文件名）用于在资源清单里找到对应资源，
    * `label` 是卡片自带的**原始展示名**（附件卡的 `name` / 音频卡的 `fileName`），取不到时回落资源名。
    */
-  | { kind: "media"; cardName: string; filename: string | null; label: string | null }
+  | {
+    kind: "media";
+    cardName: string;
+    filename: string | null;
+    label: string | null;
+    /** 卡片**显示尺寸**（用户拖过缩放手柄就是缩放后的值；缺省/非法 = 用资源原尺寸）。 */
+    width?: number;
+    height?: number;
+  }
   /**
    * 快路径**还原不了**的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…）。
    *
@@ -273,11 +281,18 @@ function parseCardNode(attrs: string): QuickNotePreviewNode[] {
     const url = value?.src ?? value?.url ?? value?.audioId;
     // 展示名同理：附件卡 `name`（"报告.pdf"）、音频卡 `fileName`；图片卡没有原始名（只有磁盘名）。
     const label = value?.name ?? value?.fileName;
+    // 卡片显示尺寸（261121）：图片被拖小后预览仍按**原图比例盒**占位 ⇒ 图变小、
+    // 外框留一大片空白（用户报「间距问题」）。卡里的 width/height 才是当前显示尺寸。
+    const size = (raw: unknown): number | null =>
+      typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? Math.round(raw) : null;
+    const width = size(value?.width);
+    const height = size(value?.height);
     return [{
       kind: "media",
       cardName: name,
       filename: basename(url),
       label: typeof label === "string" && label ? label : null,
+      ...(width && height ? { width, height } : {}),
     }];
   }
   return [{ kind: "unsupported", label: name || "card" }];
@@ -322,8 +337,28 @@ export function toggleTaskInBody(body: string, checkboxIndex: number, checked: b
   });
 }
 
+/**
+ * 把「被当成文本粘进来」的卡片标记还原成真卡片元素（261121 用户现场）。
+ *
+ * 来由：从文档/语雀复制一张图片（或动图）卡，再粘到**只接收文本**的地方（或内核失败态回写），
+ * 正文里就多出一段实体化标记 `&lt;card type="inline" name="image" value="data:…"&gt;`。
+ * 预览器把它当普通文字 ⇒ 卡片位置显示一整屏「超长链接」（动图/图片都中）。
+ * 这里只还原「`&lt;card …&gt;` 开标签」这一种形态，并补一个空闭合标签，让后面的解析按真卡处理；
+ * 其余实体、普通文本一律不动（不改变用户可见文字）。
+ */
+export function restoreEscapedCards(body: string): string {
+  if (!body || !/&lt;card\b/i.test(body)) return body;
+  return body.replace(/&lt;card\b([\s\S]*?)&gt;/gi, (whole, attrs: string) => {
+    // 只认带 name= 的卡片标记；别把用户随口写的 "&lt;card&gt;" 也变成卡片。
+    if (!/(?:^|\s)name\s*=/i.test(attrs)) return whole;
+    const clean = attrs.replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<");
+    return `<card${clean}></card>`;
+  });
+}
+
 export function parseQuickNotePreview(body: string, state: { checkbox: number } = { checkbox: 0 }): QuickNotePreviewNode[] {
   if (!body || typeof body !== "string") return [];
+  body = restoreEscapedCards(body);
   const nodes: QuickNotePreviewNode[] = [];
   let i = 0;
   while (i < body.length) {

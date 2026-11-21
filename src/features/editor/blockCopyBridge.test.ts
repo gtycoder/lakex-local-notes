@@ -273,7 +273,9 @@ describe("单张图片块：菜单复制 → 位图入口", () => {
 describe("接线护栏：块手柄挂载点必须挂上复制桥", () => {
   const MOUNT_SRC = read("./blockHandleMount.ts");
   it("mountBlockHoverHandle 挂载/清理复制桥", () => {
-    expect(MOUNT_SRC).toMatch(/attachBlockCopyBridge\(container\)/);
+    // 261122：挂载点同时传「正文读取器」（表格复制要取内核正文，DOM 虚拟渲染会缺行）。
+    expect(MOUNT_SRC).toMatch(/attachBlockCopyBridge\(container/);
+    expect(MOUNT_SRC).toMatch(/editor\.getDocument\("text\/lake"\)/);
     expect(MOUNT_SRC).toMatch(/detachCopyBridge\(\)/);
   });
   it("复制桥复用 buildClipboardPayload（单一来源）", () => {
@@ -282,5 +284,50 @@ describe("接线护栏：块手柄挂载点必须挂上复制桥", () => {
     expect(BRIDGE_SRC).not.toMatch(/normalizeClipboardHtml\(/);
     // 单块文字直写剪贴板：允许 Clipboard API/writeText 兜底，但内容必须来自 buildClipboardPayload。
     expect(BRIDGE_SRC).toMatch(/writePayloadDirect\(/);
+  });
+});
+describe("单块表格：菜单「复制」从正文取整表（261122）", () => {
+  class FakeClipboardItem {
+    items: Record<string, Blob>;
+    constructor(items: Record<string, Blob>) { this.items = items; }
+  }
+
+  it("DOM 里只有 1 行、正文有 3 行 ⇒ 剪贴板拿到 3 行（虚拟渲染缺行不影响）", async () => {
+    document.body.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "lake-editor-mount";
+    // DOM 只渲染 1 行（模拟虚拟渲染）
+    container.innerHTML = '<table class="ne-table"><tbody><tr><td>A1</td></tr></tbody></table>';
+    document.body.appendChild(container);
+    const menu = document.createElement("div");
+    menu.className = "ne-block-context-menu";
+    const item = document.createElement("div");
+    item.className = "ne-block-menu-item";
+    const label = document.createElement("span");
+    label.className = "ne-block-menu-label";
+    label.textContent = "复制";
+    item.appendChild(label);
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+
+    vi.stubGlobal("ClipboardItem", FakeClipboardItem);
+    const body = '<p>x</p><table class="lake-table"><tbody><tr><td><p><span>A1</span></p></td></tr><tr><td><p><span>A2</span></p></td></tr><tr><td><p><span>A3</span></p></td></tr></tbody></table>';
+    const detach = attachBlockCopyBridge(container, () => body);
+    // 悬停表格 → activeBlock（菜单 mousedown 前 vendor 会清高亮，必须走这个口径）
+    container.querySelector("table")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    item.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(clipboard.write).toHaveBeenCalled();
+    const calls = (clipboard.write as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const items = calls[calls.length - 1][0] as FakeClipboardItem[];
+    const itemArg = items[0];
+    const plain = (await itemArg.items["text/plain"].text()).trim();
+    expect(plain.split("\n")).toHaveLength(3);
+    expect(plain.split("\n")[0]).toBe("A1");
+    expect(plain.split("\n")[2]).toBe("A3");
+    detach();
+    vi.unstubAllGlobals();
   });
 });

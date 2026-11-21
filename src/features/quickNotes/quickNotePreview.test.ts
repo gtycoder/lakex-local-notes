@@ -162,3 +162,55 @@ describe("小记预览解析（白名单块）", () => {
     expect(parseQuickNotePreview("<").length).toBeLessThanOrEqual(1);
   });
 });
+describe("被当文本粘进来的卡片标记（261121 用户现场：动图/图片显示成超长链接）", () => {
+  /** 真实形态：整段标记被实体化成文本，且**没有闭合标签**，后面紧跟用户自己的话。 */
+  const escaped = '&lt;card type="inline" name="image" value="data:%7B%22src%22%3A%22http%3A%2F%2F127.0.0.1%3A19876%2Fquick-notes%2F942bc3ee%2F1795168158555_c41feec8.gif%22%2C%22width%22%3A144%2C%22height%22%3A85%7D"&gt;目录栏展开是加了动效吗？';
+
+  it("还原成图片卡：媒体节点 + 后续文字仍是段落，不再出现整段标记", () => {
+    const nodes = parseQuickNotePreview(`<p data-lake-id="p1" id="p1" class="ne-p"><span>${escaped}</span></p>`);
+    expect(nodes.some((node) => node.kind === "media")).toBe(true);
+    const media = nodes.find((node) => node.kind === "media") as { filename: string | null; cardName: string };
+    expect(media.cardName).toBe("image");
+    expect(media.filename).toBe("1795168158555_c41feec8.gif");
+    // 文字部分保留（且不含 <card 标记）
+    const text = nodes.filter((node) => node.kind === "paragraph")
+      .flatMap((node) => (node as { runs: Array<{ text: string }> }).runs.map((run) => run.text))
+      .join("");
+    expect(text).toContain("目录栏展开是加了动效吗");
+    expect(text).not.toContain("card");
+    expect(text).not.toContain("data:");
+  });
+
+  it("列表项里的实体化卡片：不再显示超长链接（只留文字）", () => {
+    const body = `<ul list="u1"><li data-lake-id="l1" id="l1"><span>${escaped}</span></li></ul>`;
+    const nodes = parseQuickNotePreview(body);
+    const allText = JSON.stringify(nodes);
+    expect(allText).not.toContain("data:%7B");
+    expect(allText).not.toContain("&lt;card");
+  });
+
+  it("不带 name= 的 &lt;card&gt; 原样保留（不误判成卡片）", () => {
+    const nodes = parseQuickNotePreview('<p class="ne-p"><span>这里写 &lt;card&gt; 只是举例</span></p>');
+    // 预览会把实体解码成可见文字（<card> 本身），但不变成媒体节点
+    expect(JSON.stringify(nodes)).toContain("这里写 <card> 只是举例");
+    expect(nodes.some((node) => node.kind === "media")).toBe(false);
+  });
+});
+describe("图片卡显示尺寸（261121：拖动缩小后预览不再留大空白）", () => {
+  it("卡片 width/height 进 media 节点；无尺寸的老卡不带字段（回落资源元数据）", () => {
+    const card = (value: string) => `<p class="ne-p"><card type="inline" name="image" value="data:${encodeURIComponent(value)}"></card></p>`;
+    const resized = parseQuickNotePreview(card(JSON.stringify({ src: "http://127.0.0.1:19876/quick-notes/n/a.png", width: 144, height: 85 })));
+    expect(resized[0]).toMatchObject({ kind: "media", cardName: "image", width: 144, height: 85 });
+    const legacy = parseQuickNotePreview(card(JSON.stringify({ src: "http://127.0.0.1:19876/quick-notes/n/b.png" })));
+    expect(legacy[0]).toMatchObject({ kind: "media" });
+    expect((legacy[0] as { width?: number }).width).toBeUndefined();
+  });
+
+  it("非法尺寸（0 / 负数 / 字符串）不落字段", () => {
+    const card = (value: string) => `<p class="ne-p"><card type="inline" name="image" value="data:${encodeURIComponent(value)}"></card></p>`;
+    for (const bad of [{ width: 0, height: 0 }, { width: -3, height: 10 }, { width: "144", height: 85 }]) {
+      const nodes = parseQuickNotePreview(card(JSON.stringify({ src: "http://127.0.0.1:19876/quick-notes/n/c.png", ...bad })));
+      expect((nodes[0] as { width?: number }).width).toBeUndefined();
+    }
+  });
+});

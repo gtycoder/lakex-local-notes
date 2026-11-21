@@ -68,3 +68,68 @@ describe("表格默认字号 = 11（Excel 11pt 口径，用户 261119）", () =>
     expect(fallback, "内核 DEFAULT_STYLES.fs 变了：确认未设式样单元格仍由我们的 defaultStyle.fs=11 兜住").toBe("11");
   });
 });
+
+describe("表格默认居中 / 自动换行 / 自动行高（用户 261121）", () => {
+  it("常量单一来源：居中 2 / 换行 3 / 自动行高 1 / 上限 500 行", async () => {
+    const core = await import("../../core/usheetDoc");
+    expect(core.USHEET_DEFAULT_HORIZONTAL_ALIGN).toBe(2); // HorizontalAlign.CENTER
+    expect(core.USHEET_DEFAULT_WRAP_STRATEGY).toBe(3); // WrapStrategy.WRAP
+    expect(core.USHEET_ROW_IS_AUTO_HEIGHT).toBe(1); // BooleanNumber.TRUE
+    expect(core.USHEET_AUTO_ROW_HEIGHT_MAX_ROWS).toBe(500);
+  });
+
+  it("新建表格：workbook 与工作表 defaultStyle 都落 ht/tb，且 35 行都标自动行高", () => {
+    const wb = emptyUsheetWorkbook() as {
+      defaultStyle?: { ht?: number; tb?: number };
+      sheets?: Record<string, { defaultStyle?: { ht?: number; tb?: number }; rowData?: Record<string, { ia?: number; h?: number }> }>;
+    };
+    expect(wb.defaultStyle?.ht).toBe(2);
+    expect(wb.defaultStyle?.tb).toBe(3);
+    expect(wb.sheets?.s1?.defaultStyle?.ht).toBe(2);
+    expect(wb.sheets?.s1?.defaultStyle?.tb).toBe(3);
+    const rowData = wb.sheets?.s1?.rowData ?? {};
+    expect(Object.keys(rowData)).toHaveLength(35);
+    expect(rowData["0"]).toEqual({ ia: 1 });
+    expect(rowData["34"]).toEqual({ ia: 1 });
+  });
+
+  it("normalize：补默认对齐/换行；已有显式 h 的行保持手动高度，只给没有 h 的行打自动行高", async () => {
+    const core = await import("../../core/usheetDoc");
+    const wb = {
+      sheets: {
+        s1: {
+          rowCount: 3,
+          defaultStyle: { fs: 11 },
+          rowData: { "0": { h: 60 }, "1": { ia: 1 } },
+        },
+      },
+      defaultStyle: {},
+    } as never;
+    core.normalizeUsheetWorkbook(wb);
+    const sheet = (wb as { sheets: Record<string, { defaultStyle: Record<string, unknown>; rowData: Record<string, { ia?: number; h?: number }> } > }).sheets.s1;
+    const top = (wb as { defaultStyle: Record<string, unknown> }).defaultStyle;
+    expect(top.ht).toBe(2);
+    expect(top.tb).toBe(3);
+    expect(sheet.defaultStyle.ht).toBe(2);
+    expect(sheet.defaultStyle.tb).toBe(3);
+    expect(sheet.rowData["0"]).toEqual({ h: 60 }); // 手动高度不碰
+    expect(sheet.rowData["1"]).toEqual({ ia: 1 });
+    expect(sheet.rowData["2"]).toEqual({ ia: 1 });
+  });
+
+  it("normalize：自动行高上限 500 行（1 万行的表不塞满 rowData）", async () => {
+    const core = await import("../../core/usheetDoc");
+    const wb = { sheets: { s1: { rowCount: 10000 } } } as never;
+    core.normalizeUsheetWorkbook(wb);
+    const sheet = (wb as { sheets: Record<string, { rowData?: Record<string, unknown> }> }).sheets.s1;
+    expect(Object.keys(sheet.rowData ?? {})).toHaveLength(500);
+  });
+
+  it("normalize 对空表幂等（新建正文 = 规范化后字节，打开不产生假改动）", async () => {
+    const core = await import("../../core/usheetDoc");
+    const wb = emptyUsheetWorkbook();
+    const before = JSON.stringify(wb);
+    core.normalizeUsheetWorkbook(wb);
+    expect(JSON.stringify(wb)).toBe(before);
+  });
+});

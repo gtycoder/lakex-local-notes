@@ -213,6 +213,12 @@ components:
 - 展开面板正文同为 15px（261008 起就是 bodyMd，本批与表内容对齐，不再有「表里 14 / 展开 15」的跳变）。
 - 落点：`src/features/bitable/*.css`（护栏 `bitableEditorMount.test`）；移动端共用同一份 CSS，基线见 `scripts/mobile-audit/baseline/bitable-snap.json`。
 
+
+### 表格（sheet）内容默认（261121 用户点单）
+
+- **单元格默认 = 水平居中 + 自动换行 + 自动行高**：`ht = 2`（CENTER）、`tb = 3`（WRAP）、`rowData[*].ia = 1`，全部由 `src/core/usheetDoc.ts` 的 `normalizeUsheetWorkbook` 写进 `defaultStyle` / 行数据（与默认字号 11 同一落点，两端共用）。
+- **只写默认**：单元格 / 命名样式 / 行里已有的显式 `ht` / `tb` / 手动行高（`h`）一律不动；自动行高上限 500 行（超出的行保持内核默认，避免给大表塞满 `rowData`）。
+- **为什么不进令牌层**：这是**内容区行为**（单元格对齐/行高），和 `--lake-*` 的壳层视觉无关；内核负责渲染，我们只给默认值。
 ### Named Rules
 
 **The Tabular Rule.** 一切会变化的数字（计数、字数、进度、表格数值）必须 `font-variant-numeric: tabular-nums`，否则切换时整行会抖。

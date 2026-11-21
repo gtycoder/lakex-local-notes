@@ -6,8 +6,9 @@
  *   展开侧同样先清一遍子树再加自身：即便其它入口（同步新增容器的自动展开、定位回填等）
  *   曾把后代写回展开集，点击展开也只会开一级。
  * · 子树集合复用 `core/tree.subtreeIds`（自带 visited，防环/防深树重复遍历），不另造遍历。
- * · 展开态只活在会话内（Sidebar 的 useState）：**不持久化** —— 不写 localStorage / device_state、不进 S3，
- *   重启回到默认展开（笔记本/分组）。这是有意的 —— 用户要的就是「不记录上次展开的层级」。
+ * · 展开态的**记忆**在 `features/sidebar/treeExpansion.ts`（261121 口径反转）：记设备本地
+ *   localStorage、不进 S3；**空数组 = 用户主动全部收起**。本模块只管切换语义，不碰存储。
+ *   （261119 曾定「不持久化、重启回默认展开」，261121 用户报「收起后重开又全展开」⇒ 改为记忆。）
  */
 import { subtreeIds } from "../../../core/tree";
 import type { TreeNode } from "../../../lib/types";

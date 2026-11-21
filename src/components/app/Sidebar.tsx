@@ -33,6 +33,7 @@ import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
 import { SidebarCollapsedSection } from "./SidebarCollapsedSection";
+import { pruneExpandedNodeIds, readExpandedNodeIds, writeExpandedNodeIds } from "../../features/sidebar/treeExpansion";
 import {
   readCollapsedHeight,
   readCollapsedNotebookIds,
@@ -171,11 +172,46 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   /**
-   * 目录树展开集（261119 用户点单）：**只活在会话内**，不写 localStorage / device_state、不进 S3 ——
-   * 不记录上次展开的层级，重启回到默认展开（笔记本/分组）。收起清整棵子树、展开只开一级，
-   * 判据单一来源 = sidebar/treeExpandState.ts。
+   * 目录树展开集（261121 **口径反转**：用户报「退出前收起所有笔记本，重开又全部展开」）。
+   *
+   * 261119 曾定「只活在会话内、重启回默认展开」；261121 用户明确这影响体验 ⇒ 改为**设备本地记忆**
+   * （localStorage，不进 S3、各端独立）：记「当前展开的节点 id」，**空数组 = 用户主动全部收起**
+   * （与"从没记过"区分）；节点删掉后的残留 id 按当前树裁剪。读写单一来源 = sidebar/treeExpansion.ts。
+   * 收起清整棵子树、展开只开一级的语义不变（判据 = sidebar/treeExpandState.ts）。
    */
-  const [expanded, setExpanded] = useState<Set<string>>(() => autoExpanded(props.nodes));
+  const restoredExpandedRef = useRef<{ stored: string[] | null }>({ stored: null });
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const stored = readExpandedNodeIds();
+    restoredExpandedRef.current.stored = stored;
+    return new Set(stored ?? autoExpanded(props.nodes));
+  });
+  /** 树是否已经拿到过真实节点（启动时 nodes 先空后到；在此之前**不许**把记忆写空）。 */
+  const treeSyncedRef = useRef(false);
+
+  // 首次拿到真实树：按记忆恢复（裁剪掉已删节点）；**没有记忆**才走默认展开（笔记本/分组）。
+  // 之后的 refreshTree 只裁掉已删节点，绝不改写用户当前展开态。
+  useEffect(() => {
+    if (props.nodes.length === 0) return;
+    if (!treeSyncedRef.current) {
+      treeSyncedRef.current = true;
+      const stored = restoredExpandedRef.current.stored;
+      const base = stored === null ? autoExpanded(props.nodes) : new Set(stored);
+      const next = new Set(pruneExpandedNodeIds([...base], props.nodes));
+      setExpanded((current) => (sameIdSet(current, next) ? current : next));
+      return;
+    }
+    setExpanded((current) => {
+      const next = new Set(pruneExpandedNodeIds([...current], props.nodes));
+      return sameIdSet(current, next) ? current : next;
+    });
+  }, [props.nodes]);
+
+  // 记忆：树同步之后才写 —— 启动时 nodes 为空，此刻写 [] 会把「用户主动全部收起」和「从没记过」混为一谈。
+  useEffect(() => {
+    if (!treeSyncedRef.current) return;
+    writeExpandedNodeIds([...expanded]);
+  }, [expanded]);
+
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const [releaseState, setReleaseState] = useState<{
@@ -234,7 +270,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   // 拖拽生命周期只用来决定 `onPreviewLeave` 的时序（拖拽中右缘跟着指针走，不能当"移出"处理）。
   const splitDraggingRef = useRef(false);
   const suppressClickRef = useRef(false);
-  const prevNodeIds = useRef<Set<string>>(new Set());
+  /** 上一次见过的节点 id；**null = 还没建立基线**（启动首帧树是空的，不能把那一次当成"全是新节点"）。 */
+  const prevNodeIds = useRef<Set<string> | null>(null);
   const query = props.search.trim().toLocaleLowerCase();
   // 目录筛选：图标按需展开输入框（交互与大纲筛选共用 dockFilterModel 状态机）
   const filter = useDockFilter(props.search, props.onSearch);
@@ -377,7 +414,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }, [props.onWidthCommit]);
 
   useEffect(() => {
-    // 只自动展开新出现的容器节点（笔记本/分组），不碰已有节点的展开状态
+    // 只自动展开**真正新出现**的容器节点（同步拉来 / 新建的笔记本、分组），不碰已有节点。
+    if (props.nodes.length === 0) return;
+    // 261122 用户报「每次打开还是全都展开」的真因：启动首帧树为空，第一次 effect 把所有笔记本都
+    // 当成"新节点"全量展开，随后又被记忆持久化覆盖 ⇒ 记忆永远存不下"收起"。
+    // ⇒ 第一次拿到真实树只**建立基线**、不展开。
+    if (prevNodeIds.current === null) {
+      prevNodeIds.current = new Set(props.nodes.map((n) => n.id));
+      return;
+    }
     const prevIds = prevNodeIds.current;
     const newContainerIds = props.nodes
       .filter((n) => n.nodeType !== "note" && !prevIds.has(n.id))
@@ -724,9 +769,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   // 蓝色高亮看不见（user 260917 报）。收起态没有可见列表，跳过。
   // 同时把上一次点击留下的 context 复位：它已不是"当前文档"了，再留主色内描边是残留。
   // `expandSelf: false`：点开一个带子项的文档只**打开它**，不顺手把它的子项摊开（user 260918）。
+  /** 冷启动的"跟随定位"只允许发生一次（之后用户切标签/切模式照常跟随）。 */
+  const startupFollowRef = useRef(false);
   useEffect(() => {
     setContextId(props.activeId ?? null);
     if (props.mode === "collapsed") return;
+    const startup = !startupFollowRef.current && treeSyncedRef.current;
+    if (startup) {
+      startupFollowRef.current = true;
+      // 261122 用户报「退出前收起了所有笔记本，重开又自动展开」：冷启动没有"切换标签"这回事，
+      // 目录**严格按上次记忆渲染**，不替用户展开 active 文档的祖先（要定位用工具条的「定位」按钮）。
+      // 没有记忆（首次运行）时仍按默认展开，保持老观感。
+      if (restoredExpandedRef.current.stored !== null) return;
+    }
     revealNodeRef.current(props.activeId, { expandSelf: false });
   }, [props.activeId, props.mode]);
 
@@ -1561,6 +1616,12 @@ function expandAncestors(current: Set<string>, nodes: TreeNode[], targetId: stri
     cursor = cursor.parentId ? nodes.find((n) => n.id === cursor!.parentId) : undefined;
   }
   return next;
+}
+
+function sameIdSet(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
 }
 
 function autoExpanded(nodes: TreeNode[]): Set<string> {

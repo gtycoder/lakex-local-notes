@@ -58,13 +58,18 @@ interface MediaProps {
   cardName: string;
   /** 卡片自带的原始展示名（附件卡的 `name` / 音频卡的 `fileName`）；取不到回落资源里的文件名。 */
   label: string | null;
+  /** 卡片显示尺寸（缩放后的值）；缺省 = 用资源原尺寸的比例盒。 */
+  width?: number;
+  height?: number;
   assets: Asset[];
   onImageClick(image: Asset): void;
+  /** 图片/媒体加载完成 → 让外层重测内容高（经典路径按内容高判定是否折叠）。 */
+  onMediaLoad?: () => void;
   /** 单行省略的工具类（桌面 .ln-ellipsis / 移动端 .mb-ellipsis）——由调用方给，组件不写死。 */
   ellipsisClassName: string;
 }
 
-function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassName }: MediaProps) {
+function Media({ filename, cardName, label, width, height, assets, onImageClick, onMediaLoad, ellipsisClassName }: MediaProps) {
   const asset = filename ? assets.find((item) => item.filename === filename) : undefined;
   /** 文件条上显示的名字：优先卡片里的原始名（"报告.pdf"），否则资源文件名（磁盘名）。 */
   const displayName = label ?? asset?.filename ?? filename ?? "";
@@ -74,13 +79,15 @@ function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassN
   if (isQuickNoteImageMime(asset.mimeType)) {
     // 比例盒：宽高元数据可用时给 <img> 写 width/height 属性（CSS max-width/max-height 仍生效），
     // 加载前浏览器先按比例占位 —— 列表式预览不再因图片到达而跳版；老数据缺尺寸则不写。
-    const box = imageBoxAttrs(asset);
-    return <img className="quick-note-preview-image" src={asset.url} alt="小记图片" loading="lazy" decoding="async" title="点击放大"
+    // 261121：**卡片显示尺寸优先**。图片被拖小后若仍按原图比例盒占位，图四周会留一大片空白
+    // （用户报「间距问题」）；卡里的 width/height 才是当前显示尺寸，缺省才回落资源元数据。
+    const box = imageBoxAttrs(width && height && width > 0 && height > 0 ? { width, height } : asset);
+    return <img className="quick-note-preview-image" src={asset.url} alt="小记图片" loading="lazy" decoding="async" title="点击放大" onLoad={onMediaLoad}
       {...(box ?? {})}
       onClick={(event) => { event.stopPropagation(); onImageClick(asset); }} />;
   }
   if (asset.mimeType.startsWith("video/")) {
-    return <video className="quick-note-preview-video" src={asset.url} title={displayName} controls preload="metadata" onClick={(event) => event.stopPropagation()} />;
+    return <video className="quick-note-preview-video" src={asset.url} title={displayName} controls preload="metadata" onLoadedMetadata={onMediaLoad} onClick={(event) => event.stopPropagation()} />;
   }
   if (asset.mimeType.startsWith("audio/")) {
     return <audio className="quick-note-preview-audio" src={asset.url} title={displayName} controls preload="metadata" onClick={(event) => event.stopPropagation()} />;
@@ -91,13 +98,15 @@ function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassN
   </span>;
 }
 
-function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName, hiddenMediaNames }: {
+function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName, hiddenMediaNames, onMediaLoad }: {
   nodes: QuickNotePreviewNode[]; assets: Asset[]; onImageClick(image: Asset): void;
   /** 待办勾选（预览里点复选框就能完成/取消，用户 260919 要求：只做这一个交互）。 */
   onToggleTask?(checkboxIndex: number, checked: boolean): void;
   ellipsisClassName: string;
   /** 已经在上方**封面**里展示过的图片（磁盘名）：预览里不再重复渲染（261112 用户报「插一张图展两张」）。 */
   hiddenMediaNames?: ReadonlySet<string>;
+  /** 媒体加载完成 → 外层复测内容高（经典路径折叠判定；图片不加载时也算"已定格"）。 */
+  onMediaLoad?: () => void;
 }) {
   return <>{nodes.map((node, index) => {
     switch (node.kind) {
@@ -133,7 +142,7 @@ function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName, h
       case "media":
         // 封面已经展示了这张图 ⇒ 预览里跳过（只跳 image；附件/音视频没有封面语义，照常显示）。
         if (node.cardName === "image" && node.filename && hiddenMediaNames?.has(node.filename)) return null;
-        return <Media key={index} filename={node.filename} cardName={node.cardName} label={node.label} assets={assets} onImageClick={onImageClick} ellipsisClassName={ellipsisClassName} />;
+        return <Media key={index} filename={node.filename} cardName={node.cardName} label={node.label} width={node.width} height={node.height} assets={assets} onImageClick={onImageClick} onMediaLoad={onMediaLoad} ellipsisClassName={ellipsisClassName} />;
       default:
         return <span key={index} className="quick-note-preview-unsupported" title="该块不支持在卡片里预览，请在编辑态查看">{node.label}</span>;
     }
@@ -200,6 +209,8 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
   const hostRef = useRef<HTMLDivElement>(null);
   /** 槽位模式的内容盒：外框被槽钉住后宿主不再变高 ⇒ 异步内容（正文/内核/图片）长高由它上报（标签详情卡先例）。 */
   const contentRef = useRef<HTMLDivElement>(null);
+  /** 复测入口：图片/视频加载完成后由 Media 回调触发（经典路径的内容高只在 layout 后才知道）。 */
+  const measureRef = useRef<() => void>(() => { /* 未挂载前空操作 */ });
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   /** F-H 展开/收起位移过渡：动画期行内高由下方 effect 接管，React 的 style 只回写 max-height:none。 */
@@ -217,10 +228,20 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
     if (!host) return;
     const measure = () => {
       if (animatingRef.current) return;
-      setOverflowing(slotFrame
-        ? host.scrollHeight > host.clientHeight + OVERFLOW_SLACK_PX
-        : host.scrollHeight > COLLAPSED_MAX_PX + 8);
+      if (slotFrame) {
+        setOverflowing(host.scrollHeight > host.clientHeight + OVERFLOW_SLACK_PX);
+        return;
+      }
+      // 经典路径（桌面 / 标签详情，261121 用户点单「预览要有高度上限」）：
+      // 折叠时宿主带 max-height + overflow:hidden —— **子节点的布局不受裁剪影响**，
+      // 所以用最后一个子节点的实际下沿量内容高，而不是 host.scrollHeight（那会被裁剪成等高 ⇒ 永远不溢出）。
+      const last = host.lastElementChild as HTMLElement | null;
+      const contentHeight = last
+        ? last.getBoundingClientRect().bottom - host.getBoundingClientRect().top
+        : host.scrollHeight;
+      setOverflowing(contentHeight > COLLAPSED_MAX_PX + 8);
     };
+    measureRef.current = measure;
     measure();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     observer?.observe(host);
@@ -304,13 +325,20 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
       ? { height: COLLAPSED_MAX_PX }
       : { maxHeight: kernelFallback && noteId ? COLLAPSED_MAX_PX : SLOT_TEXT_MAX }
     : undefined;
-  const style = animating ? { maxHeight: "none" } : clampStyle;
+  const style = animating
+    ? { maxHeight: "none" }
+    : slotFrame
+      ? clampStyle
+      // 经典路径（桌面 / 标签详情）的折叠 = **真实高度上限**（261121 用户点单：
+      // 预览不能无限长）；以前 is-collapsed 只加了渐变遮罩、没有裁高 ⇒ 长小记把整列撑开。
+      : collapsed ? { maxHeight: COLLAPSED_MAX_PX } : undefined;
   // 槽位模式的类名拼装（qn-preview-slot* 只有移动端样式；桌面不传 slotFrame ⇒ 从不渲染这些类）。
   const className = slotFrame
     ? ["quick-note-preview", "qn-preview-slot", "qn-preview-slot--" + slotFrame, collapsed ? "is-collapsed" : "", expanded ? "is-expanded" : "", animating ? "is-animating" : ""].filter(Boolean).join(" ")
     : "quick-note-preview" + (collapsed ? " is-collapsed" : "");
-  const fastPath = <Nodes nodes={visibleNodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />;
-  const chips = <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />;
+  const remeasure = () => measureRef.current();
+  const fastPath = <Nodes nodes={visibleNodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} onMediaLoad={remeasure} />;
+  const chips = <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} onMediaLoad={remeasure} />;
   const content = kernelFallback && noteId
     ? (
       // F-C：槽位模式下 fallback 保留**占位文本**（与外框同构），内核到达不改外框；

@@ -341,3 +341,12 @@ describe("移动端平台闸门（261119 用户裁决：移动端禁用图片/�
     expect(runtime).toContain('mountMediaCardResize(mount, mode === "editor")');
   });
 });
+describe("把手盒的定位与宿主无关（261122 用户报「小记图片上下都占空间」）", () => {
+  const CSS = readFileSync(join(process.cwd(), "src/styles/feature.css"), "utf8");
+
+  it("position:absolute 规则不再只挂在 .lake-editor-tab 下（小记写作卡/详情也要生效）", () => {
+    // 反例（改动前的 bug）：盒子在正常流里当卡片的第二个子元素，把图片高度再占一遍。
+    expect(CSS).not.toMatch(/\.lake-editor-tab[^{]*>\.lake-media-resize-box\s*\{[^}]*position:\s*absolute/);
+    expect(CSS).toMatch(/:is\(ne-card\[data-card-name="video"\], ne-card\[data-card-name="image"\]\) > \.lake-media-resize-box \{[^}]*position:\s*absolute/);
+  });
+});

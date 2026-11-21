@@ -76,6 +76,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onActiveNoteChange, onRegisterBackHandler } = props;
   const {
     tree,
+    treeReady,
     setTree,
     title,
     notebookIcon: nbIcon,
@@ -242,6 +243,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 261103 P11-②：初次进入/再次指定文档/活动页懒读 → useWorkspaceAssemble（三个 effect 顺序与依赖逐字保留）。
   useWorkspaceAssemble({
     tree,
+    treeReady,
     savedTabIds,
     savedTabActiveId,
     initialNoteId,
@@ -385,18 +387,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       drag={drag}
       longPress={longPress}
       onPressRow={setPressedNode}
+      onToggleExpand={(id) => toggleGroup(id)}
       onActivate={(item) => {
         // 选择态：可选行（文档）的点击由行自己切成勾选；分组行保留展开/折叠。
         if (selection.active && !isTreeRowSelectable(item)) {
           if (childrenOf(item.id).length > 0) toggleGroup(item.id);
           return;
         }
-        // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
-        if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
+        // 261121 用户点单：**文档行点击 = 打开文档**（哪怕它有子文档；展开交给左侧三角），
+        // 分组/笔记本行点击 = 展开/折叠（与桌面同语义）。
         if (item.kind === "note") {
           if (padTwoPane) closePadTree(); else openSidebar(false);
           void openTab(item.id);
+          return;
         }
+        if (childrenOf(item.id).length > 0) toggleGroup(item.id);
       }}
       onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
       onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}

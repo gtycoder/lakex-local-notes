@@ -7,6 +7,61 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261123 · 复制入口全覆盖（⌘C + 块菜单）**：
+  - `attachBlockCopyBridge(container, getBody?)` 新增「单块表格」分支：块菜单「复制 / 复制表格」不再交回内核（内核只写第一格文字），改为从**内核正文**取整表（`tableClipboardModel`）直写剪贴板；`mountBlockHoverHandle` 传入 `editor.getDocument("text/lake")`。
+  - **实测**：在 dev 里对文档表格派发块菜单「复制」点击 ⇒ 剪贴板 `text/html` **115 个 `<tr>`**（与 ⌘C 路径同一份正文数据，14873 字节）。
+  - 至此复制入口：⌘C（keydown 捕获）、DOM copy、块菜单「复制/复制表格」三条都走同一份「正文 → 矩阵 → 标准 `<table>` + TSV」；粘贴端仍是纠正式覆盖 + 锚点固定 + 自动扩行。
+  - 护栏：`blockCopyBridge.test.ts` 新增「单块表格：DOM 只有 1 行、正文 3 行 ⇒ 剪贴板 3 行」（桩 ClipboardItem 读回 Blob），并更新接线断言（挂载点必须传正文读取器）。
+
+- **261123 · 表格复制/粘贴彻底版（推翻此前两次结论）**：
+  - **复制端真根因（两条）**：① 内核 ⌘C 走 **keydown**，DOM `copy` 事件不派发 ⇒ 之前的 copy 处理器从未执行，剪贴板里只有第一格文字；② 更关键：文档表格是**虚拟渲染**，DOM 里只有视口附近的行（116 行里只有 28 行有内容）⇒ 即使接管，从 DOM 序列化也缺行。
+  - **复制端修法**：新增 `src/features/editor/tableClipboardModel.ts` —— 从**内核正文**（`editor.getDocument("text/lake")` 里的 `<table class="lake-table">`）取整表矩阵（按「选中表在宿主 DOM 的序号」对齐正文里的第 N 张表），生成标准 `<table>` + TSV；`attachTableCopy(host, getBody?)` 在 **keydown 捕获**阶段接管（只有整表/多格选择才拦，普通文字/图片不受影响），已接入 `EditorTab`（文档）与 `attachSelectionClipboard`（LakeEditor/小记）。
+  - **粘贴端修法**：Univer 的 ⌘V 同样是 keydown（自己读剪贴板、Excel 风格解析）⇒ 采用**纠正式覆盖**：不拦内核，异步读剪贴板，确认是外部表格后用矩阵写回；锚点在**按键当下同步捕获**（异步再取会变成「在已粘好的表下方再粘一遍」，实测 115→230 行）；超出行列自动 `insertRowsAfter/insertColumnsAfter`。`onPaste` 里不再处理表格（否则默认粘贴事件会再写一遍）。
+  - **实测**：真实 ⌘C ⇒ 剪贴板 HTML **115 个 `<tr>` × 5 列**（正文数据，不丢行）；粘贴矩阵 115×5、写入锚点稳定在 A1（日志 `atRow=0`）。⚠️ 之前看到的「230 行」是**复用测试表里的旧数据**（keydown 时 `maxRows` 已是 230 可证），不是重复写入。
+  - **护栏**：新增 `tableClipboardModel.test.ts`（6 例：115 行不丢行 / 多表按序号 / 空行保留 / 载荷→粘贴解析器闭环 / DOM 回退 / 序号对齐）。
+
+- **261123 · 表格粘贴**真实链路**修正（推翻 261121 的「已修」结论）+ 小记图片重复占高**：
+  - **误判原因**：261121 用**合成 paste 事件**验证（带 clipboardData）才走到 window paste 处理器；用户真实 ⌘V **不派发 paste 事件** —— Univer 的粘贴是 **keydown 快捷键**，handler 自己 `navigator.clipboard.read()` 并用自己的 Excel 风格解析器解析外部 HTML ⇒ 文档表格卡只剩左上角一格。
+  - **实测**：剪贴板放入文档表格卡真实 HTML（158,693 字符，28×5）+ 命令行 ⌘V ⇒ 只落 `{0,0:"命令分组"}`；探针 `keydown=1 / paste=0`（网格焦点是 `div[contenteditable=true][data-u-comp=editor]`）。
+  - **两次错误尝试（已回退，别再走）**：① keydown `preventDefault+stopImmediatePropagation` 自己读剪贴板 ⇒ 内部复制/图片/纯文本**全废**；② 只 stopImmediatePropagation 依赖默认粘贴 ⇒ 仍无 paste 事件；③ 合成 keydown 重放 ⇒ 内核不接受。
+  - **最终方案 = 纠正式覆盖**：keydown **不拦**（内核照旧粘贴，原有路径零影响），异步读剪贴板；只有「非内部复制（无 data-copy-id）+ 解析出表格」时，用我们的矩阵在 80/320/700ms 三次写回。内部复制/图片/纯文本一律不碰。
+  - **实测（真实 ⌘V）**：落 **121 格（1 旧 + 120 新 = 24×5）**，值与源表逐列一致。护栏 +2（keydown 内不得 preventDefault/stopImmediatePropagation、必须跳过内部复制并三次写回）。
+  - **小记图片上下都占空间**（用户数据 `61cd8ba5…`/`6993651d…` 实测）：`ne-card` 高 727px，其中 `ne-card-root` 365 + **`div.lake-media-resize-box` 363（正常流）** —— 缩放把手盒只在 `.lake-editor-tab` 下被设为 absolute，小记写作卡不在该作用域 ⇒ 盒子把图片高度再占一遍。修法 = 定位规则去掉宿主限定。实测卡片 727→365，图片后文字紧贴；护栏 `mediaCardResize.test.ts` +1。
+
+### 261121 · 表格粘贴修复（文档表格卡 → 我们自己表格）+ 表格默认居中/自动行高 + 小记 ⌘S
+
+- **用户点单（4 项）**：① 切 master 并更新到最新；② 修「文档表格（Lake/语雀表格卡）复制后粘进我们自己的表格只剩一行一列」；③ 表格开发自动行高 + 默认居中对齐；④ 小记接入正常保存快捷键（⌘S）。
+- **起点**：工作树原停在已合入的 `modernize/web-platform-261115`（v1.2.0，落后 origin/master 192 提交）；已切 `master` 并 fast-forward 到 `4b816b63`（v1.5.4 + 文档）。
+- **② 根因（实测）**：我们自己的复制**没有问题** —— 3×3 选区复制出来的 `text/plain` 是完整 TSV、`text/html` 是 Univer Excel 风格表格（带 `data-copy-id`，内部粘贴走 copyContentCache 保样式）。坏在**外部**粘贴：Univer 1.0.3 的 `HtmlToUSMService`（Excel 风格解析）遇到文档表格卡的 `<table class="ne-table">` + 单元格内嵌 `<div>` 只取出左上角一格。
+- **② 改法**：新增纯函数 `src/features/usheet/usheetClipboardTable.ts`（HTML 表格 → 矩阵：`br`→空格、NBSP/空白归一、colspan/rowspan 按 Excel 语义铺空、尾部空行空列裁掉；另有 TSV 兜底），宿主 `UniverSheetEditor` 的 window 捕获粘贴里接管「外部表格 / 多行 TSV」→ facade `setValues` 从活动单元格整块写入；**Univer 自己的复制（`data-copy-id`）与单元格编辑态（contenteditable/输入框）一律放行给内核**。
+- **③ 改法（core 单一来源）**：`defaultStyle` 补 `ht = USHEET_DEFAULT_HORIZONTAL_ALIGN(2=CENTER)` 与 `tb = USHEET_DEFAULT_WRAP_STRATEGY(3=WRAP)`；每张工作表 `rowData[*].ia = 1`（自动行高，上限 `USHEET_AUTO_ROW_HEIGHT_MAX_ROWS=500` 行；**已有显式 `h` 的行不动**）。全部走 `normalizeUsheetWorkbook`（与默认字号同一条「规范化 = 写盘形式」路径）⇒ **打开不额外发命令、不标脏**，两端（桌面/移动宿主）同落点。
+- **④ 改法**：`QuickNoteComposer.publishOnShortcut` 增加 ⌘/Ctrl+S → `onSave()`（**正常保存**，不是「保存并同步」），⌘⇧S/⌘⌥S 不触发。
+- **验证（隔离实例：`LAKE_USER_DATA=/tmp/lake-usheet-fix2`、`LAKE_RENDERER=scheme`、CDP 9223、端口 19891/19892）**：新建表格 → 粘贴 Lake 表格卡 HTML ⇒ 落 `0,0..1,2` 六格（改前只剩一格），正文 `defaultStyle {fs:11,ht:2,tb:3}`、`rowData` 35 行 `{ia:1}`；长文本粘贴后行高实测被顶到 ≈214px 且文本居中（截图 `.css-audit/usheet-261121/`，gitignore）。
+- **门禁**：`tsc --noEmit` 0；`vitest run src/features/usheet src/core/usheetDoc.test.ts` **66/66**；`QuickNoteComposer.render.test` **7/7**（含新增 3 例 ⌘S）；`ui-metrics` 0（颜色/字号/!important/重复组全持平）；`check:core` 182 文件 0 违规；`git diff --check` 干净。
+- **护栏**：`usheetClipboardTable.test.ts`（8 例：Lake 表格/Excel/colspan-rowspan/尾部空行/内部复制不接管/TSV/优先级）、`usheetDefaults.test.ts` +5 例（常量、新建默认、显式 h 不覆盖、500 行上限、空表 normalize 幂等）、`QuickNoteComposer.render.test.tsx` +3 例。
+- **契约回填**：`src/features/usheet/usheetKernelContract.ts` 新增 `HtmlToUSMService`（外部表格粘贴失效表现）与 `SetWorksheetRowIsAutoHeightMutation`（`rowData.ia`）两条升网点。
+- **未验**：移动端（`MobileUsheetViewer` 同走 core normalize，默认居中/自动行高应同效）未装包点收；真机从语雀网页复制（而非我们自己的文档表格卡）未实测 —— 两者 HTML 结构同源，理论等价。
+- **261121 追加（用户新报 2 条，同一会话）**：
+  - **① 动图/图片在小记预览里被展示成超长链接**：根因 = 从文档（或只接收文本的地方）粘进来的图片卡被**实体化**成文本 `&lt;card … value="data:%7B…"&gt;`，预览器按普通文字渲染 ⇒ 一整屏「超长链接」。修法 = `quickNotePreviewParser.restoreEscapedCards()`（只还原「`&lt;card` + 带 name= 的开标签」并补空闭合标签，其余实体/文本不动）→ 真卡按 media 节点渲染；列表项里则至少不再显示标记文本。护栏 `quickNotePreview.test.ts` +3 例（段落/列表/非卡片文本不误判）。
+  - **② 小记图片缩放的「间距」**：预览原先按**资源原尺寸**给比例盒，用户拖小图片后卡里仍是原图比例的框 ⇒ 图变小、四周留大片空白。修法 = 解析器把卡片**显示尺寸**（`width/height`，即缩放后的值）带进 media 节点，`QuickNotePreview.Media` 优先用它、缺省才回落资源元数据。护栏 +2 例（缩放值生效 / 0·负数·字符串不落字段）。
+- **261122 · 目录「重开还是全展开」的真正两个根因（用户复验发现，已修）**：
+  - **根因 A**：`Sidebar` 的「自动展开新出现的容器」effect 用 `useRef(new Set())` 起手 ⇒ 启动首帧树为空、拿到树后把**所有笔记本/分组**都当成"新节点"全量展开（随后被记忆持久化覆盖）。修法 = `prevNodeIds` 改 `Set|null`，**第一次拿到真实树只建立基线、不展开**；之后同步/新建的容器照旧自动展开。
+  - **根因 B**：冷启动的「目录跟随 active 文档」effect 会 `expandAncestorChain` 并持久化 ⇒ 只要恢复出标签，active 文档的祖先就自动展开。修法 = `startupFollowRef`：冷启动那一次**有记忆就跳过跟随**（严格按记忆渲染；要定位用工具条「定位」按钮），之后切标签/切模式照常跟随。
+  - **实测（dev 实例）**：全部收起（rows 92→5、open 0、stored `[]`）→ 完全退出 → 重启 ⇒ **rows 5 / open 0 / stored `[]`**（标签仍恢复 1 个，目录保持收起）。护栏：`treeExpandState.test.ts` ④ +3 条源码钉法。
+- **261122 · 目录展开动效（用户提供录屏 GIF 定位）**：逐帧分析 190 帧 ⇒ 子级容器每次展开都播 `shell-tree-reveal`（opacity 0→1 + translateY(-3px)，250ms），嵌套展开逐层各播一次 = 「一跳一跳」。修法 = 删除 `.tree-children` 的入场动效与 keyframes（`app/misc.css`），保留 border；reduced-motion 白名单同步去掉 `.tree-children`。dev 实例实测 `getComputedStyle('.tree-children').animationName === 'none'`。护栏：`src/styles` 16 文件 63 例全过（层围栏/声明数棘轮自动下降）。
+- **261122 · 验收环境**：`npm run dev` 新实例已起（vite 1421 / Electron CDP 9222，dev 数据目录，HMR 生效）；模拟器 `lake_mobile`（emulator-5554）已装最新 debug APK（`scripts/android-build.sh --sync --install`，BUILD SUCCESSFUL）。测试数据：dev 里 `验收-表格粘贴`（表格卡粘贴/居中/自动行高验证），模拟器里 `验收笔记本`（空），都可删。
+- **261122 · 移动端目录/标签恢复 + 剪贴板位图（第三批用户点单）**：
+  - **① 桌面目录展开「一跳一跳」**：隔离实例实测（新建笔记本 + 24 篇文档 → 展开）：行数 3→27、**`layout-shift` 条目 0**、被展开行 `top 131→131`、滚动位置不变；chevron 的 `.open` 只是**瞬时** `rotate(90deg)`（无 transition/animation）。⇒ 不是布局跳动，怀疑是 `.tree-row{content-visibility:auto}` 的**绘制闪烁**（逐行跳入视口），需用户一段慢放录屏或笔记本身份复现再定；改法只有一个：去掉行上的 `content-visibility`（代价 = 10k 行不再跳过渲染）。
+  - **② 复制到 DSH / Codex 用不了**（微信正常 ⇒ 文本/HTML 没问题）：它们读的是系统剪贴板**位图**（访达复制之所以可用，是因为同时给了图）。修法 = 复制图片选区时在原有 `text/html`（含原图 data URL，微信仍拿动图）+ `text/plain` 之外，再用 `navigator.clipboard.write` 补一条 **`image/png`**（非 PNG 用 canvas 转一帧；解码 1.2s 超时收口；失败静默保留文本）。护栏 `selectionClipboard.image.test.ts`（3 例）。
+  - **③ 移动端打开笔记本每次都清空上次标签**：根因 = 初次进入的恢复决策在 `tree` **还没加载**（首帧 `[]`）时执行，存档标签被按「已知 id」全过滤掉 ⇒ 走 `restore([], null)` 清空。修法 = `useNotebookTreeData` 增加 `treeReady`（首次 `getWorkspaceSnapshot` 完成才真），`useWorkspaceAssemble` 在未就绪时**不做任何决策**、就绪后 effect 再跑一次。护栏 `workspaceAssembleRestore.render.test.tsx`（3 例：未就绪不恢复/就绪后恢复/真删光才清空）。
+  - **④ 移动端小记预览图片显示成链接 + 图文错乱**：与桌面同源（`QuickNotePreview` 共用）—— 共享修复（`restoreEscapedCards` + 卡片显示尺寸）已在 261121 两批落地，**移动端包还没重建/安装**（本机 `adb devices` 为空）。待装包复验。
+  - **⑤ 移动端有子文档的文档打不开**：`NotebookWorkspace.onActivate` 原顺序是「有子节点先展开/折叠」在前 ⇒ 带子文档的文档永远进不去；且三角与行共用同一个 onClick。修法 = 文档行**永远先打开**（分组/笔记本行仍开合）+ 三角独立命中区（`stopPropagation` + `onToggleExpand`→`toggleGroup`，键盘 Enter/Space 同效），与桌面同语义。护栏 `NotebookTreeList.render.test.ts` +2 例、`notebookTreeActivation.test.ts`（源码钉法 2 例）。
+  - **门禁**：`tsc` 0；`selectionClipboard(.image) + mobile/notebook + quickNotes + components/app + usheet` **117 文件 / 763 例全过**；`ui-metrics` 0；`git diff --check` 干净。
+- **261121 追加（第二批用户点单）**：
+  - **① 桌面目录展开态跨会话丢失**（用户：退出前收起所有笔记本，重开又全展开）。根因 = `Sidebar` 的 `expanded` 是会话内 `useState(autoExpanded(nodes))`，261119 的定稿是「不持久化」。**261121 口径反转**：新增设备本地记忆 `features/sidebar/treeExpansion.ts`（localStorage `lakex-local-notes-v3.sidebar-expanded`，不进 S3）——记「当前展开的节点 id」，**空数组 = 用户主动全部收起**（与「从没记过」区分），删掉的节点按当前树裁剪；**树同步之后才写**（启动空树写 `[]` 会把「没记录」写成「全收起」）。护栏：新增 `treeExpansion.test.ts`（5 例：null=无记录 / 空数组保留 / 去重 / 坏 JSON / 存储不可用 / 裁剪）+ 改写 `treeExpandState.test.ts` ④（从「不持久化」改成「设备本地记忆 + 接线」）。
+  - **② 桌面小记预览没有高度上限**（用户：不能无限长）。根因 = 经典路径（桌面 / 标签详情）的 `is-collapsed` **只有渐变遮罩、没有裁高**；`COLLAPSED_MAX_PX` 只在移动端 `slotFrame` 生效。修法 = 经典路径折叠时给宿主 inline `max-height: 220`（展开即放开），溢出判定改用**最后一个子节点的实际下沿**（`max-height` 只裁剪显示、不改子节点布局，`scrollHeight` 会被裁成等高），图片/视频加载后补一次复测。
+  - **③ 移动端表格文字紧凑 / 只露半行**：判据同桌面 —— 单元格 `tb=WRAP` + 行没有自动行高 ⇒ 换行内容被 24px 行高裁掉。桌面/移动共用 `normalizeUsheetWorkbook`，本批的 `rowData[*].ia = 1` 对移动端同样生效（`MobileUsheetViewer` 打开时走同一 normalize）。**未装包验**（本机当时没有在跑的 AVD），下次移动端交付必须先 `--sync --install` 再看这张表。
+  - **② 的「拖动缩小要停顿约 5s 才生效」尚待复现**：本批只修了间距口径；5s 现象未在隔离实例复现（未查到对应定时器：唯一 5000ms 是删除撤销窗口）。已登记到 §3 待办，需要用户说明是**编辑态拖动**还是**卡片预览**、以及是否只在动图/GIF 上出现。
 ### 261120 之后 · 启动页统一：白底 + 只留透明绿折纸（用户点单）
 
 - **需求**：先「启动这个绿色纸质背后的圆形底不是去掉了吗？另外启动使用白色背景如何」→ 再「桌面端好像也有，应该只留一个绿色折纸就行了」。
@@ -601,6 +656,15 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261121 · 表格粘贴/默认值批基线（未发版；v1.5.4 之后）**
+
+- 起点 = `master` @ `4b816b63`（v1.5.4 + 文档；原工作树停在 v1.2.0 的已合并分支，已切回）。
+- `npx tsc --noEmit` = **0**；`git diff --check` = 0。
+- 相关 vitest：`src/features/usheet` + `src/core/usheetDoc.test.ts` **66/66**；`QuickNoteComposer.render.test` **7/7**。
+- `ui-metrics` = 0（颜色 0 / 字号 0 / `!important` 9 = 清单 / 跨文件重复 45 = 基线 / 被压声明 0）；`check:core` **182** 文件 0 违规。
+- 扩面 vitest：`src/features/usheet + src/core + src/mobile/usheet + src/components/app` **253 文件 / 1840 例全过**。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 **580,754 / 592,000**（余 11.2KB）、mobile 首屏 **340,541 / 345,000**（余 4.5KB）、mobile entry **43,334 / 46,000**（余 2.7KB）、mobile CSS 140,279/141,312、preload 12/12；`audit-vendor-css` OK；import 方向 0 违规。
+- 未跑全量 vitest / 视觉快照（本批无 CSS 改动；表格默认值属内容区，不进 tokensnap）。⚠️ 先跑 `check:bundle` 前必须**先重建移动包**（`npx vite build -c vite.mobile.config.ts`），否则读到旧 `dist-mobile` 会假红 mobile entry。
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
 **261118 · v1.3.6 基线（端口固定化查漏补缺，tag `v1.3.6`）**
@@ -767,6 +831,21 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
+**261122 批待办**
+
+- **桌面目录「一跳一跳」待复现**：隔离实例量到 0 个 layout-shift、被展开行位置不动；若复现，最可能来源是 `.tree-row { content-visibility: auto }` 的**绘制闪烁**（去掉它 = 牺牲 10k 行的视口外跳过渲染），需要用户慢放录屏或指明笔记本/子文档数量。
+- **移动端装包复验（两件事捆一起）**：① 小记预览图片/动图（共享解析器修复）；② 表格行高（`rowData.ia`）+ 行点击语义（文档打开/三角展开）。本机 `adb devices` 为空，需先起 AVD 再 `bash scripts/android-build.sh --sync --install`。
+- **剪贴板位图待用户验收**：桌面复制图片 → 粘到 DSH / Codex / 微信三处各一次；若 DSH 仍不认，下一步是给 `text/uri-list`（需要主进程把资产落成临时文件）——先不动。
+**261121 批待办**
+
+**261121 批待办（第二批）**
+
+- **移动端表格渲染待装包验**：本批用 `rowData[*].ia = 1` + `tb=WRAP` 兜「换行文字被 24px 行高裁掉」；本机没有在跑的 AVD（`adb devices` 为空）⇒ 未装包。下次移动端交付前 `bash scripts/android-build.sh --sync --install`，打开那张 Redis 表格看行高是否随内容长高。
+- **桌面小记预览折叠观感待点收**：经典路径现在折叠 = `max-height: 220px` + 渐变遮罩 + 「展开/收起」；若 220 偏矮/偏高改 `QuickNotePreview.tsx` 的 `COLLAPSED_MAX_PX`（单一来源，移动端 slot 也用它）。
+- **动图粘贴的写入端未定位**：用户确认超长链接来自「不同录屏软件的动图粘贴」。读取端已容错（`restoreEscapedCards`）；要堵写入端需要一份当时的正文（`.qnote.body`）或剪贴板 HTML。
+- **移动端装包点收**：`MobileUsheetViewer` 与桌面同走 `normalizeUsheetWorkbook`（默认居中/自动换行/自动行高应同效），但本批未 `--sync --install` 设备验；动过 `src/core/usheetDoc.ts` ⇒ 下次移动端交付前先装包看一眼表格。
+- **小记图片缩放「停顿约 5s 才生效」待复现（261121 用户报）**：本批已修「预览比例盒按原图尺寸 ⇒ 缩放后留大空白」（改用卡片显示尺寸）；但“拖动缩小后要等 ~5s”未复现（仓库内唯一 5000ms = 删除撤销窗口）。下次跟进要问清：编辑态拖动 vs 卡片预览、是否只在 GIF/大图、是否与保存/列表刷新时机重合；怀疑点是列表详情缓存 + 预览预热（`quickNoteDetailPrewarm`）只在刷新时更新。
+- **真机从语雀网页复制**：本批验证用的是我们自己的**文档表格卡**（与语雀云端表格同源内核/同形 HTML）；语雀网页版实测未做 —— 若用户现场仍是一格，按 `usheetClipboardTable.ts` 头注释补该来源的样本。
 **261120 批待办**
 
 - **mobile entry 现余 2,665B（43,335/46,000）**：v1.5.4 又加了「已收起」与书架卡改版（+732B）；下一笔移动端入口增量前仍先看能否走懒加载（候选：第二个 tanstack 使用点、settings 抽屉里的静态重依赖、crashLog 仍被 MobileErrorBoundary 静态引用）。

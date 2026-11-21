@@ -121,7 +121,9 @@ export function mountBlockHoverHandle(
   const root = createRoot(host);
   root.render(createElement(BlockHandleHost, { container, editor, noteId }));
   // 块菜单「复制」统一到应用侧剪贴板管线（与 ⌘C 同一份 payload；见 blockCopyBridge.ts）
-  const detachCopyBridge = attachBlockCopyBridge(container);
+  const detachCopyBridge = attachBlockCopyBridge(container, () => {
+    try { return editor.getDocument("text/lake"); } catch { return null; }
+  });
   return () => {
     detachCopyBridge();
     try {

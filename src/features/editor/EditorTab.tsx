@@ -14,6 +14,7 @@ import {
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
+import { attachTableCopy } from "./selectionClipboard";
 import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
 import { subscribeUploadJournal } from "./uploadJournal";
 import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
@@ -463,6 +464,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     host.addEventListener("lake-board-contentchange", boardContentChangeGuard);
     document.addEventListener("pointerdown", documentBoardPointerGuard, true);
     document.addEventListener("keydown", documentBoardKeyGuard, true);
+    // 261122：整表/多格复制由共用接管负责（内核自己的复制只写第一个单元格的文字）。
+    // 数据源 = 内核正文（表格虚拟渲染，DOM 里只有视口附近的行）；拿不到正文时模块内回退 DOM。
+    const detachTableCopy = attachTableCopy(host, () => {
+      try { return editorRef.current?.getDocument("text/lake") ?? null; } catch { return null; }
+    });
     host.addEventListener("copy", copyHandler, true);
     host.addEventListener("cut", cutHandler, true);
     host.addEventListener("paste", pasteHandler, true);
@@ -1000,6 +1006,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       healDeferredUntilBlur = false;
       window.clearTimeout(heal.timer);
       heal.timer = undefined;
+      detachTableCopy();
       host.removeEventListener("copy", copyHandler, true);
       host.removeEventListener("cut", cutHandler, true);
       host.removeEventListener("paste", pasteHandler, true);

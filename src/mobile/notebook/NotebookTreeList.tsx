@@ -58,6 +58,8 @@ export interface NotebookTreeListProps {
   onPressRow: (item: NotebookTreeItem) => void;
   /** 点行：有子节点 → 展开/折叠；文档 → 打开（判据在调用方，保持原语义）。 */
   onActivate: (item: NotebookTreeItem) => void;
+  /** 左侧三角：**只展开/收起**（261121 用户点单：文档行点击 = 打开，三角 = 展开；分组/笔记本行点击仍 = 展开）。 */
+  onToggleExpand: (id: string) => void;
   onOpenMenu: (item: NotebookTreeItem) => void;
   onOpenCreate: (item: NotebookTreeItem) => void;
   /** 多选模式；不传 = 普通浏览态（行为与之前逐字一致）。 */
@@ -124,7 +126,26 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
             <SelectionCheckbox checked={checked} label={"选择 " + (it.title || "无标题")} />
           </span>
         )}
-        {kids ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
+        {kids ? (
+          // 三角是**独立命中区**（与桌面同语义）：点它只开合，点行按行语义（文档=打开 / 分组·笔记本=开合）。
+          // 不 stopPropagation 的话点击会冒泡到整行按钮 ⇒ 文档行永远打不开（261121 现场）。
+          <span
+            role="button"
+            tabIndex={0}
+            className="mb-chevron-hit mb-tap"
+            aria-label={expanded.has(it.id) ? "收起" : "展开"}
+            aria-expanded={expanded.has(it.id)}
+            onClick={(event) => { event.stopPropagation(); props.onToggleExpand(it.id); }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.stopPropagation();
+              props.onToggleExpand(it.id);
+            }}
+          >
+            <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} />
+          </span>
+        ) : <span className="mb-chevron-spacer" />}
         <>
           {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
           <span className="mb-row__title side-panel-row__title">{it.title}</span>

@@ -28,6 +28,23 @@ export const USHEET_DEFAULT_COLUMNS = 16;
  *  在 1.0.3 恰好也是 11，但那是内核内部常量、升级可漂移 ⇒ **不作为我们的落点**。 */
 export const USHEET_DEFAULT_FONT_SIZE = 11;
 
+/** 表格默认水平对齐 = 居中（用户 261121：「表格默认居中对齐」）。
+ *  值 = Univer `HorizontalAlign.CENTER`（2，见 @univerjs/core enum）。
+ *  ⚠️ 与默认字号同一落点：workbook 与**每张工作表**的 `defaultStyle.ht`（缺失也补）。
+ *  **只写默认**：单元格 / 命名 styles 里已有的显式 `ht` 一律不动。 */
+export const USHEET_DEFAULT_HORIZONTAL_ALIGN = 2;
+
+/** 表格默认**自动行高**（用户 261121）：行打 `ia = TRUE` 后，换行内容会把行高顶起来（Excel 同款）。
+ *  值 = Univer `BooleanNumber.TRUE`（1）；字段名 = SetWorksheetRowIsAutoHeightMutation 的 `ia`。
+ *  覆盖范围上限 = `USHEET_AUTO_ROW_HEIGHT_MAX_ROWS` 行（避免给上万行的表塞满 rowData）；
+ *  **已有显式高度（`h`）的行不碰** —— 用户手动拖过的高度优先。 */
+export const USHEET_ROW_IS_AUTO_HEIGHT = 1;
+export const USHEET_AUTO_ROW_HEIGHT_MAX_ROWS = 500;
+
+/** 表格默认换行策略 = 自动换行（`WrapStrategy.WRAP` = 3）。
+ *  自动行高只有在内容会换行时才有意义（不换行 = 溢出到邻格，行高永远不变）⇒ 两者成对落地。 */
+export const USHEET_DEFAULT_WRAP_STRATEGY = 3;
+
 /** Univer 单元格（只声明搜索/校验要读的字段；样式等其余字段原样透传）。 */
 export interface UsheetCell {
   /** 原始值 */
@@ -79,6 +96,11 @@ export const USHEET_CANONICAL_FONT_FAMILY = '"MiSans", -apple-system, BlinkMacSy
  *    `USHEET_DEFAULT_FONT_SIZE`（缺失也补）。只写默认 —— 命名 styles / 单元格 / 富文本里的
  *    显式 `fs` 零变化（存量显式值不动）。工作表级 defaultStyle 是 Univer 1.0.3 实际消费的
  *    渲染底（见 USHEET_DEFAULT_FONT_SIZE 注释）⇒ 未设式样单元格按 11 号渲染，两端同一落点。
+ * 4) 默认居中 + 自动换行（用户 261121）：defaultStyle 的 `ht = USHEET_DEFAULT_HORIZONTAL_ALIGN`、
+ *    `tb = USHEET_DEFAULT_WRAP_STRATEGY`（缺失也补）；只写默认，显式值不动。
+ * 5) 默认自动行高（用户 261121）：每张工作表的 `rowData[*].ia = 1`（未设显式 `h` 的行），
+ *    上限 USHEET_AUTO_ROW_HEIGHT_MAX_ROWS ⇒ 换行内容把行高顶起来。与 defaultStyle 同路径，
+ *    **不额外发命令、不标脏**（否则「打开 = 只读」会被打破）。
  * 幂等；就地修改传入 workbook（编辑器在序列化前调用）。
  */
 export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
@@ -86,6 +108,8 @@ export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
   const base = isRecord(wb.defaultStyle) ? wb.defaultStyle : {};
   base.ff = USHEET_CANONICAL_FONT_FAMILY;
   base.fs = USHEET_DEFAULT_FONT_SIZE;
+  base.ht = USHEET_DEFAULT_HORIZONTAL_ALIGN;
+  base.tb = USHEET_DEFAULT_WRAP_STRATEGY;
   wb.defaultStyle = base;
   if (isRecord(wb.sheets)) {
     for (const sheet of Object.values(wb.sheets)) {
@@ -93,7 +117,10 @@ export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
       // 工作表级 defaultStyle = 内核 getComposedCellStyle 的渲染底（workbook 级内核不读）。
       const sheetBase = isRecord(sheet.defaultStyle) ? sheet.defaultStyle : {};
       sheetBase.fs = USHEET_DEFAULT_FONT_SIZE;
+      sheetBase.ht = USHEET_DEFAULT_HORIZONTAL_ALIGN;
+      sheetBase.tb = USHEET_DEFAULT_WRAP_STRATEGY;
       sheet.defaultStyle = sheetBase;
+      applyAutoRowHeight(sheet);
     }
   }
   if (isRecord(wb.styles)) {
@@ -106,6 +133,30 @@ export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
       if (isRecord(resource) && typeof resource.data === "string" && resource.data.trim() === "") resource.data = "{}";
     }
   }
+}
+
+/** 给行打「自动行高」标记：只补 `ia`，不碰显式 `h`；上限 USHEET_AUTO_ROW_HEIGHT_MAX_ROWS 行。
+ *  写在 normalize 里（与 defaultStyle 同一条「规范化 = 写盘形式」路径）⇒ 打开时不额外发命令、不标脏。
+ *  没有 rowCount（坏/极简快照）就按已存在的 rowData 键补，绝不自造行数。 */
+function applyAutoRowHeight(sheet: Record<string, unknown>): void {
+  const rowData = isRecord(sheet.rowData) ? sheet.rowData : {};
+  const declared = typeof sheet.rowCount === "number" && Number.isFinite(sheet.rowCount) ? Math.floor(sheet.rowCount) : 0;
+  const existing = Object.keys(rowData).map((key) => Number(key)).filter((index) => Number.isInteger(index) && index >= 0);
+  const total = Math.min(Math.max(declared, existing.length ? Math.max(...existing) + 1 : 0), USHEET_AUTO_ROW_HEIGHT_MAX_ROWS);
+  for (let row = 0; row < total; row += 1) {
+    const entry = rowData[String(row)];
+    if (!isRecord(entry)) { rowData[String(row)] = { ia: USHEET_ROW_IS_AUTO_HEIGHT }; continue; }
+    // 用户手动设过高度的行保持手动（Excel 同款：手动高度压过自动），只给没有 h 的行打自动标记。
+    if (entry.h === undefined) entry.ia = USHEET_ROW_IS_AUTO_HEIGHT;
+  }
+  if (total > 0) sheet.rowData = rowData;
+}
+
+/** 新建空表的 rowData：每行都标自动行高（与 normalize 输出同形：`row -> { ia }`，键序一致）。 */
+function autoRowData(rows: number): Record<string, { ia: number }> {
+  const rowData: Record<string, { ia: number }> = {};
+  for (let row = 0; row < rows; row += 1) rowData[String(row)] = { ia: USHEET_ROW_IS_AUTO_HEIGHT };
+  return rowData;
 }
 
 export interface UsheetDoc {
@@ -125,7 +176,7 @@ export function emptyUsheetWorkbook(): UsheetWorkbook {
     id: "workbook",
     name: "表格",
     sheetOrder: ["s1"],
-    defaultStyle: { ff: USHEET_CANONICAL_FONT_FAMILY, fs: USHEET_DEFAULT_FONT_SIZE },
+    defaultStyle: { ff: USHEET_CANONICAL_FONT_FAMILY, fs: USHEET_DEFAULT_FONT_SIZE, ht: USHEET_DEFAULT_HORIZONTAL_ALIGN, tb: USHEET_DEFAULT_WRAP_STRATEGY },
     sheets: {
       s1: {
         id: "s1",
@@ -134,7 +185,8 @@ export function emptyUsheetWorkbook(): UsheetWorkbook {
         columnCount: USHEET_DEFAULT_COLUMNS,
         defaultColumnWidth: 88,
         defaultRowHeight: 24,
-        defaultStyle: { fs: USHEET_DEFAULT_FONT_SIZE },
+        rowData: autoRowData(USHEET_DEFAULT_ROWS),
+        defaultStyle: { fs: USHEET_DEFAULT_FONT_SIZE, ht: USHEET_DEFAULT_HORIZONTAL_ALIGN, tb: USHEET_DEFAULT_WRAP_STRATEGY },
         cellData: {},
       },
     },

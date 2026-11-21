@@ -42,9 +42,14 @@ interface ComposerProps {
 export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "card", active = true, uploadResource, tagOptions, onTextChange, onTagIdsChange, onCreateTag, onEditorReady, onSave, onSaveAndSync, onCancel }: ComposerProps) {
   const [tagPickerAnchor, setTagPickerAnchor] = useState<HTMLElement | null>(null);
   const tagNameOf = (id: string) => tagOptions.find((tag) => tag.id === id)?.name ?? "已删除标签";
-  /** ⌘/Ctrl + Enter 触发主按钮（发布/保存）：编辑器可能吞键，故挂捕获阶段兜底。 */
+  /** ⌘/Ctrl + Enter 触发主按钮（发布/保存）：编辑器可能吞键，故挂捕获阶段兜底。
+   *  ⌘/Ctrl + S 走**同一条正常保存**（用户 261121：「接入正常保存，就是正常保存的快捷键」）——
+   *  不是「保存并同步」那条快路径；内核吞掉 ⌘S 时这里兜住。 */
   function publishOnShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod) return;
+    if (event.key === "Enter") { event.preventDefault(); onSave(); return; }
+    if (!event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") { event.preventDefault(); onSave(); }
   }
   /** 本地写与网络推送两段都要禁用动作行（避免半途中重复提交）。 */
   const busy = saving || syncing;

@@ -29,6 +29,7 @@ import { buildClipboardPayload } from "./clipboardHtml";
 import { native } from "../../lib/native";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { parseAssetRef } from "./selectionToolbar/selectionToolbarModel";
+import { matrixFromTableElement, payloadFromMatrix, tableIndexInHost, tableMatrixFromBody } from "./tableClipboardModel";
 
 const MENU_ROOT = ".ne-block-context-menu";
 const MENU_ITEM = ".ne-block-menu-item";
@@ -38,6 +39,8 @@ const HIGHLIGHT_EXTEND_PROP = "--ln-brick-hl-extend";
 const COPY_LABEL = "复制";
 /** 图片卡块的菜单文案与普通块不同（见 vendor BlockContextMenu 的卡片菜单表）。 */
 const COPY_IMAGE_LABEL = "复制图片";
+/** 块菜单里表格块的「复制」（有的内核版本文案是「复制表格」）。两者都要走整表序列化。 */
+const COPY_TABLE_LABEL = "复制表格";
 const SINGLE_IMAGE_LABELS = new Set([COPY_LABEL, COPY_IMAGE_LABEL]);
 
 /** 菜单项文字（「复制」vs「复制代码/复制图片/复制表格」靠它区分）。 */
@@ -161,6 +164,14 @@ function writePayloadDirect(range: Range): void {
   } catch {
     return;
   }
+  writePayloadToClipboard(payload);
+}
+
+/**
+ * 把一份现成 payload 写进剪贴板（单块表格走这里：数据来自**内核正文**，见 tableClipboardModel）。
+ * 不依赖焦点：块菜单项是 activeElement，copy 事件不经过编辑器宿主。
+ */
+function writePayloadToClipboard(payload: { html: string; plain: string }): void {
   const writeViaTextarea = (): boolean => {
     try {
       const textarea = document.createElement("textarea");
@@ -218,7 +229,7 @@ function closeBlockMenu(): void {
  * @param container 编辑器实例挂载点（`.lake-editor-mount`）：高亮块只在这个范围内找。
  * @returns 卸载函数（随编辑器销毁）。
  */
-export function attachBlockCopyBridge(container: HTMLElement): () => void {
+export function attachBlockCopyBridge(container: HTMLElement, getBody?: () => string | null): () => void {
   /** 菜单项按下瞬间的选区快照：menu mousedown 可能触发 vendor 的清选区/清高亮逻辑，click 时再取可能已丢。 */
   let pressedRange: Range | null = null;
   /** 最近悬停/按下的顶层块：单块菜单复制时即使选区被 vendor 清掉，也能确定"复制哪一块"。 */
@@ -229,9 +240,13 @@ export function attachBlockCopyBridge(container: HTMLElement): () => void {
    * （清 `.ne-brick-highlight`/收起手柄），到 click 时高亮可能已经没了 —— 只靠高亮会漏掉单图路径。
    */
   let activeImage: HTMLImageElement | null = null;
+  /** 最近悬停/按下的表格（真实 <table class="ne-table">，不是内核的 ne-* 自定义元素）。 */
+  let activeTable: HTMLTableElement | null = null;
 
   const trackImage = (target: Element | null): void => {
     if (!target || typeof target.closest !== "function") return;
+    const table = target.closest<HTMLTableElement>("table.ne-table, table.lake-table");
+    if (table && container.contains(table)) activeTable = table;
     const img = target instanceof HTMLImageElement ? target : target.closest("img");
     if (img instanceof HTMLImageElement && container.contains(img) && parseAssetRef(img.getAttribute("src") ?? "")) {
       activeImage = img;
@@ -263,7 +278,7 @@ export function attachBlockCopyBridge(container: HTMLElement): () => void {
     const item = target.closest(MENU_ITEM);
     if (!item || !item.closest(MENU_ROOT)) return;
     const label = menuItemLabel(item);
-    if (!SINGLE_IMAGE_LABELS.has(label)) return;
+    if (label !== COPY_TABLE_LABEL && !SINGLE_IMAGE_LABELS.has(label)) return;
     const blocks = highlightedBlocks(container).filter((block) => block.isConnected);
     // ---- 多块（图文混排）优先：只有「复制」这个文案存在多块语义 ----
     if (label === COPY_LABEL) {
@@ -302,6 +317,25 @@ export function attachBlockCopyBridge(container: HTMLElement): () => void {
       const img = singleBlock?.querySelector("img");
       return !!img && !!parseAssetRef(img.getAttribute("src") ?? "");
     })();
+    // ---- 单块**表格**（261122）：内核复制只写第一个单元格的文字；改为从正文取整表 ——
+    if (singleBlock || activeTable) {
+      const tableEl = ((singleBlock?.matches?.("table.ne-table, table.lake-table") ? singleBlock : singleBlock?.querySelector?.("table.ne-table, table.lake-table")) ?? (activeTable && activeTable.isConnected && container.contains(activeTable) ? activeTable : null)) as HTMLTableElement | null;
+      if (tableEl) {
+        const index = tableIndexInHost(container, tableEl);
+        const matrix = (getBody ? tableMatrixFromBody(getBody(), index) : null) ?? matrixFromTableElement(tableEl);
+        if (matrix) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          pressedRange = null;
+          activeImage = null;
+          writePayloadToClipboard(payloadFromMatrix(matrix));
+          clearHighlight(blocks);
+          closeBlockMenu();
+          return;
+        }
+      }
+    }
     if (singleBlock && !singleBlockHasLocalImage) {
       const range = usableRange && blockAncestor(usableRange.startContainer) === singleBlock
         ? usableRange.cloneRange()

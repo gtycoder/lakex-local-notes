@@ -115,25 +115,45 @@ describe("③ 展开-收起-再展开循环幂等", () => {
   });
 });
 
-describe("④ 展开态不持久化（会话内）", () => {
+describe("④ 展开态 = 设备本地记忆（261121 用户报「收起后重开又全展开」⇒ 反转 261119 的会话内口径）", () => {
   const SIDEBAR = readFileSync(new URL("../Sidebar.tsx", import.meta.url), "utf8");
   const EXPAND = readFileSync(new URL("./treeExpandState.ts", import.meta.url), "utf8");
-  const stripComments = (source: string): string =>
-    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const STORE = readFileSync(new URL("../../../features/sidebar/treeExpansion.ts", import.meta.url), "utf8");
 
-  it("注释写明「不持久化/只活在会话内」", () => {
-    expect(EXPAND).toContain("不持久化");
-    expect(SIDEBAR).toContain("只活在会话内");
+  it("存储单一来源：treeExpansion.ts 用 localStorage，且明确「空数组 = 主动全部收起」", () => {
+    expect(STORE).toContain("lakex-local-notes-v3.sidebar-expanded");
+    expect(STORE).toContain("localStorage");
+    expect(STORE).toContain("空数组 = 用户主动全部收起");
+    // 切换语义模块不碰存储（单一职责；注释里提到不算）
+    const code = EXPAND.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    expect(code).not.toMatch(/localStorage/);
   });
 
-  it("展开集无任何 localStorage / sessionStorage / device_state 读写（跨会话无记忆）", () => {
-    for (const source of [stripComments(SIDEBAR), stripComments(EXPAND)]) {
-      expect(source).not.toMatch(/localStorage|sessionStorage|device_state/);
-    }
+  it("接线：初始值优先读记忆、没有记忆才默认展开；树同步后才写回；refresh 只裁剪", () => {
+    expect(SIDEBAR).toContain("readExpandedNodeIds()");
+    expect(SIDEBAR).toContain("writeExpandedNodeIds([...expanded])");
+    expect(SIDEBAR).toContain("pruneExpandedNodeIds([...base], props.nodes)");
+    expect(SIDEBAR).toContain("new Set(stored ?? autoExpanded(props.nodes))");
+    // 启动空树不许写回（否则把"没记录"写成"全部收起"）
+    expect(SIDEBAR).toContain("if (!treeSyncedRef.current) return;");
   });
 
-  it("接线：展开集是会话内 useState，行切换走 toggleExpandedNode（收起清子树）", () => {
-    expect(SIDEBAR).toContain("useState<Set<string>>(() => autoExpanded(props.nodes))");
+  it("行切换仍走 toggleExpandedNode（收起清整棵子树）", () => {
     expect(SIDEBAR).toContain("setExpanded((current) => toggleExpandedNode(current, id, props.nodes))");
+  });
+
+  it("启动首帧空树不把全部笔记本当「新节点」展开（261122 真因：记忆被全量展开覆盖）", () => {
+    // prevNodeIds 必须是 null 起手（= 未建立基线），第一次拿到真实树只记基线
+    expect(SIDEBAR).toContain("useRef<Set<string> | null>(null)");
+    expect(SIDEBAR).toContain("if (prevNodeIds.current === null) {");
+    expect(SIDEBAR).toContain("只**建立基线**、不展开");
+    // 仍然保留「同步新出现的容器自动展开」
+    expect(SIDEBAR).toContain("!prevIds.has(n.id)");
+  });
+
+  it("冷启动不替用户展开「当前文档的祖先」（有记忆时严格按记忆渲染）", () => {
+    expect(SIDEBAR).toContain("严格按上次记忆渲染");
+    expect(SIDEBAR).toContain("if (restoredExpandedRef.current.stored !== null) return;");
+    expect(SIDEBAR).toContain("startupFollowRef");
   });
 });

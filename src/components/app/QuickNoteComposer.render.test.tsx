@@ -106,3 +106,37 @@ describe("QuickNoteComposer（261110 第二批）", () => {
     expect(publish.className).toContain("ln-btn--primary");
   });
 });
+describe("小记保存快捷键（261121 用户点单：⌘S = 正常保存）", () => {
+  const press = (key: string, init: KeyboardEventInit = {}) => {
+    const composer = host.querySelector<HTMLElement>(".quick-note-composer");
+    expect(composer).not.toBeNull();
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    composer!.dispatchEvent(event);
+    return event;
+  };
+
+  it("⌘S：走同一条正常保存（onSave 一次），并吞掉默认行为", () => {
+    const onSave = vi.fn();
+    render(vi.fn(), onSave);
+    const event = press("s", { metaKey: true });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("Ctrl+S（非 mac 口径）同样生效；⌘⇧S / ⌘⌥S 不触发", () => {
+    const onSave = vi.fn();
+    render(vi.fn(), onSave);
+    press("s", { ctrlKey: true });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    press("s", { metaKey: true, shiftKey: true });
+    press("s", { metaKey: true, altKey: true });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("⌘Enter 仍是原来的主按钮快捷键（不回归）", () => {
+    const onSave = vi.fn();
+    render(vi.fn(), onSave);
+    press("Enter", { metaKey: true });
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+});

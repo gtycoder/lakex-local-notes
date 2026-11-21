@@ -76,7 +76,10 @@
   .note-row-copy strong { color: inherit; }
   .tree-row.type-notebook { min-height: 29px; color: var(--lake-text-1); }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; }
-  .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal var(--lake-motion-panel) var(--lake-ease-standard); }
+  /* 261122 用户报「目录展开一跳一跳」（录屏逐帧确认：子级容器每次展开都播 250ms 淡入 + 上移 3px，
+     嵌套展开时逐层各播一次 ⇒ 看起来一行行地在跳）。展开是**结构变化**，按 DESIGN「状态切换瞬时」
+     取消这条入场动效：border-left-color 保留，动画与 transform-origin 一并删除。 */
+  .tree-children { border-left-color: var(--lake-border-2); }
 
   /* 261006：光标/命中带/药丸已并入 kit 的 .ln-split-handle（分栏与侧栏唯一实现），
      这里只留侧栏特有的定位。几何与原值逐像素相同（药丸 left:50% - 1px == 原 right:4px）。 */
@@ -94,23 +97,18 @@
 
 }
 
-@keyframes shell-tree-reveal {
-  from { opacity: 0; transform: translateY(-3px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* @keyframes shell-tree-reveal 已随 .tree-children 入场动效一起删除（261122，见上方注释）。 */
 
 @media (prefers-reduced-motion: reduce) {
   /* 261112 Q1：.app-shell / .sidebar / .tab-item / .seg__item 的 animation:none 单一来源在 a11y 层
      （已被其压死，此处不再重复）；下面三个 a11y 层未覆盖，保留。 */
   .tab-switcher,
-  .tab-switcher-menu,
-  .tree-children { animation: none; }
+  .tab-switcher-menu { animation: none; }
   .app-shell,
   .sidebar,
   .tab-item,
   .tab-switcher,
   .tab-switcher-menu,
-  .tree-children,
   .seg__item { transition-duration: 1ms; }
 }
 
