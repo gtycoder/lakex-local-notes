@@ -3,16 +3,18 @@
  *
  * 链路（每一步都可单独失败并给出可执行错误）：
  *   ① 关闭 SQLite 连接（复用便携包导入的 closeDbForPortableImport，保证 DB/WAL 一致）；
- *   ② 原生 exportSnapshot：把「数据库 + 全部正文/资产/历史/草稿」打成快照 zip 到 App 私有目录；
+ *   ② 原生 exportSnapshot：把「数据库 + 全部正文/资产/草稿/素材/基线」打成快照 zip 到 App 私有目录
+ *      （v2 261122：历史快照不进包；导出端清 note_history 行；清单带 baseline ref）；
  *   ③ 原生 inspectSnapshot 自检：校验 portable.json、只读打开包内 SQLite 数行数、抽查文档正文齐全
  *      —— 导出即验证「可恢复」，避免用户拿到一个坏包却不自知；
  *   ④ OpenFile.saveAs(toDownloads=true)：Android 10+ 直接落到系统「下载」目录（文件管理器可见、
  *      卸载 App 后仍留存；不弹系统选择器）；低版本自动回退 SAF；
  *   ⑤ finally 重开数据库。
  *
- * 包 = 明文全量数据（含历史快照/草稿），UI 必须提醒用户妥善保管。
+ * 包 = 明文全量数据（不含历史快照；含草稿/素材/同步基线），UI 必须提醒用户妥善保管。
  */
 import { closeDbForPortableImport, reopenDbForPortableImport } from "../bridge/context";
+import { readBaselineFile } from "../data/v3BaselineFile";
 import { saveFileToUserVisible } from "../native/openFileSave";
 import { nativeExportPortableSnapshot, nativeInspectPortableSnapshot, type PortableSnapshotCounts } from "../native/portablePackage";
 
@@ -45,7 +47,17 @@ export async function exportPortableSnapshotToDownloads(): Promise<PortableExpor
       // 关不掉也继续：原生复制的是文件，SQLite 的 WAL 可能让快照少最后几条；自检会暴露不完整。
       console.warn("[portable-export] 关闭数据库失败（继续导出）", error);
     }
-    const exported = await nativeExportPortableSnapshot();
+    // v2（261122）：清单带 baseline ref（解析口径单一来源在 TS；纯离线 = null）。
+    const baselineRead = await readBaselineFile();
+    const baselineRef = baselineRead.status === "ok"
+      ? {
+        epoch: baselineRead.baseline.epoch,
+        generation: baselineRead.baseline.generation,
+        lakeCommit: baselineRead.baseline.lakeCommit,
+        quickNotesCommit: baselineRead.baseline.quickNotesCommit,
+      }
+      : null;
+    const exported = await nativeExportPortableSnapshot(baselineRef);
     if (!exported.ok || !exported.path) {
       return { ok: false, error: exported.error || "导出失败：原生没有返回快照文件" };
     }

@@ -128,8 +128,9 @@ interface PortableImportPluginApi {
   rollbackImport(): Promise<PortableRecoverResult>;
   recoverPending(): Promise<PortableRecoverResult>;
   pendingInfo(): Promise<PortablePendingInfo>;
-  /** 261117 D 项：把当前移动端全量数据打成快照 zip（写到 App 私有目录，返回路径）。 */
-  exportSnapshot(): Promise<PortableSnapshotExport>;
+  /** 261117 D 项：把当前移动端全量数据打成快照 zip（写到 App 私有目录，返回路径）。
+   *  v2（261122）：随包清单带 baseline ref（JS 解析后传入；纯离线 = null）。 */
+  exportSnapshot(options: { baseline: { epoch: string; generation: number; lakeCommit: string; quickNotesCommit: string } | null }): Promise<PortableSnapshotExport>;
   /** 解析校验一个快照 zip（manifest + 只读打开包内 SQLite + 正文抽查）。 */
   inspectSnapshot(options: { path: string }): Promise<PortableSnapshotInspect>;
   /** 261117 D 项：从手机整机快照恢复（调用前 JS 必须已关闭数据库连接）。 */
@@ -243,10 +244,12 @@ export async function nativeRecoverPortableImport(): Promise<PortableRecoverResu
   }
 }
 
-export async function nativeExportPortableSnapshot(): Promise<PortableSnapshotExport> {
+export async function nativeExportPortableSnapshot(
+  baseline: { epoch: string; generation: number; lakeCommit: string; quickNotesCommit: string } | null,
+): Promise<PortableSnapshotExport> {
   if (!isPortableImportNativeAvailable()) return { ok: false, error: "浏览器预览不支持导出便携包，请在 Android 上操作" };
   try {
-    return (await PortableImport.exportSnapshot()) ?? { ok: false, error: "没有返回结果" };
+    return (await PortableImport.exportSnapshot({ baseline })) ?? { ok: false, error: "没有返回结果" };
   } catch (error) {
     return { ok: false, error: errorText(error) };
   }

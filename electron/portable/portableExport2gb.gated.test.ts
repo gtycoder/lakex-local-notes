@@ -14,9 +14,9 @@
  *
  * 验证：
  *  - 结构：EOCD/ZIP64 EOCD/中央目录条目数/每条 method=0/本地头签名/32 位大小一致；
- *  - manifest：parsePortableManifest 全量校验（format/version/hasHistory/limitBytes/counts/baseline）；
+ *  - manifest：parsePortableManifest 全量校验（format/version/layout/limitBytes/counts/baseline；v2 恒无历史）；
  *  - 计数：manifest.counts.bytes === 所有条目数据字节和；counts.notes/assets 与条目前缀统计一致；
- *  - 白名单：不含 history/draft-journal/logs/backups/settings/window-state/sync-v3/state.gz；
+ *  - 白名单：不含 history/logs/backups/settings/window-state/sync-v3/state.gz（v2：草稿与素材随包）；
  *  - 抽样读回：真实读数据 + CRC32 校验（正文含种子正文标记、附件大小/命名符合）；
  *  - 移动端导入前兼容：按 android PortablePackagePlugin.kt 的 MAX_ENTRIES / 4GiB 上限判定。
  *
@@ -56,116 +56,11 @@ import { QuickNotesStore } from "../quickNotes/index.js";
 import { exportPortablePackage } from "./portableExport.js";
 import { PORTABLE_LIMIT_BYTES, parsePortableManifest } from "../../src/core/portable/portableFormat.js";
 import { crc32 } from "./zipStore.js";
+import { readCentralDirectory, readEntryData, sumEntrySizes } from "./zipRead.js";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const TEMP_PREFIXES = ["/tmp/lake-scale-", "/private/tmp/lake-scale-"];
-const EOCD_SIG = 0x06054b50;
-const ZIP64_LOCATOR_SIG = 0x07064b50;
-const ZIP64_EOCD_SIG = 0x06064b50;
-const CENTRAL_SIG = 0x02014b50;
-const LOCAL_SIG = 0x04034b50;
-
-interface ZipEntryMeta {
-  name: string;
-  crc: number;
-  size: number;
-  localOffset: number;
-  method: number;
-  flags: number;
-}
-
-interface CentralDirectory {
-  entries: ZipEntryMeta[];
-  zip64: boolean;
-  centralDirOffset: number;
-  centralDirSize: number;
-  fileBytes: number;
-}
-
-function readAt(fd: number, position: number, length: number): Buffer {
-  const buffer = Buffer.alloc(length);
-  const read = fs.readSync(fd, buffer, 0, length, position);
-  if (read !== length) throw new Error(`读取越界：position=${position} length=${length} read=${read}`);
-  return buffer;
-}
-
-/** 从文件尾部读 EOCD（必要时 ZIP64），再读中央目录；不读任何条目数据。 */
-function readCentralDirectory(filePath: string): CentralDirectory {
-  const stat = fs.statSync(filePath);
-  const fd = fs.openSync(filePath, "r");
-  try {
-    const tailSize = Math.min(stat.size, 256 * 1024);
-    const tailStart = stat.size - tailSize;
-    const tail = readAt(fd, tailStart, tailSize);
-    let eocd = -1;
-    for (let index = tail.length - 22; index >= 0; index -= 1) {
-      if (tail.readUInt32LE(index) === EOCD_SIG) {
-        eocd = index;
-        break;
-      }
-    }
-    if (eocd < 0) throw new Error("zip 缺少 EOCD");
-    let count = tail.readUInt16LE(eocd + 10);
-    let centralDirSize = tail.readUInt32LE(eocd + 12);
-    let centralDirOffset = tail.readUInt32LE(eocd + 16);
-    let zip64 = false;
-    if (count === 0xffff || centralDirSize === 0xffffffff || centralDirOffset === 0xffffffff) {
-      zip64 = true;
-      const locatorOffset = tailStart + eocd - 20;
-      const locator = readAt(fd, locatorOffset, 20);
-      if (locator.readUInt32LE(0) !== ZIP64_LOCATOR_SIG) throw new Error("zip64 locator 缺失");
-      const zip64EocdOffset = Number(locator.readBigUInt64LE(8));
-      const record = readAt(fd, zip64EocdOffset, 56);
-      if (record.readUInt32LE(0) !== ZIP64_EOCD_SIG) throw new Error("zip64 EOCD 缺失");
-      count = Number(record.readBigUInt64LE(32));
-      centralDirSize = Number(record.readBigUInt64LE(40));
-      centralDirOffset = Number(record.readBigUInt64LE(48));
-    }
-    const central = readAt(fd, centralDirOffset, centralDirSize);
-    const entries: ZipEntryMeta[] = [];
-    let cursor = 0;
-    for (let index = 0; index < count; index += 1) {
-      if (central.readUInt32LE(cursor) !== CENTRAL_SIG) throw new Error(`中央目录损坏（第 ${index} 条）`);
-      const flags = central.readUInt16LE(cursor + 8);
-      const method = central.readUInt16LE(cursor + 10);
-      const crc = central.readUInt32LE(cursor + 16);
-      const size = central.readUInt32LE(cursor + 24);
-      const nameLength = central.readUInt16LE(cursor + 28);
-      const extraLength = central.readUInt16LE(cursor + 30);
-      const commentLength = central.readUInt16LE(cursor + 32);
-      const localOffset = central.readUInt32LE(cursor + 42);
-      const name = central.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
-      entries.push({ name, crc, size, localOffset, method, flags });
-      cursor += 46 + nameLength + extraLength + commentLength;
-    }
-    return { entries, zip64, centralDirOffset, centralDirSize, fileBytes: stat.size };
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/** 按中央目录偏移读一条条目的真实数据（校验本地头；不整包读入）。 */
-function readEntryData(filePath: string, entry: ZipEntryMeta): Buffer {
-  const fd = fs.openSync(filePath, "r");
-  try {
-    const header = readAt(fd, entry.localOffset, 30);
-    if (header.readUInt32LE(0) !== LOCAL_SIG) throw new Error("本地头损坏：" + entry.name);
-    const localNameLength = header.readUInt16LE(26);
-    const localExtraLength = header.readUInt16LE(28);
-    const localCrc = header.readUInt32LE(14);
-    const localSize = header.readUInt32LE(22);
-    if (localCrc !== entry.crc || localSize !== entry.size) throw new Error("本地头与中央目录不一致：" + entry.name);
-    const nameAtLocal = readAt(fd, entry.localOffset + 30, localNameLength).toString("utf8");
-    if (nameAtLocal !== entry.name) throw new Error("本地头文件名不一致：" + entry.name);
-    return readAt(fd, entry.localOffset + 30 + localNameLength + localExtraLength, entry.size);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-function sumEntrySizes(entries: ZipEntryMeta[]): number {
-  return entries.reduce((sum, entry) => sum + entry.size, 0);
-}
+// zip 读取统一走生产读取器 zipRead.ts（261122 收口：删除本地重复实现）。
 
 function readIntEnv(key: string, fallback: number): number {
   const raw = process.env[key];
@@ -313,8 +208,8 @@ describeGated("2GB 便携包导出与格式校验（桌面 → 手机）", () =>
       const manifestRaw = readEntryData(result.path, manifestEntry!);
       expect(crc32(manifestRaw)).toBe(manifestEntry!.crc);
       const manifest = parsePortableManifest(JSON.parse(manifestRaw.toString("utf8")));
-      expect(manifest.formatVersion).toBe(1);
-      expect(manifest.hasHistory).toBe(false);
+      expect(manifest.formatVersion).toBe(2);
+      expect(manifest.layout).toBe("desktop-workspace");
       expect(manifest.limitBytes).toBe(PORTABLE_LIMIT_BYTES);
       // counts.bytes 的定义 = 白名单文件 + 两 DB 快照 + baseline（**不含 portable.json 自身**），
       // 而 zip 数据字节和含 manifest 条目 ⇒ 差额必须正好是 manifest 条目大小。
@@ -339,9 +234,9 @@ describeGated("2GB 便携包导出与格式校验（桌面 → 手机）", () =>
       expect(prefixes.databases).toBe(2);
       expect(prefixes.baseline).toBe(1);
 
+      // v2（261122）：draft-journal/quick-notes/staging/materials 随包（用户内容）；history/ 仍恒排除。
       const forbiddenPrefixes = [
         "desktop/history/",
-        "desktop/draft-journal/",
         "desktop/logs/",
         "desktop/backups/",
         "desktop/settings.json",
@@ -442,7 +337,7 @@ describeGated("2GB 便携包导出与格式校验（桌面 → 手机）", () =>
         notes: [
           "Android PortablePackagePlugin 用 ZipInputStream 逐条读取：本包 store-only、本地头带真实 CRC/大小、无数据描述符（正是为了这套解压器）。",
           maxEntries === null ? "未读到 MAX_ENTRIES，需人工核对。" : `MAX_ENTRIES=${maxEntries}；本包 ${entries.length} 条 ⇒ ${entriesOk ? "通过" : "超出上限，手机导入会报「zip 条目过多」"}。`,
-          "导入前还需：包体 ≤4GiB、portable.json 的 format/formatVersion/hasHistory/limitBytes 校验（本测试已用 parsePortableManifest 覆盖）。",
+          "导入前还需：包体 ≤4GiB、portable.json 的 format/formatVersion/layout/limitBytes 校验（本测试已用 parsePortableManifest 覆盖）。",
         ],
       };
       report.mobileCompat = mobileCompat;

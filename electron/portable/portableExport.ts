@@ -1,13 +1,15 @@
 /**
- * 桌面 → 手机 便携包导出（docs/PORTABLE-TRANSFER.md §2）。
+ * 桌面导出大统一迁移包（docs/PORTABLE-TRANSFER.md v2；261122「大统一」：各端互导）。
  *
- * 流程：VACUUM INTO 两份 DB 一致性快照（由 store/quickNotes 注入回调执行）→ 按白名单遍历
- * 工作区（正文/资源/小记/基线，**不含历史快照**）→ 生成 portable.json → 流式写 store-only zip。
+ * 流程：VACUUM INTO 两份 DB 一致性快照（由 store/quickNotes 注入回调执行）→ 清掉历史索引行
+ * （包恒不含历史快照）→ 按白名单遍历工作区（正文/资源/小记/草稿/画板素材/基线）→ 生成
+ * portable.json（v2：layout=desktop-workspace）→ 流式写 store-only zip。
  *
  * 红线：
  * - 包里不写任何密钥/设备本地状态（settings.json、window-state.json、sync-v3/state.json 均不在白名单）；
- * - 总大小 ≤4GiB（先预检，写了过大再删半成品）；
- * - 遍历只走白名单目录 ⇒ history/draft-journal/logs/backups 天然不会进包。
+ * - 总大小 ≤4GiB（先预检，写了过大再删半成品；261122 维持 4GiB，不做 5GiB/ZIP64）；
+ * - 历史快照不进包（261122 裁决：仅本机数据）：history/ 不收集，且快照库清 note_history 等索引行；
+ * - 遍历只走白名单目录 ⇒ logs/backups 天然不会进包。
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -16,6 +18,7 @@ import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import Database from "better-sqlite3";
 import { noteBodyRelativePath, quickNoteBodyRelativePath } from "../../src/core/noteBodyPaths.js";
+import { PORTABLE_BODY_DIRS } from "../../src/core/portable/portableRows.js";
 import { NOTE_KINDS, type NoteKind } from "../../src/core/noteKind.js";
 import {
   assertPortableSize,
@@ -30,10 +33,10 @@ import {
 } from "../../src/core/portable/portableFormat.js";
 import { writeStoreZip, type ZipEntrySource } from "./zipStore.js";
 
-/** 正文目录（zip 内 desktop/<dir>/<相对路径>）；扩展名只作说明，收集时按目录整体遍历。 */
-const BODY_DIRS = ["notes", "usheets", "bitables", "boards", "inks"] as const;
+/** 正文目录（zip 内 desktop/<dir>/<相对路径>）；清单单一来源 = core/portableRows。 */
+const BODY_DIRS = PORTABLE_BODY_DIRS;
 
-export type PortableFileKind = "body" | "asset" | "quick-item" | "quick-asset";
+export type PortableFileKind = "body" | "asset" | "quick-item" | "quick-asset" | "draft" | "material";
 
 export interface CollectedPortableFile {
   /** zip 内路径（posix）。 */
@@ -69,7 +72,7 @@ function walkFiles(root: string): Array<{ rel: string; abs: string; size: number
   return out;
 }
 
-/** 白名单收集（spec §2 的包内布局）。history/draft-journal/logs/backups 等不在白名单里。 */
+/** 白名单收集（spec §2 的包内布局；261122 全量跨端口径）。history/logs/backups 不在白名单里。 */
 export function collectPortableFiles(workspaceRoot: string): CollectedPortableFile[] {
   const files: CollectedPortableFile[] = [];
   const add = (kind: PortableFileKind, zipPrefix: string, dir: string): void => {
@@ -81,7 +84,28 @@ export function collectPortableFiles(workspaceRoot: string): CollectedPortableFi
   add("asset", "note-assets", "note-assets");
   add("quick-item", "quick-notes/items", path.join("quick-notes", "items"));
   add("quick-asset", "quick-notes/assets", path.join("quick-notes", "assets"));
+  // 261122「数据覆盖全面」：草稿（未提交草稿日志 + 小记草稿暂存图）与画板自定义素材随包跨端。
+  add("draft", "draft-journal", "draft-journal");
+  add("draft", "quick-notes/staging", path.join("quick-notes", "staging"));
+  add("material", "materials", "materials");
   return files;
+}
+
+/** 历史索引行的表（桌面主库；包恒不含历史，连索引行一起清掉，避免恢复后出现加载不到的历史条目）。 */
+const HISTORY_INDEX_TABLES = ["note_history", "history_fallback_state"] as const;
+
+/**
+ * 清掉 DB 快照里的历史索引行（261122 裁决：历史快照不进导入导出）。
+ * 只动快照副本（VACUUM INTO 产物），不碰运行中的库；表不存在时跳过（兼容旧夹具/精简库）。
+ */
+export function scrubHistoryRowsFromSnapshot(snapshotRoot: string): void {
+  const main = new Database(path.join(snapshotRoot, "metadata.sqlite3"));
+  try {
+    for (const table of HISTORY_INDEX_TABLES) {
+      const exists = main.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) as { name?: string } | undefined;
+      if (exists?.name) main.prepare("DELETE FROM " + table).run();
+    }
+  } finally { main.close(); }
 }
 
 /** 解压 desktop 的 sync-v3/baseline.json.gz → 包内 desktop/sync-v3/baseline.json。
@@ -210,6 +234,8 @@ export async function exportPortablePackage(options: PortableExportOptions): Pro
     const snapshotRoot = path.join(tempRoot, "snapshot");
     fs.mkdirSync(path.join(snapshotRoot, "quick-notes"), { recursive: true });
     options.snapshotDatabases(snapshotRoot);
+    // 261122：历史快照不进包 ⇒ 快照库连历史索引行一起清掉（包内自洽，无悬空条目）。
+    scrubHistoryRowsFromSnapshot(snapshotRoot);
     const dbFiles = [
       { zipPath: "desktop/metadata.sqlite3", absPath: path.join(snapshotRoot, "metadata.sqlite3") },
       { zipPath: "desktop/quick-notes/metadata.sqlite3", absPath: path.join(snapshotRoot, "quick-notes", "metadata.sqlite3") },
@@ -244,7 +270,7 @@ export async function exportPortablePackage(options: PortableExportOptions): Pro
       appVersion: options.appVersion,
       exportedAt: now.toISOString(),
       source: { platform: "desktop" },
-      hasHistory: false,
+      layout: "desktop-workspace",
       limitBytes: PORTABLE_LIMIT_BYTES,
       counts,
       baseline: baseline?.ref ?? null,

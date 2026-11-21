@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { gzipSync } from "node:zlib";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import type { IpcRegistrar } from "../ipc/registrar.js";
 import type { PortableExportAvailability, PortableExportProgress } from "../../src/core/portable/portableFormat.js";
 
@@ -54,8 +55,9 @@ function makeWorkspace(): string {
 
 function makeSnapshot(targetRoot: string): void {
   fs.mkdirSync(path.join(targetRoot, "quick-notes"), { recursive: true });
-  fs.writeFileSync(path.join(targetRoot, "metadata.sqlite3"), "MAIN");
-  fs.writeFileSync(path.join(targetRoot, "quick-notes", "metadata.sqlite3"), "QUICK");
+  // 真 SQLite 空库（导出会对快照库清历史索引行，假字节会 "file is not a database"）
+  new Database(path.join(targetRoot, "metadata.sqlite3")).close();
+  new Database(path.join(targetRoot, "quick-notes", "metadata.sqlite3")).close();
 }
 
 const AVAILABLE: PortableExportAvailability = { available: true };
@@ -69,6 +71,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
     let snapshots = 0;
     registerPortableIpc(ipc, {
       workspaceRoot: () => workspace,
+      stagingParent: () => path.join(workspace, "..", "portable-import"),
       appVersion: () => "1.0.4",
       snapshotDatabases: (root) => { snapshots += 1; makeSnapshot(root); },
       availability: () => AVAILABLE,
@@ -92,6 +95,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
     const { ipc, call } = makeIpc();
     registerPortableIpc(ipc, {
       workspaceRoot: () => workspace,
+      stagingParent: () => path.join(workspace, "..", "portable-import"),
       appVersion: () => "1.0.4",
       snapshotDatabases: makeSnapshot,
       availability: () => AVAILABLE,
@@ -120,6 +124,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
     let snapshots = 0;
     registerPortableIpc(ipc, {
       workspaceRoot: () => workspace,
+      stagingParent: () => path.join(workspace, "..", "portable-import"),
       appVersion: () => "1.0.4",
       snapshotDatabases: (root) => { snapshots += 1; makeSnapshot(root); },
       availability: () => AVAILABLE,
@@ -140,6 +145,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
     const { ipc, call } = makeIpc();
     registerPortableIpc(ipc, {
       workspaceRoot: () => workspace,
+      stagingParent: () => path.join(workspace, "..", "portable-import"),
       appVersion: () => "1.0.4",
       snapshotDatabases: makeSnapshot,
       availability: () => AVAILABLE,

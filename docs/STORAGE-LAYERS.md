@@ -29,10 +29,10 @@
 ```text
 userData/
 ├── logs/lakex-local-notes.log       # 日志（不属于工作区）
-├── sync-v3/baseline.json.gz         # 设备同步基线（每篇 contentHash）—— L3 账本，绝不上传
-├── sync-v3/state.json               # 设备同步状态（删除意图/恢复标记/待补资产）—— L3 账本
-└── workspace-default/
+└── workspace-default/               # 工作区根（boot/paths.ts：metadata/正文/资产/sync-v3/quick-notes 都在它下面）
     ├── metadata.sqlite3             # 主库（WAL）：元数据 + 本地账本（见 §2.2）
+    ├── sync-v3/baseline.json.gz     # 设备同步基线（每篇 contentHash）—— L3 账本，绝不上传
+    ├── sync-v3/state.json           # 设备同步状态（删除意图/恢复标记/待补资产）—— L3 账本
     ├── notes/{noteId}.lake          # 正文 kind=doc（L1，S3 对象 objects/…）
     ├── usheets/{noteId}.usheet.json # 正文 kind=usheet（Univer IWorkbookData）
     ├── bitables/{noteId}.bitable.json # 正文 kind=bitable（自研 record JSON）

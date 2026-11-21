@@ -1,17 +1,33 @@
 /**
- * 桌面 → 手机 一次性便携包（docs/PORTABLE-TRANSFER.md）的共享格式定义与校验。
- * 纯逻辑，不 import node:* / electron / capacitor。
+ * 大统一迁移包（便携包 .zip.lln）的共享格式定义与校验 —— 261122 用户裁决「大统一」。
+ * 纯逻辑，不 import node:* / electron / capacitor；桌面与移动端共用，是清单格式的单一来源。
+ *
+ * v2（261122）：一份清单管两种布局（desktop-workspace / mobile-snapshot），两端互导；
+ *   · 恒不含历史快照（261122 裁决：历史是仅本机数据，不进导入导出；清单不再有 hasHistory 字段）；
+ *   · 包含全部跨端数据（正文/资产/小记/标签/回收站/草稿/画板素材/同步基线），密钥与设备本地态永不进包；
+ *   · 上限 4GiB（261122 维持，不做 5GiB/ZIP64）；不写 v1 兼容（formatVersion 1 直接拒，旧包用新版重导）。
+ * 规格：docs/PORTABLE-TRANSFER.md。
  */
 import { cloudStateOf } from "../cloudState";
 import type { SyncSettings } from "../sharedTypes";
 
 export const PORTABLE_FORMAT = "lakex-local-notes-portable";
-export const PORTABLE_FORMAT_VERSION = 1;
+export const PORTABLE_FORMAT_VERSION = 2;
 /** 便携包文件后缀：压缩包 + 专属后缀，便于在网盘/文件选择器里识别，避免误选普通 zip。
  *  只接受该后缀；旧 `.zip` 不再兼容（用户 261110 定稿）。 */
 export const PORTABLE_FILE_EXTENSION = ".zip.lln";
-/** 单包上限：4GiB（用户 261109 定；超限暂不支持分卷）。 */
+/** 单包上限：4GiB（261109 定 4GiB；261122 裁决维持 4GiB，不做 5GiB/ZIP64；超限不支持分卷）。 */
 export const PORTABLE_LIMIT_BYTES = 4 * 1024 * 1024 * 1024;
+
+export type PortablePlatform = "desktop" | "mobile";
+/** 包内布局：desktop-workspace = 桌面工作区镜像；mobile-snapshot = 移动端全量快照。 */
+export type PortableLayout = "desktop-workspace" | "mobile-snapshot";
+
+/** 布局与来源平台一一对应（v2 唯一的两组合法组合）。 */
+export const PORTABLE_LAYOUT_BY_PLATFORM: Record<PortablePlatform, PortableLayout> = {
+  desktop: "desktop-workspace",
+  mobile: "mobile-snapshot",
+};
 
 export interface PortableBaselineRef {
   epoch: string;
@@ -31,15 +47,20 @@ export interface PortableCounts {
 
 export interface PortableManifest {
   format: typeof PORTABLE_FORMAT;
-  formatVersion: 1;
+  formatVersion: 2;
   appVersion: string;
   exportedAt: string;
-  source: { platform: "desktop" };
-  hasHistory: false;
+  source: { platform: PortablePlatform };
+  layout: PortableLayout;
   limitBytes: number;
   counts: PortableCounts;
   /** 云端基线；纯离线导出为 null（之后配置 S3 时按「无基线」处理：空桶首传 / 已有数据先拉取）。 */
   baseline: PortableBaselineRef | null;
+}
+
+/** 布局判据（导入端分派用）：手机整机快照 vs 桌面工作区镜像。 */
+export function isMobileSnapshotManifest(manifest: PortableManifest): boolean {
+  return manifest.layout === "mobile-snapshot";
 }
 
 /** 解析并校验清单；不合法直接抛错（导入方按「文件无效」处理）。 */
@@ -48,12 +69,13 @@ export function parsePortableManifest(raw: unknown): PortableManifest {
   const value = raw as Record<string, unknown>;
   if (value.format !== PORTABLE_FORMAT) throw new Error("不是 LakexLocalNotes 便携包");
   if (value.formatVersion !== PORTABLE_FORMAT_VERSION) throw new Error("便携包格式版本不支持");
-  if (value.hasHistory !== false) throw new Error("便携包不应包含历史快照");
   if (typeof value.appVersion !== "string" || value.appVersion.length === 0) throw new Error("便携包 appVersion 非法");
   if (typeof value.exportedAt !== "string" || value.exportedAt.length === 0) throw new Error("便携包 exportedAt 非法");
   if (value.limitBytes !== PORTABLE_LIMIT_BYTES) throw new Error("便携包上限声明不匹配");
   const source = value.source as Record<string, unknown> | undefined;
-  if (!source || source.platform !== "desktop") throw new Error("便携包来源非法");
+  const platform = source?.platform;
+  if (platform !== "desktop" && platform !== "mobile") throw new Error("便携包来源非法");
+  if (value.layout !== PORTABLE_LAYOUT_BY_PLATFORM[platform]) throw new Error("便携包布局与来源不匹配");
   const baselineRaw = value.baseline as Record<string, unknown> | null | undefined;
   if (baselineRaw !== null && baselineRaw !== undefined
     && (typeof baselineRaw.epoch !== "string" || typeof baselineRaw.generation !== "number"
@@ -67,11 +89,11 @@ export function parsePortableManifest(raw: unknown): PortableManifest {
   }
   return {
     format: PORTABLE_FORMAT,
-    formatVersion: 1,
+    formatVersion: 2,
     appVersion: value.appVersion,
     exportedAt: value.exportedAt,
-    source: { platform: "desktop" },
-    hasHistory: false,
+    source: { platform },
+    layout: PORTABLE_LAYOUT_BY_PLATFORM[platform],
     limitBytes: PORTABLE_LIMIT_BYTES,
     counts: c as unknown as PortableCounts,
     baseline: baselineRaw

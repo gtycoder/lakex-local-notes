@@ -7,6 +7,15 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261122 · 大统一迁移包 v2（各端互导；规格 = docs/PORTABLE-TRANSFER.md 重写版）**：
+  - **用户裁决**：一份 `.zip.lln` 各端互导（未来 iPhone 复用移动布局）；上限**维持 4GiB**；**历史快照不进导入导出**（连 note_history 索引行都清）；**AI 会话不随包**；草稿/画板素材随包；密钥不随包（配好 S3 即增量——包内带同步基线）；不写 v1 兼容（formatVersion **2**）。
+  - **格式层**：`core/portable/portableFormat.ts` = 清单唯一校验器（layout↔platform 配对、无 hasHistory）；移动 `MobileSnapshotManifest` 第二方言删除；as* 助手上移 `core/portableRows.ts`（R4 禁 electron→src/mobile）。
+  - **桌面导出**：白名单 +`draft-journal/`/`quick-notes/staging/`/`materials/`；导出清快照库历史行。**桌面导入三路**：便携包 desktop 布局（staging 换位 + baseline.gz 转换）/ 便携包 mobile 布局（反向映射 `portable/mobileToDesktopMapping.ts` + 真 schema 建库 + 种子不带入 + baseline 反转）/ 整库备份目录（`restoreWorkspaceMirror`）；「隔离→换位→回滚」唯一实现 `replaceWorkspaceWith`。
+  - **移动端**：Kotlin formatVersion 2 / MAX_ENTRIES 500k / SNAPSHOT_DIRS 去 history / 导出 staged 清 note_history / 清单带 baseline ref（JS readBaselineFile 透传）/ PAYLOAD_DIRS +staging·draft-journal·materials。**桌面设置入口**：「从整库备份恢复（完整目录）」+「从便携包导入（覆盖本机）」（迁移包组）；settingsSearch/settingsGroups 钉法同步。zip 读取器三合一 `portable/zipRead.ts`（zipTestReader 已删）。
+  - **门禁**：全量 vitest **1089 文件 / 6913 例 0 failed**；ui-metrics 0；check:core 183/0；check:mobileui 过；check:arch/check:bundle PASS（desktop 582,297/592,000、mobile 340,800/345,000）；tsc 0；compileDebugKotlin 0。文档回填：PORTABLE-TRANSFER v2 / guide/18 重写 / README 换机三条路 / UNINSTALL-DATA / STORAGE-LAYERS sync-v3 位置校正。
+  - **探针新坑（§7#21-22 同类）**：`"portable-import"` 字符串被 `SIDE_EFFECT_IMPORT_RE` 误抓（收紧行首语句位 + 自证用例）；`manifestV2` 函数名撞 versionLiterals「manifest v<数字>」正则（改名 buildManifest）。
+  - **已知边界**：小记图片元数据（quick_note_assets）不随包（文件随包，靠文件↔元数据扫描重建）；移动画板素材在 localStorage 不随快照；>4GiB 大库跨端无包（走整库目录/云拉）。
+
 - **261123 · 复制入口全覆盖（⌘C + 块菜单）**：
   - `attachBlockCopyBridge(container, getBody?)` 新增「单块表格」分支：块菜单「复制 / 复制表格」不再交回内核（内核只写第一格文字），改为从**内核正文**取整表（`tableClipboardModel`）直写剪贴板；`mountBlockHoverHandle` 传入 `editor.getDocument("text/lake")`。
   - **实测**：在 dev 里对文档表格派发块菜单「复制」点击 ⇒ 剪贴板 `text/html` **115 个 `<tr>`**（与 ⌘C 路径同一份正文数据，14873 字节）。
@@ -656,6 +665,12 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261122 · 大统一迁移包批基线（未发版；v1.5.4 之后）**
+
+- 起点 = `master` @ `4b816b63`；本批全部门禁见 §0 记录（全量 vitest 1089 文件 / 6913 例 0 failed；双端 build + check:arch/check:bundle PASS；ui-metrics 0；tsc 0）。
+- 通道数 191 → **195**（+pick_restore_backup_dir / restore_workspace_from_backup_dir / portable_import_pick_file / portable_import_run）。
+- Android debug APK 已构建并安装启动（`android-build.sh --sync --install`，BUILD SUCCESSFUL）；设备级功能点收待用户。
+
 **261121 · 表格粘贴/默认值批基线（未发版；v1.5.4 之后）**
 
 - 起点 = `master` @ `4b816b63`（v1.5.4 + 文档；原工作树停在 v1.2.0 的已合并分支，已切回）。
@@ -830,6 +845,12 @@
 ## 3. 待办（唯一待办清单）
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+
+**261122 大统一迁移包批待办**
+
+- **设备/人工点收（装包已完成）**：① 手机「导出便携包到文件」→ 桌面「从便携包导入」走一遍；② 桌面「导出便携包」→ 手机导入走一遍；③ 桌面「从整库备份恢复（完整目录）」点收；④ 导入后配 S3 确认只做增量（基线随包）。
+- **可选优化**：跨端导入后小记图片元数据（quick_note_assets）为空，靠「重建数据 → 扫描」回填；可考虑导入完成后自动触发一次文件↔元数据扫描。
+- **登记边界**：移动画板素材在 localStorage，不随手机快照（桌面↔桌面走包/目录可带）。
 
 **261122 批待办**
 

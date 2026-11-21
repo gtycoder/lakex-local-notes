@@ -251,6 +251,7 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
   // 261109 桌面 → 手机便携包（docs/PORTABLE-TRANSFER.md）：云开启 + 上轮同步成功 + 无待同步才可用。
   registerPortableIpc(ipc, {
     workspaceRoot: () => deps.workspaceRoot(),
+    stagingParent: () => path.join(app.getPath("userData"), "portable-import"),
     appVersion: () => app.getVersion(),
     snapshotDatabases: (targetRoot) => {
       // 与 A1 整库备份同一套一致性快照口径（VACUUM INTO；独立于运行中的 WAL）。

@@ -41,16 +41,17 @@ class PortablePackagePlugin : Plugin() {
 
     companion object {
         private const val PORTABLE_FORMAT = "lakex-local-notes-portable"
-        private const val PORTABLE_FORMAT_VERSION = 1
+        /** v2（261122 大统一）：一份清单两种布局（desktop-workspace / mobile-snapshot）互导；不写 v1 兼容。 */
+        private const val PORTABLE_FORMAT_VERSION = 2
         /** 只接受最新后缀；旧 .zip 不再兼容（用户 261110 定稿：不为历史数据做兼容）。 */
         private const val PORTABLE_EXTENSION = ".zip.lln"
         private const val PORTABLE_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
         /**
-         * 条目上限：10k 文档 + 100k 附件的真实大库实测便携包 = 110,005 条，旧的 100k 上限会让
-         * 目标规模包在手机上直接报「zip 条目过多」。放宽到 250k（≈2× 余量）；zip bomb 仍由
+         * 条目上限：10k 文档 + 100k 附件实测 = 110,005 条；261122 按目标量级 2 万文档/20 万附件
+         * 放宽到 500k（防炸弹闸，与 core portableFormat 的口径同拍）。zip bomb 仍由
          * 4GiB 包体上限、逐条路径/越界校验、解压总量与落盘空间共同兜底。
          */
-        private const val MAX_ENTRIES = 250_000
+        private const val MAX_ENTRIES = 500_000
         private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
         private const val PAGE_SIZE_MAX = 1000
 
@@ -58,18 +59,20 @@ class PortablePackagePlugin : Plugin() {
         private const val PENDING_FILE = "pending.json"
         private const val MOBILE_DB_FILE = "lakex-local-notes-mobileSQLite.db"
 
-        /** 需要随导入一起改写的正文/资产目录（手机端 = filesDir 下同名相对路径）。 */
+        /** 需要随导入一起改写的正文/资产/草稿/素材目录（手机端 = filesDir 下同名相对路径；v2 全量口径）。 */
         private val PAYLOAD_DIRS = listOf(
             "notes", "usheets", "bitables", "boards", "inks",
-            "note-assets", "quick-notes/items", "quick-notes/assets",
+            "note-assets", "quick-notes/items", "quick-notes/assets", "quick-notes/staging",
+            "draft-journal", "materials",
         )
 
         /** 261117 D 项：移动端导出快照（卸载/换机前的 100% 可靠备份）的包标识。 */
         private const val SNAPSHOT_LAYOUT = "mobile-snapshot"
         private const val SNAPSHOT_PREFIX = "lakex-portable-mobile-"
         private const val EXPORT_ROOT = "portable-export"
-        /** 快照要备份的目录：导入用的 8 个正文/资产目录 **加上** 历史快照与草稿日志（全量备份）。 */
-        private val SNAPSHOT_DIRS = PAYLOAD_DIRS + listOf("history", "draft-journal", "sync-v3")
+        /** 快照要备份的目录：payload（正文/资产/草稿/素材）**加上** sync-v3 基线。
+         *  261122 裁决：历史快照是仅本机数据，**不进导入导出**（导出端还会清 note_history 索引行）。 */
+        private val SNAPSHOT_DIRS = PAYLOAD_DIRS + listOf("sync-v3")
         /** 快照恢复时也要隔离/回滚的额外目录（导入路径不碰它们）。 */
         private val SNAPSHOT_EXTRA_DIRS = listOf("history", "draft-journal", "sync-v3")
 
@@ -219,7 +222,8 @@ class PortablePackagePlugin : Plugin() {
         val source = obj.optJSONObject("source") ?: throw IOException("便携包来源缺失")
         when (source.optString("platform")) {
             "desktop" -> {
-                if (obj.optBoolean("hasHistory", true)) throw IOException("便携包不应包含历史快照")
+                // v2（261122）：清单恒无 hasHistory 字段（历史不进包）；布局必须与来源配对。
+                if (obj.optString("layout") != "desktop-workspace") throw IOException("便携包布局与来源不匹配")
                 // baseline 允许为 null（纯离线包）：此时包内只有内容哈希，不写同步账本。
                 val baseline = obj.optJSONObject("baseline")
                 if (baseline != null && (baseline.optString("epoch").isEmpty() || baseline.optString("lakeCommit").isEmpty() ||
@@ -628,16 +632,18 @@ class PortablePackagePlugin : Plugin() {
     @PluginMethod
     fun exportSnapshot(call: PluginCall) {
         call.setKeepAlive(true)
+        // JS 侧解析 MobileV3Baseline 后把四个 ref 字段传进来（解析口径单一来源在 TS；纯离线传 null）。
+        val baselineRef = call.getObject("baseline")
         Thread {
             try {
-                call.resolve(exportSnapshotInternal())
+                call.resolve(exportSnapshotInternal(baselineRef))
             } catch (e: Exception) {
                 call.reject("导出便携包失败: " + (e.message ?: e.javaClass.simpleName))
             }
         }.start()
     }
 
-    private fun exportSnapshotInternal(): JSObject {
+    private fun exportSnapshotInternal(baselineRef: JSONObject?): JSObject {
         val exportRoot = File(context.filesDir, EXPORT_ROOT).apply { mkdirs() }
         // 清掉上一次导出遗留（同目录只留最新的包，避免占空间）
         exportRoot.listFiles()?.forEach { it.deleteRecursively() }
@@ -659,17 +665,26 @@ class PortablePackagePlugin : Plugin() {
             .put("appVersion", appVersionName())
             .put("exportedAt", isoNow())
             .put("source", JSONObject().put("platform", "mobile"))
-            .put("hasHistory", true)
+            .put("baseline", baselineRef ?: JSONObject.NULL)
             .put("limitBytes", PORTABLE_LIMIT_BYTES)
             .put("counts", counts)
-            .put("note", "明文全量备份（含历史快照/草稿），请妥善保管")
+            .put("note", "明文全量备份（不含历史快照；含草稿/素材/同步基线），请妥善保管")
         try {
             java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(FileOutputStream(outFile))).use { zos ->
                 // 清单先写（用户/工具先看到）
                 writeZipText(zos, "portable.json", manifest.toString())
                 entries += 1
-                // 数据库（关库后复制；wal/shm 一并带上）
-                for (file in dbFiles) {
+                // 数据库（关库后复制；wal/shm 一并带上）。历史索引行在打包前清掉（261122 裁决：
+                // 历史快照不进导入导出 ⇒ 快照库连 note_history 行一起清，包内自洽无悬空条目）。
+                // 只动 staging 副本（本插件仍不写手机业务库）；开副本会顺带合并/清掉其 wal。
+                val scrubDir = File(exportRoot, "scrub").apply { mkdirs() }
+                for (file in dbFiles) file.copyTo(File(scrubDir, file.name), overwrite = true)
+                SQLiteDatabase.openDatabase(
+                    File(scrubDir, MOBILE_DB_FILE).absolutePath, null, SQLiteDatabase.OPEN_READWRITE
+                ).use { scrubDb ->
+                    scrubDb.execSQL("DELETE FROM note_history")
+                }
+                for (file in mainDbFiles(scrubDir)) {
                     bytes += writeZipFile(zos, "mobile/databases/" + file.name, file)
                     entries += 1
                     if (bytes > PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
@@ -688,6 +703,9 @@ class PortablePackagePlugin : Plugin() {
         } catch (e: Exception) {
             outFile.delete()
             throw e
+        } finally {
+            // scrub staging 无条件清理（成功/失败都不留残余）。
+            File(exportRoot, "scrub").deleteRecursively()
         }
         return JSObject()
             .put("ok", true)

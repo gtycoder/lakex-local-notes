@@ -55,10 +55,11 @@ describe("设置页分组归属（重组后）", () => {
     }
   });
 
-  it("备份与恢复 = 整库备份 / 从云端恢复 / 从数据库快照恢复 / 自动备份 / 快照占用 / 上次数据库备份结果 / 导出便携包（独立分类）", () => {
+  it("备份与恢复 = 整库备份 / 整库恢复 / 从云端恢复 / 从数据库快照恢复 / 便携包导入导出 / 自动备份 / 快照占用 / 上次备份结果", () => {
     expect(itemIds("backup").sort()).toEqual([
       "auto-backup", "auto-backup-enabled", "auto-backup-interval", "auto-backup-keep",
-      "backup-export", "backup-import", "backup-last-result", "backup-portable-export", "backup-restore", "backup-usage",
+      "backup-export", "backup-import", "backup-last-result", "backup-portable-export", "backup-portable-import",
+      "backup-restore", "backup-restore-dir", "backup-usage",
     ]);
   });
 

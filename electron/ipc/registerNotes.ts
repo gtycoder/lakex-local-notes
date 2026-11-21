@@ -27,7 +27,7 @@ const insertPosition = (value: unknown): NoteInsertPosition => normalizeNoteInse
 const sortAnchor = (value: unknown): number | undefined => (Number.isInteger(value) ? (value as number) : undefined);
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
-import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
+import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, restoreWorkspaceMirror, writeS3RestoreSeed } from "../workspaceBackup.js";
 import { isRememberedRestoreCandidate, rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "../workspaceRestoreFromBackup.js";
 import { backupsDir } from "../autoBackup.js";
 import { pickedExportDir, rememberPickedExportDir } from "./exportDirState.js";
@@ -276,6 +276,30 @@ export function registerNotesIpc(
     }
     store.logScopes.store.info("[restore-backup] 成功，原库隔离到 " + result.quarantinePath);
     return { ok: true as const, quarantinePath: result.quarantinePath, message: result.message, requiresRestart: true as const };
+  });
+  // ---- A3 整库导入（目录模式）：选「整库备份」目录 → 整目录恢复（校验/隔离/回滚在 restoreWorkspaceMirror）----
+  let lastPickedRestoreDir: string | null = null;
+  ipc.handle("pick_restore_backup_dir", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择整库备份目录",
+      buttonLabel: "选择此目录",
+      properties: ["openDirectory"],
+    });
+    lastPickedRestoreDir = result.canceled ? null : (result.filePaths[0] ?? null);
+    return lastPickedRestoreDir;
+  });
+  ipc.handle("restore_workspace_from_backup_dir", (dir: string) => {
+    if (dir !== lastPickedRestoreDir) throw new IpcInputError("备份目录无效：请先通过系统选择框选择目录");
+    return enqueueMaintenance(async () => {
+      const result = restoreWorkspaceMirror({ backupDir: dir, workspaceRoot });
+      if (!result.ok) {
+        store.logScopes.store.error("[restore-mirror] 失败 " + (result.reason ?? "") + (result.rolledBack ? "（已回滚）" : "（回滚失败，需人工检查）"));
+        throw new IpcInputError("整库恢复失败：" + (result.reason ?? "未知原因") + (result.rolledBack === false ? "；且回滚失败，请人工检查工作区目录" : ""));
+      }
+      store.logScopes.store.info("[restore-mirror] 成功，原工作区隔离到 " + (result.quarantinePath ?? "（无）"));
+      return { ok: true as const, quarantinePath: result.quarantinePath, quickNotesRestored: result.quickNotesRestored, message: result.message, requiresRestart: true as const };
+    });
   });
   ipc.handle("set_node_icon", (id: string, icon: unknown) => store.setNodeIcon(id, assertIcon(icon)));
   ipc.handle("search_notes", (query: unknown, limit?: unknown) => {

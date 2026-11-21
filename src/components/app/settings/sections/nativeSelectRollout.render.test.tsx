@@ -209,7 +209,9 @@ const backupCtx = (over: Partial<SettingsPanelContext> = {}) => ({
   runBackupNow: vi.fn(),
   runCloudRestore: vi.fn(),
   runPortableExport: vi.fn(),
+  runPortableImport: vi.fn(),
   runRestoreFromBackup: vi.fn(),
+  runRestoreFromBackupDir: vi.fn(),
   saveBackupCfg: vi.fn(),
   ...over,
 }) as unknown as SettingsPanelContext;

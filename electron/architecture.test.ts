@@ -151,10 +151,6 @@ const TEST_SUPPORT_FILES: readonly TestSupportEntry[] = [
     reason: "文件版 DeviceStore 测试替身（给 deviceConformance 用），无生产调用点。",
   },
   {
-    file: "portable/zipTestReader.ts",
-    reason: "便携包（.zip.lln）测试用的 zip 读取器，仅测试解包断言使用。",
-  },
-  {
     file: "testing/sourceText.ts",
     reason: "测试专用源码工具（剥注释后再做文本断言 / 扫 import）；被 architecture、buildContract、aiThinkingIpc 三个门禁共用，不进产物。",
   },
@@ -168,7 +164,10 @@ const TEST_SUPPORT_FILES: readonly TestSupportEntry[] = [
 
 const STATIC_IMPORT_RE = /\b(?:import|export)\b\s+([\s\S]*?)\s+from\s*["']([^"']+)["']/g;
 const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-const SIDE_EFFECT_IMPORT_RE = /\bimport\s*["']([^"']+)["']/g;
+// 261122 修正：副作用 import 必须出现在**行首语句位**（剥注释后 ^[\t ]*import[\t ]*["']）。
+// 旧写法 /\bimport\s*["']/ 会被字符串字面量误伤（实测 "portable-import" 里的 import 把
+// 后续文本当 specifier 抓走，R6 假红）。自证样本见「import 扫描正则自证」用例。
+const SIDE_EFFECT_IMPORT_RE = /^[\t ]*import[\t ]*["']([^"']+)["']/gm;
 
 interface ImportRef {
   readonly file: string;
@@ -450,5 +449,18 @@ describe("R6 external 从 dependencies 派生（A-6）", () => {
     expect(viteConfig).toContain("mainPkg.dependencies");
     // 防回退：不允许出现「把包名逐个写进 external 数组」的旧写法
     expect(/external:\s*\[[^\]]*(better-sqlite3|sharp|electron-log)/.test(viteConfig), "external 不允许硬编码包名清单").toBe(false);
+  });
+});
+
+
+describe("import 扫描正则自证（261122：防误伤 + 防静默失效）", () => {
+  it("SIDE_EFFECT_IMPORT_RE：抓得住行首/缩进的真实副作用 import，抓不走字符串里的 import 字样", () => {
+    // 已知会命中的样本（正则改动后必须自证，不能只看跑通；/g 正则用 matchAll 取捕获组）
+    const hit = (source: string): string | undefined => [...source.matchAll(SIDE_EFFECT_IMPORT_RE)][0]?.[1];
+    expect(hit('import "./x.js";')).toBe("./x.js");
+    expect(hit('\n  import "./indented.js";')).toBe("./indented.js");
+    // 已知不该命中的样本（261122 R6 假红现场："portable-import" 字符串被误抓）
+    expect(hit('stagingParent: () => path.join(x, "portable-import"),')).toBeUndefined();
+    expect(hit('const a = "has import \"quoted\" too";')).toBeUndefined();
   });
 });

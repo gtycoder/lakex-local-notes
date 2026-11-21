@@ -33,6 +33,9 @@ import type { SearchResult } from "../../src/core/searchTypes.js";
 
 import { assetDirOf, itemPathOf, nowIso, quickImageUrlOf, type QuickNotePaths } from "./context.js";
 import { migrateQuickNotesSchema } from "./schema.js";
+// 261122 大统一迁移包：桌面导入手机快照时要对灌库跑同一份小记 schema（portable 层只允许依赖
+// domain ⇒ 从门面 quickNotes.ts 走到这里；schema 实现仍是 schema.ts 单一来源）。
+export { migrateQuickNotesSchema } from "./schema.js";
 import {
   ensureQuickNoteSearchIndex,
   rebuildQuickNoteSearchIndex,

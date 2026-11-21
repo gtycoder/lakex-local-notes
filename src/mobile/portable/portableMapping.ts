@@ -16,25 +16,9 @@ import {
 } from "../../core/s3v3/protocol/s3v3Index";
 import type { MobileV3Baseline } from "../data/v3StateRepository";
 import { normalizeFolderSpace } from "../../core/diary";
+import { asText, asTextOr, asInt, asBoolInt } from "../../core/portable/portableRows";
 
 export type DesktopRow = Record<string, unknown>;
-
-const asText = (value: unknown): string | null =>
-  typeof value === "string" && value.length > 0 ? value : null;
-
-const asTextOr = (value: unknown, fallback: string): string =>
-  typeof value === "string" && value.length > 0 ? value : fallback;
-
-const asInt = (value: unknown, fallback = 0): number => {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return Math.trunc(parsed);
-  }
-  return fallback;
-};
-
-const asBoolInt = (value: unknown): number => (value === true || value === 1 || value === "1" ? 1 : 0);
 
 /** 手机 notes 行（schema.ts 的 NOT NULL 列全部给值）。 */
 export interface MobileNoteRow {

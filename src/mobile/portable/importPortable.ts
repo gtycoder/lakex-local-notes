@@ -9,7 +9,7 @@
  *
  * 映射纯逻辑在 ./portableMapping.ts；原生边界在 ../native/portablePackage.ts。
  */
-import { PORTABLE_LIMIT_BYTES, parsePortableManifest, type PortableCounts, type PortableManifest } from "../../core/portable/portableFormat";
+import { isMobileSnapshotManifest, parsePortableManifest, type PortableCounts, type PortableManifest } from "../../core/portable/portableFormat";
 import { executeBatch, type MobileBatchStatement, type MobileDb } from "../data/sqliteDb";
 import { closeDbForPortableImport, ensureDb, reopenDbForPortableImport } from "../bridge/context";
 import { ensureV3StateTable, saveV3State, EMPTY_MOBILE_V3_STATE } from "../data/v3StateRepository";
@@ -43,68 +43,18 @@ import {
 } from "./portableMapping";
 
 /**
- * 手机整机快照清单（261117 D 项：设置 → 关于 → 卸载与换机 → 导出便携包到文件）。
- *
- * 与桌面便携包的**格式外壳相同**（format/formatVersion/limitBytes/counts），但 layout/source 不同：
- * source.platform=mobile、layout=mobile-snapshot，包内是手机自己的数据库 + 全部 files 目录。
- * 恢复走原生整机回滚（nativeRestorePortableSnapshot），不做桌面行映射。
+ * 便携包清单统一走 core 单一校验（261122 大统一 v2）：desktop-workspace 与 mobile-snapshot
+ * 两种布局共用 PortableManifest；手机整机快照 = layout=mobile-snapshot（source.platform=mobile），
+ * 包内是手机自己的数据库 + 全部 files 目录，恢复走原生整机回滚（nativeRestorePortableSnapshot），
+ * 不做桌面行映射。
  */
-export interface MobileSnapshotManifest {
-  format: string;
-  formatVersion: 1;
-  appVersion: string;
-  exportedAt: string;
-  source: { platform: "mobile" };
-  layout: "mobile-snapshot";
-  hasHistory: true;
-  limitBytes: number;
-  counts: { notes?: number; folders?: number; quickNotes?: number; tags?: number; assets?: number; bytes?: number };
-  note?: string;
-}
+export { isMobileSnapshotManifest };
 
 export interface StagedPortablePackage {
   stagingPath: string;
-  manifest: PortableManifest | MobileSnapshotManifest;
+  manifest: PortableManifest;
   bytes: number;
   entries: number;
-}
-
-/** 是否为手机整机快照（决定走「整机恢复」还是「桌面行映射导入」）。 */
-export function isMobileSnapshotManifest(manifest: StagedPortablePackage["manifest"]): manifest is MobileSnapshotManifest {
-  return (manifest as MobileSnapshotManifest).layout === "mobile-snapshot";
-}
-
-function parseMobileSnapshotManifest(raw: unknown): MobileSnapshotManifest {
-  if (!raw || typeof raw !== "object") throw new Error("快照清单不是对象");
-  const value = raw as Record<string, unknown>;
-  if (value.format !== "lakex-local-notes-portable") throw new Error("不是 LakexLocalNotes 便携包");
-  if (value.formatVersion !== 1) throw new Error("便携包格式版本不支持");
-  if (value.layout !== "mobile-snapshot") throw new Error("快照布局不支持");
-  const source = value.source as Record<string, unknown> | undefined;
-  if (!source || source.platform !== "mobile") throw new Error("快照来源非法");
-  if (typeof value.appVersion !== "string" || typeof value.exportedAt !== "string") throw new Error("快照元数据非法");
-  if (value.limitBytes !== PORTABLE_LIMIT_BYTES) throw new Error("便携包上限声明不匹配");
-  const counts = value.counts as Record<string, unknown> | undefined;
-  if (!counts) throw new Error("快照 counts 非法");
-  const picked: MobileSnapshotManifest["counts"] = {};
-  for (const key of ["notes", "folders", "quickNotes", "tags", "assets", "bytes"] as const) {
-    const raw = counts[key];
-    if (raw === undefined) continue;
-    if (!Number.isInteger(raw) || (raw as number) < 0) throw new Error("快照 counts." + key + " 非法");
-    picked[key] = raw as number;
-  }
-  return {
-    format: "lakex-local-notes-portable",
-    formatVersion: 1,
-    appVersion: value.appVersion,
-    exportedAt: value.exportedAt,
-    source: { platform: "mobile" },
-    layout: "mobile-snapshot",
-    hasHistory: true,
-    limitBytes: PORTABLE_LIMIT_BYTES,
-    counts: picked,
-    note: typeof value.note === "string" ? value.note : undefined,
-  };
 }
 
 export type PortableImportPhase =
@@ -152,10 +102,8 @@ export async function pickPortablePackageForImport(): Promise<StagedPortablePack
   }
   let manifest: StagedPortablePackage["manifest"];
   try {
-    const raw: unknown = JSON.parse(picked.manifestJson);
-    manifest = isMobileSnapshotManifest(raw as StagedPortablePackage["manifest"])
-      ? parseMobileSnapshotManifest(raw)
-      : parsePortableManifest(raw);
+    // 261122 大统一：一份校验器管两种布局（desktop-workspace / mobile-snapshot），按 layout 分派。
+    manifest = parsePortableManifest(JSON.parse(picked.manifestJson));
   } catch (error) {
     await nativeDiscardPortableStaging(picked.stagingPath);
     throw new Error("便携包无效：" + (error instanceof Error ? error.message : String(error)));

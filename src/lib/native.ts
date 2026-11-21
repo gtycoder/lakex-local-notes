@@ -195,6 +195,14 @@ export interface LakeNative {
   pickBackupDatabase(): Promise<{ path: string; name: string } | null>;
   /** Batch4-A：从备份恢复主库（校验→隔离原库→替换）；成功后需重启应用。失败抛错（含回滚说明）。 */
   restoreWorkspaceFromBackup(filePath: string): Promise<{ ok: true; quarantinePath?: string; message?: string; requiresRestart: true }>;
+  /** A3 整库导入：系统选择框选「整库备份」目录；取消返回 null。 */
+  pickRestoreBackupDir(): Promise<string | null>;
+  /** A3 整库导入：备份目录整目录恢复（校验→隔离当前工作区→全量拷回）；成功后需重启应用。失败抛错（含回滚说明）。 */
+  restoreWorkspaceFromBackupDir(dir: string): Promise<{ ok: true; quarantinePath?: string; quickNotesRestored?: boolean; message?: string; requiresRestart: true }>;
+  /** 便携包导入：系统文件选择框选 .zip.lln；取消返回 null。 */
+  portableImportPickFile(): Promise<string | null>;
+  /** 便携包导入（覆盖式）：校验→staging 换位（失败回滚）；成功后需重启应用。失败抛错（含回滚说明）。 */
+  portableImportRun(): Promise<{ ok: boolean; quarantinePath?: string; quickNotesRestored?: boolean; requiresRestart?: boolean; message?: string }>;
   /** 261105：低频文件↔元数据扫描配置（小时，0 = 关闭后台扫描）。 */
   getFileScanSettings(): Promise<{ intervalHours: number }>;
   saveFileScanSettings(settings: { intervalHours: number }): Promise<{ intervalHours: number }>;
@@ -517,6 +525,10 @@ export const native = {
   confirmRelaunch: () => api().confirmRelaunch(),
   pickBackupDatabase: () => api().pickBackupDatabase(),
   restoreWorkspaceFromBackup: (filePath: string) => api().restoreWorkspaceFromBackup(filePath),
+  pickRestoreBackupDir: () => api().pickRestoreBackupDir(),
+  restoreWorkspaceFromBackupDir: (dir: string) => api().restoreWorkspaceFromBackupDir(dir),
+  portableImportPickFile: () => api().portableImportPickFile(),
+  portableImportRun: () => api().portableImportRun(),
   getFileScanSettings: () => api().getFileScanSettings(),
   saveFileScanSettings: (settings: { intervalHours: number }) => api().saveFileScanSettings(settings),
   getBackupSettings: () => api().getBackupSettings(),

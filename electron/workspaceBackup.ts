@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
+import { inspectBackupDatabase, inspectQuickNotesDatabase } from "./workspaceRestoreFromBackup.js";
 
 const SQLITE_BASENAMES = new Set(["metadata.sqlite3", "metadata.sqlite3-wal", "metadata.sqlite3-shm"]);
 
@@ -71,6 +72,131 @@ export function prepareCloudRestore(workspaceRoot: string): { quarantinePath: st
 export function relaunchApp(): void {
   app.relaunch();
   app.exit(0);
+}
+
+
+// ---- A3 整库导入（目录模式；PORTABLE-TRANSFER.md §4）：备份目录整目录恢复 ----
+
+export interface MirrorRestoreFsOps {
+  existsSync: (target: string) => boolean;
+  readdirSync: (target: string) => fs.Dirent[];
+  mkdirSync: (target: string, options?: { recursive?: boolean }) => void;
+  renameSync: (from: string, to: string) => void;
+  cpSync: (from: string, to: string) => void;
+  rmSync: (target: string, options?: { recursive?: boolean; force?: boolean }) => void;
+}
+
+export interface MirrorRestoreOptions {
+  backupDir: string;
+  workspaceRoot: string;
+  /** 测试用：覆盖文件操作（缺省 = node:fs）。 */
+  fsOps?: Partial<MirrorRestoreFsOps>;
+}
+
+export interface MirrorRestoreResult {
+  ok: boolean;
+  reason?: string;
+  /** 失败时是否已把原工作区移回（false = 回滚也失败，必须人工介入）。 */
+  rolledBack?: boolean;
+  /** 成功时原工作区的隔离目录（**不删除**，可手动找回；全新机器没有隔离时为 undefined）。 */
+  quarantinePath?: string;
+  /** 备份是否包含小记库（false = 旧备份只有主库，恢复后标签/小记为空）。 */
+  quickNotesRestored?: boolean;
+  message?: string;
+}
+
+
+/** 工作区换位选项（A3 整库导入 / 便携包导入共用同一套「隔离 → 落新 → 回滚」）。 */
+export interface WorkspaceReplaceOptions {
+  workspaceRoot: string;
+  /** 旧工作区隔离后，把新工作区内容落到 workspaceRoot（rename staging 或 copy 备份目录）；抛错即回滚。 */
+  materialize: (workspaceRoot: string) => void;
+  quickNotesRestored: boolean;
+  /** 成功文案的开头（例如「已从备份整库恢复」「便携包已导入」）。 */
+  describe: string;
+}
+
+/**
+ * 唯一的「换位 + 回滚」实现：当前工作区改名隔离（不删除）→ materialize 落新工作区；
+ * 任何失败都把旧工作区移回（回滚失败如实报告 rolledBack=false）。
+ */
+export function replaceWorkspaceWith(options: WorkspaceReplaceOptions): MirrorRestoreResult {
+  const workspaceRoot = path.resolve(options.workspaceRoot);
+  const quarantinePath = path.join(path.dirname(workspaceRoot), quarantineDirName());
+  const hadWorkspace = fs.existsSync(workspaceRoot);
+  let quarantined = false;
+  try {
+    if (hadWorkspace) {
+      fs.mkdirSync(path.dirname(workspaceRoot), { recursive: true });
+      fs.renameSync(workspaceRoot, quarantinePath);
+      quarantined = true;
+    }
+    options.materialize(workspaceRoot);
+  } catch (error) {
+    try { fs.rmSync(workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
+    let rolledBack = true;
+    if (quarantined) {
+      try { fs.renameSync(quarantinePath, workspaceRoot); } catch { rolledBack = false; }
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: detail, rolledBack };
+  }
+  return {
+    ok: true,
+    quarantinePath: quarantined ? quarantinePath : undefined,
+    quickNotesRestored: options.quickNotesRestored,
+    message: options.describe + "。" + (quarantined ? "原工作区已隔离保留在 " + quarantinePath + "（未删除）；" : "") + "请重启应用后生效。",
+  };
+}
+
+/**
+ * 从「整库备份」目录整库恢复（校验 → 隔离当前工作区 → 全量拷回 → 需重启）。
+ * 与 Batch4-A「从数据库快照恢复」（只换两份库）互补：同端/大库/含历史归档走这条路；
+ * 失败时尽最大努力回滚（校验阶段失败保证一个文件都没动）。
+ */
+export function restoreWorkspaceMirror(options: MirrorRestoreOptions): MirrorRestoreResult {
+  const ops: MirrorRestoreFsOps = {
+    existsSync: fs.existsSync,
+    readdirSync: (target) => fs.readdirSync(target, { withFileTypes: true }),
+    mkdirSync: (target, opts) => { fs.mkdirSync(target, opts); },
+    renameSync: fs.renameSync,
+    cpSync: (from, to) => { fs.cpSync(from, to, { recursive: true }); },
+    rmSync: (target, opts) => { fs.rmSync(target, opts); },
+    ...options.fsOps,
+  };
+  const backupDir = path.resolve(options.backupDir);
+  const workspaceRoot = path.resolve(options.workspaceRoot);
+  // 守卫：备份目录不能是工作区自己或其子目录（防自嵌套拷贝与「把备份一起隔离」）。
+  if (backupDir === workspaceRoot || backupDir.startsWith(workspaceRoot + path.sep)) {
+    return { ok: false, reason: "备份目录不能位于工作区内部，请选择外部的备份目录" };
+  }
+  const backupMainDb = path.join(backupDir, "metadata.sqlite3");
+  if (!ops.existsSync(backupMainDb)) {
+    return { ok: false, reason: "备份目录无效：缺少 metadata.sqlite3（请选择「整库备份」产生的目录）" };
+  }
+  const mainInspection = inspectBackupDatabase(backupMainDb);
+  if (!mainInspection.ok) return { ok: false, reason: "备份主库校验未通过：" + (mainInspection.reason ?? "未知原因") };
+  const backupQuickDb = path.join(backupDir, "quick-notes", "metadata.sqlite3");
+  const hasQuick = ops.existsSync(backupQuickDb);
+  if (hasQuick) {
+    const quickInspection = inspectQuickNotesDatabase(backupQuickDb);
+    if (!quickInspection.ok) return { ok: false, reason: "备份小记库校验未通过：" + (quickInspection.reason ?? "未知原因") };
+  }
+
+  // 隔离 → 拷回 → 回滚统一走 replaceWorkspaceWith（materialize = 目录拷贝）。
+  return replaceWorkspaceWith({
+    workspaceRoot,
+    quickNotesRestored: hasQuick,
+    describe: hasQuick
+      ? "已从备份整库恢复（主库 + 小记库）"
+      : "已从备份整库恢复（备份中无小记库，恢复后标签/小记为空）",
+    materialize: (freshRoot) => {
+      ops.mkdirSync(freshRoot, { recursive: true });
+      for (const entry of ops.readdirSync(backupDir)) {
+        ops.cpSync(path.join(backupDir, entry.name), path.join(freshRoot, entry.name));
+      }
+    },
+  });
 }
 
 /** A2：S3 凭据跨恢复保留 seed（重启后 main 读入新库再删除）。固定名放新 workspace 根。 */

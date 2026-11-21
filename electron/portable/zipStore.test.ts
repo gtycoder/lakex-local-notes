@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { crc32, PortableSizeError, validateZipEntryName, writeStoreZip, type ZipEntrySource } from "./zipStore.js";
-import { readStoreZip, readStoreZipNames } from "./zipTestReader.js";
+import { readStoreZip, readStoreZipNames } from "./zipRead.js";
 
 const tempDirs: string[] = [];
 

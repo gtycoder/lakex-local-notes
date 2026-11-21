@@ -109,7 +109,7 @@ PORTABLE_2GB=1 LAKE_SCALE_SEED_ROOT=/tmp/lake-scale-seed-<ts> \
   本地头签名与 CRC/大小一致；
 - **manifest**：`parsePortableManifest` 全量（format/formatVersion/hasHistory/limitBytes/source/counts/baseline）；
 - **计数**：`counts.bytes === 所有条目数据字节和`；`counts.notes/assets/quickNotes/folders/tags` 与条目前缀统计一致；
-- **白名单**：不含 `history/`、`draft-journal/`、`logs/`、`backups/`、`settings.json`、`window-state.json`、
+- **白名单**：不含 `history/`、`logs/`、`backups/`、`settings.json`、`window-state.json`、（v2 261122 起 `draft-journal/`/`materials/`/`quick-notes/staging/` 随包）、
   `sync-v3/state.json`、`sync-v3/baseline.json.gz`；所有条目路径安全（无 `..`/绝对路径/反斜杠/空段）；
 - **抽样读回**：manifest + 两个 DB（SQLite magic）+ baseline + 正文（含种子正文标记）+ 若干附件
   （按本地头偏移真实读数据并重算 CRC32）；2GB 包不能整包进内存，这里用按需 seek 的流式校验

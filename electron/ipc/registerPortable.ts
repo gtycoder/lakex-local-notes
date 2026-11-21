@@ -18,9 +18,12 @@ import type {
   PortableExportStatus,
 } from "../../src/core/portable/portableFormat.js";
 import { exportPortablePackage } from "../portable/portableExport.js";
+import { importPortablePackageOnDesktop } from "../portable/portableImport.js";
 
 export interface PortableIpcDeps {
   workspaceRoot: () => string;
+  /** 导入 staging 父目录（与工作区同卷；main 注入 <userData>/portable-import）。 */
+  stagingParent: () => string;
   appVersion: () => string;
   /** 主库 + 小记库 VACUUM INTO 到 targetRoot（main 里接 store/quickNotes）。 */
   snapshotDatabases: (targetRoot: string) => void;
@@ -34,7 +37,20 @@ export interface PortableIpcDeps {
   broadcastProgress?: (progress: PortableExportProgress) => void;
   /** 覆盖系统目录选择（测试注入）；缺省用 Electron dialog。 */
   pickDirectory?: () => Promise<string | null>;
+  /** 覆盖便携包文件选择（测试注入）；缺省用 Electron dialog（.zip.lln）。 */
+  pickPackageFile?: () => Promise<string | null>;
   now?: () => Date;
+}
+
+async function defaultPickPackageFile(): Promise<string | null> {
+  const result = await dialog.showOpenDialog({
+    title: "选择便携包",
+    buttonLabel: "导入",
+    filters: [{ name: "LakexLocalNotes 便携包", extensions: ["lln"] }],
+    properties: ["openFile"],
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0] ?? null;
 }
 
 async function defaultPickDirectory(): Promise<string | null> {
@@ -49,7 +65,9 @@ async function defaultPickDirectory(): Promise<string | null> {
 
 export function registerPortableIpc(ipc: IpcRegistrar, deps: PortableIpcDeps): void {
   let pickedDir: string | null = null;
+  let pickedPackage: string | null = null;
   let running = false;
+  let importRunning = false;
   let lastExport: PortableExportStatus["lastExport"] = null;
 
   ipc.handle("portable_export_status", (): PortableExportStatus => {
@@ -61,6 +79,32 @@ export function registerPortableIpc(ipc: IpcRegistrar, deps: PortableIpcDeps): v
     const dir = await (deps.pickDirectory ?? defaultPickDirectory)();
     if (dir) pickedDir = dir;
     return dir;
+  });
+
+  ipc.handle("portable_import_pick_file", async () => {
+    const file = await (deps.pickPackageFile ?? defaultPickPackageFile)();
+    if (file) pickedPackage = file;
+    return file;
+  });
+
+  ipc.handle("portable_import_run", async () => {
+    if (importRunning) throw new IpcInputError("已有导入任务在进行中，请稍候");
+    if (!pickedPackage) throw new IpcInputError("请先选择便携包文件");
+    const zipPath = pickedPackage;
+    importRunning = true;
+    try {
+      const result = importPortablePackageOnDesktop({
+        zipPath,
+        workspaceRoot: deps.workspaceRoot(),
+        stagingParent: deps.stagingParent(),
+      });
+      if (!result.ok) {
+        throw new IpcInputError("便携包导入失败：" + (result.reason ?? "未知原因") + (result.rolledBack === false ? "；且回滚失败，请人工检查工作区目录" : ""));
+      }
+      return result;
+    } finally {
+      importRunning = false;
+    }
   });
 
   ipc.handle("portable_export_run", async (): Promise<PortableExportResult> => {

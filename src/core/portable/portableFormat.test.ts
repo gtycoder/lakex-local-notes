@@ -1,34 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { PORTABLE_LIMIT_BYTES, assertPortableSize, parsePortableManifest, portableExportAvailability, portableExportCloudActive, type PortableExportAvailabilityInput } from "./portableFormat";
+import { PORTABLE_LIMIT_BYTES, assertPortableSize, isMobileSnapshotManifest, parsePortableManifest, portableExportAvailability, portableExportCloudActive, type PortableExportAvailabilityInput } from "./portableFormat";
 
-describe("portableFormat（共享格式/可用性）", () => {
-  it("清单校验：合法通过、坏 format/版本/hasHistory/上限/counts 拒绝", () => {
-    const valid = {
-      format: "lakex-local-notes-portable",
-      formatVersion: 1,
-      appVersion: "1.0.4",
-      exportedAt: "2026-11-09T12:00:00Z",
-      source: { platform: "desktop" },
-      hasHistory: false,
-      limitBytes: PORTABLE_LIMIT_BYTES,
-      counts: { notes: 1, folders: 0, quickNotes: 0, tags: 0, assets: 0, bytes: 10 },
-      baseline: { epoch: "e", generation: 1, lakeCommit: "lc", quickNotesCommit: "qc" },
-    };
-    expect(parsePortableManifest(valid).counts.notes).toBe(1);
-    expect(parsePortableManifest({ ...valid, baseline: null }).baseline).toBeNull();
+const validDesktop = {
+  format: "lakex-local-notes-portable",
+  formatVersion: 2,
+  appVersion: "1.5.5",
+  exportedAt: "2026-11-22T02:00:00Z",
+  source: { platform: "desktop" },
+  layout: "desktop-workspace",
+  limitBytes: PORTABLE_LIMIT_BYTES,
+  counts: { notes: 1, folders: 0, quickNotes: 0, tags: 0, assets: 0, bytes: 10 },
+  baseline: { epoch: "e", generation: 1, lakeCommit: "lc", quickNotesCommit: "qc" },
+};
+
+describe("portableFormat（大统一迁移包 v2 共享格式/可用性）", () => {
+  it("清单校验：desktop/mobile 两种布局都合法，坏 format/版本/上限/布局/counts/baseline 拒绝", () => {
+    expect(parsePortableManifest(validDesktop).counts.notes).toBe(1);
+    expect(parsePortableManifest({ ...validDesktop, baseline: null }).baseline).toBeNull();
+    const validMobile = { ...validDesktop, source: { platform: "mobile" }, layout: "mobile-snapshot" };
+    const parsedMobile = parsePortableManifest(validMobile);
+    expect(parsedMobile.source.platform).toBe("mobile");
+    expect(isMobileSnapshotManifest(parsedMobile)).toBe(true);
+    expect(isMobileSnapshotManifest(parsePortableManifest(validDesktop))).toBe(false);
     for (const broken of [
-      { ...valid, format: "x" },
-      { ...valid, formatVersion: 2 },
-      { ...valid, hasHistory: true },
-      { ...valid, limitBytes: 1 },
-      { ...valid, counts: { notes: -1 } },
-      { ...valid, baseline: { epoch: "e" } },
+      { ...validDesktop, format: "x" },
+      { ...validDesktop, formatVersion: 1 },          // v1 不写兼容（261122：旧包用新版重导）
+      { ...validDesktop, formatVersion: 3 },
+      { ...validDesktop, limitBytes: 1 },
+      { ...validDesktop, layout: "mobile-snapshot" }, // 布局与来源不匹配
+      { ...validMobile, layout: "desktop-workspace" },
+      { ...validDesktop, source: { platform: "ios" } },
+      { ...validDesktop, source: {} },
+      { ...validDesktop, counts: { notes: -1 } },
+      { ...validDesktop, counts: undefined },
+      { ...validDesktop, baseline: { epoch: "e" } },
     ]) {
       expect(() => parsePortableManifest(broken)).toThrow();
     }
   });
 
-  it("4GiB 上限：99% 以内放行，逼近上限抛错", () => {
+  it("4GiB 上限：99% 以内放行，逼近上限抛错（261122 维持 4GiB，不做 5GiB）", () => {
     expect(() => assertPortableSize(1024)).not.toThrow();
     expect(() => assertPortableSize(PORTABLE_LIMIT_BYTES * 0.99)).not.toThrow();
     expect(() => assertPortableSize(PORTABLE_LIMIT_BYTES * 0.995)).toThrow("4GiB");

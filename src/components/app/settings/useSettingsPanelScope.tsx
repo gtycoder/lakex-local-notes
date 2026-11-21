@@ -296,6 +296,50 @@ let verifiedS3Fingerprint: string | null = null;
     });
   };
 
+  /** A3 整库导入（目录模式；261122 大统一）：选「整库备份」目录 → 校验/隔离/整目录拷回 → 重启生效。 */
+  const runRestoreFromBackupDir = async () => {
+    if (!hostCapabilities().localFileSystem) { backup.setMessage("浏览器端不支持整库恢复（需重启本机应用，请在桌面端操作）"); return; }
+    const dir = await backup.run(async () => native.pickRestoreBackupDir());
+    if (!dir) return;
+    if (!(await confirm({
+      title: "从整库备份恢复（覆盖本机）？",
+      body: `将用备份目录「${dir}」整库替换当前工作区：① 备份先校验（两库完整性/关键表/外键）；② 当前工作区整体改名隔离（不删除、可找回，含正文/资源/历史）；③ 备份全量拷回后需要重启应用生效。这是覆盖式恢复。`,
+      confirmText: "继续",
+      danger: true,
+    }))) return;
+    await backup.run(async () => {
+      const result = await native.restoreWorkspaceFromBackupDir(dir);
+      await notice({
+        title: "已从整库备份恢复",
+        body: <>原工作区已隔离保留在：<div className="note-info-path">{result.quarantinePath ?? "（见日志）"}</div>应用即将重启后生效。</>,
+      });
+      await native.confirmRelaunch();
+      return "已从整库备份恢复，正在重启…";
+    }, { errorPrefix: "整库恢复失败：" });
+  };
+
+  /** 便携包导入（覆盖本机；261122 大统一）：选 .zip.lln → 校验/staging 换位（失败回滚）→ 重启生效。 */
+  const runPortableImport = async () => {
+    if (!hostCapabilities().localFileSystem) { portable.setMessage("浏览器端不支持便携包导入（需重启本机应用，请在桌面端操作）"); return; }
+    const picked = await portable.run(async () => native.portableImportPickFile());
+    if (!picked) return;
+    if (!(await confirm({
+      title: "从便携包导入（覆盖本机）？",
+      body: "将用便携包整库替换当前工作区（跨端数据：正文/表格/多维表/画板/手写板/小记/标签/回收站/草稿/素材/同步基线；不含历史快照与 AI 会话）：① 包先校验（v2/上限/清单）；② 当前工作区整体改名隔离（不删除、可找回）；③ 导入后需要重启应用生效。S3 密钥不随包：如需增量同步请在「云端与同步」重新配置（包内带同步基线，配好即增量）。",
+      confirmText: "继续",
+      danger: true,
+    }))) return;
+    await portable.run(async () => {
+      const result = await native.portableImportRun();
+      await notice({
+        title: "便携包已导入",
+        body: <>{result.quarantinePath ? <>原工作区已隔离保留在：<div className="note-info-path">{result.quarantinePath}</div></> : null}应用即将重启后生效。</>,
+      });
+      await native.confirmRelaunch();
+      return "便携包已导入，正在重启…";
+    }, { errorPrefix: "便携包导入失败：" });
+  };
+
   /** 261105：保存后台扫描间隔（小时，0 = 关闭）；成功后刷新体检数据（显示新间隔/启用状态）。 */
   const saveScanInterval = (intervalHours: number) => {
     setScanIntervalHours(intervalHours);
@@ -713,7 +757,7 @@ let verifiedS3Fingerprint: string | null = null;
 
 
   return {
-    open, settings, onClose, onChange, openCategory, onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured, cloudEnabled, category, setCategory, navQuery, setNavQuery, navSearchRef, floating, confirm, notice, confirmElement, stats, setStats, histCfg, setHistCfg, lastCleanup, setLastCleanup, health, setHealth, logRows, setLogRows, logKeyword, setLogKeyword, s3, setS3, s3VerifiedFp, setS3VerifiedFp, s3Verified, syncGateAlert, setSyncGateAlert, markS3Verified, invalidateS3Verified, s3ImportOpen, setS3ImportOpen, aiView, setAiView, aiMsg, setAiMsg, aiEnabled, setAiEnabled, defaultSpace, setDefaultSpace, aiEnableAlert, setAiEnableAlert, aiErr, setAiErr, aiDraft, setAiDraft, aiKeyVisible, setAiKeyVisible, aiModels, setAiModels, aiManualModel, setAiManualModel, aiForceSave, setAiForceSave, activeAi, aiProviderId, activeDef, aiPending, resetAiDraft, saveAi, aiPendingPatch, switchAiProvider, fetchAiModels, testAi, testAndSaveAi, forceSaveAi, gcCfg, setGcCfg, gcLog, setGcLog, syncMsg, setSyncMsg, webStatus, setWebStatus, syncCfg, setSyncCfg, cloudState, cloudOffline, sysInfo, setSysInfo, pendingHit, setPendingHit, diagMsg, setDiagMsg, syncReports, setSyncReports, syncDiagMsg, setSyncDiagMsg, scanIntervalHours, setScanIntervalHours, backupCfg, setBackupCfg, backupSnapshot, setBackupSnapshot, backupUsage, setBackupUsage, backupUsageBusy, setBackupUsageBusy, portableStatus, setPortableStatus, portableProgress, setPortableProgress, portableStatusText, portablePhaseText, portableProgressText, hist, healthCheck, searchIndex, backup, portable, gcRun, syncCfgRun, logLoad, webRun, aiRun, aiModelsRun, runBackup, runCloudRestore, runRestoreFromBackup, saveScanInterval, runLogLoad, saveBackupCfg, loadBackupUsage, runBackupNow, loadPortableStatus, runPortableExport, runHealth, itemHits, jumpToItem, revealFolder, copyDiagnostics, syncDiagText, copySyncDiagnostics, nav, filteredNav, visibleNav, saveHistCfg, runCleanup, setS3Field, saveS3, testS3, exportS3ConfigFile, importS3ConfigFile, importS3Config, saveSyncCfg, setWeb, openWeb, saveGcCfg, runGcAction, rebuildSearchIndex, histText, searchText, backupUsageInfo, backupResult, backupText, logText, webText,
+    open, settings, onClose, onChange, openCategory, onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured, cloudEnabled, category, setCategory, navQuery, setNavQuery, navSearchRef, floating, confirm, notice, confirmElement, stats, setStats, histCfg, setHistCfg, lastCleanup, setLastCleanup, health, setHealth, logRows, setLogRows, logKeyword, setLogKeyword, s3, setS3, s3VerifiedFp, setS3VerifiedFp, s3Verified, syncGateAlert, setSyncGateAlert, markS3Verified, invalidateS3Verified, s3ImportOpen, setS3ImportOpen, aiView, setAiView, aiMsg, setAiMsg, aiEnabled, setAiEnabled, defaultSpace, setDefaultSpace, aiEnableAlert, setAiEnableAlert, aiErr, setAiErr, aiDraft, setAiDraft, aiKeyVisible, setAiKeyVisible, aiModels, setAiModels, aiManualModel, setAiManualModel, aiForceSave, setAiForceSave, activeAi, aiProviderId, activeDef, aiPending, resetAiDraft, saveAi, aiPendingPatch, switchAiProvider, fetchAiModels, testAi, testAndSaveAi, forceSaveAi, gcCfg, setGcCfg, gcLog, setGcLog, syncMsg, setSyncMsg, webStatus, setWebStatus, syncCfg, setSyncCfg, cloudState, cloudOffline, sysInfo, setSysInfo, pendingHit, setPendingHit, diagMsg, setDiagMsg, syncReports, setSyncReports, syncDiagMsg, setSyncDiagMsg, scanIntervalHours, setScanIntervalHours, backupCfg, setBackupCfg, backupSnapshot, setBackupSnapshot, backupUsage, setBackupUsage, backupUsageBusy, setBackupUsageBusy, portableStatus, setPortableStatus, portableProgress, setPortableProgress, portableStatusText, portablePhaseText, portableProgressText, hist, healthCheck, searchIndex, backup, portable, gcRun, syncCfgRun, logLoad, webRun, aiRun, aiModelsRun, runBackup, runCloudRestore, runRestoreFromBackup, runRestoreFromBackupDir, runPortableImport, saveScanInterval, runLogLoad, saveBackupCfg, loadBackupUsage, runBackupNow, loadPortableStatus, runPortableExport, runHealth, itemHits, jumpToItem, revealFolder, copyDiagnostics, syncDiagText, copySyncDiagnostics, nav, filteredNav, visibleNav, saveHistCfg, runCleanup, setS3Field, saveS3, testS3, exportS3ConfigFile, importS3ConfigFile, importS3Config, saveSyncCfg, setWeb, openWeb, saveGcCfg, runGcAction, rebuildSearchIndex, histText, searchText, backupUsageInfo, backupResult, backupText, logText, webText,
     S3_DEFAULTS, LAKE_KERNEL_VERSION, LAKE_WRAPPER_VERSION, depVersion, fieldErrorFor,
   };
 }

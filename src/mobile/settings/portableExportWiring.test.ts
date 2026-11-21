@@ -27,7 +27,9 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
 
   it("导出编排：原生快照 → 自检 → saveAs(toDownloads)", () => {
     const flow = read("src/mobile/portable/exportPortable.ts");
-    expect(flow).toContain("nativeExportPortableSnapshot()");
+    // v2（261122）：导出前读基线并把 ref 传给原生（清单 baseline 字段）
+    expect(flow).toContain("readBaselineFile()");
+    expect(flow).toContain("nativeExportPortableSnapshot(baselineRef)");
     expect(flow).toContain("nativeInspectPortableSnapshot(exported.path)");
     expect(flow).toContain("saveFileToUserVisible(");
     expect(flow).toContain("toDownloads: true");
@@ -65,6 +67,25 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
     expect(flow).toContain("restoreMobileSnapshot");
     const ui = read("src/mobile/settings/PortableImportSection.tsx");
     expect(ui).toContain("手机整机快照");
+  });
+
+  it("v2 大统一口径（261122）：formatVersion 2 / 500k 条目 / 历史不进包 / 导出清 note_history / 清单无 hasHistory", () => {
+    const plugin = read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackagePlugin.kt");
+    expect(plugin).toContain("PORTABLE_FORMAT_VERSION = 2");
+    expect(plugin).toContain("MAX_ENTRIES = 500_000");
+    // 历史快照不进导入导出（261122 裁决）：快照目录不含 history，导出端清 note_history 索引行
+    expect(plugin).toContain('SNAPSHOT_DIRS = PAYLOAD_DIRS + listOf("sync-v3")');
+    expect(plugin).toContain("DELETE FROM note_history");
+    // v2 清单：无 hasHistory 字段，带 layout 配对与 baseline ref
+    expect(plugin).not.toContain('.put("hasHistory"');
+    expect(plugin).not.toContain('optBoolean("hasHistory"');
+    expect(plugin).toContain('.put("baseline", baselineRef ?: JSONObject.NULL)');
+    expect(plugin).toContain('"desktop-workspace"');
+    // 草稿/素材随包（数据覆盖全面）
+    expect(plugin).toContain('"quick-notes/staging"');
+    expect(plugin).toContain('"materials"');
+    // 包内手机库文件名：桌面导入端 importMobileSnapshot.MOBILE_DB_NAME 必须与之同值
+    expect(plugin).toContain('MOBILE_DB_FILE = "lakex-local-notes-mobileSQLite.db"');
   });
 
   it("文档写清 D 已实现与操作步骤", () => {
