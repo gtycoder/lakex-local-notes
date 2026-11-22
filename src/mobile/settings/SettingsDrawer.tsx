@@ -42,6 +42,7 @@ import type { HomeTab } from "../home/tabPager";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 import { EmptyState } from "../ui/EmptyState";
 import { DelayedLoading } from "../ui/delayedLoading";
+import { PortableExportBlock } from "./PortableExportBlock";
 import { PortableImportSection } from "./PortableImportSection";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
@@ -717,8 +718,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 </div>
             </Group>
 
-            <Group title="从桌面迁移" icon={<Download size={16} />}>
-                {/* 261109：从便携包导入（覆盖本机；桌面导出 zip.lln → 手机导入，不需要先配 S3）。 */}
+            <Group title="迁入迁出（便携包）" icon={<Download size={16} />}>
+                {/* 261122 大统一：便携包是跨端迁移的**唯一出入口**（迁出 = 导出到「下载」目录 / 迁入 = 覆盖式导入），
+                    与桌面「备份与恢复 → 迁入迁出」同构；不再散落在「关于 → 卸载与换机」。 */}
+                <PortableExportBlock />
                 <PortableImportSection onImported={() => void onRefresh()} />
             </Group>
             </>
@@ -744,7 +747,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "update" && <UpdateCenterSection appInfo={appInfo} />}
 
-          {view === "about" && <AboutSettingsSection appInfo={appInfo} diag={diag} />}
+          {view === "about" && <AboutSettingsSection appInfo={appInfo} diag={diag} onOpenBackup={() => setView("backup")} />}
 
           {view === "trash" && (
             <TrashList key={listKey} title="回收站" onChanged={onRefresh} onPreview={(noteId) => setPreviewNoteId(noteId)} />

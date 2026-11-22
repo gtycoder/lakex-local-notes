@@ -15,6 +15,7 @@
   - **门禁**：全量 vitest **1089 文件 / 6913 例 0 failed**；ui-metrics 0；check:core 183/0；check:mobileui 过；check:arch/check:bundle PASS（desktop 582,297/592,000、mobile 340,800/345,000）；tsc 0；compileDebugKotlin 0。文档回填：PORTABLE-TRANSFER v2 / guide/18 重写 / README 换机三条路 / UNINSTALL-DATA / STORAGE-LAYERS sync-v3 位置校正。
   - **探针新坑（§7#21-22 同类）**：`"portable-import"` 字符串被 `SIDE_EFFECT_IMPORT_RE` 误抓（收紧行首语句位 + 自证用例）；`manifestV2` 函数名撞 versionLiterals「manifest v<数字>」正则（改名 buildManifest）。
   - **已知边界**：移动画板素材在 localStorage 不随快照；>4GiB 大库跨端无包（走整库目录/云拉）。
+  - **261122 设置重构（用户点单：三大类）**：「备份与恢复」收敛为 **备份 / 恢复 / 迁入迁出** —— 备份 = 整库备份 + 自动备份 + 上次结果/快照占用统计；恢复 = 整库恢复/数据库快照/云端恢复三档；**迁入迁出 = 便携包的唯一出入口**（迁出：导出 / 迁入：导入，两端同构）。移动端导出块从「关于 → 卸载与换机」迁入「备份与恢复 → 迁入迁出」（原处只留跳转指引）；guide/12 同步。附带修一个**时间炸弹用例**（aiConversationPersist v1 迁移：fixture 固定日期 + 30 天 TTL，11-22 到期假红 ⇒ 显式传 now）。
   - **261122 review 补强（同日第二轮）**：① 仅本机行随包漏洞堵死——两端导出清 `ai_writing_*`/`ai_conversations`/`sync_conflicts`/`s3_gc_*`/`orphan_assets`（历史此前已清）；② **拒包级 bug**：Kotlin counts 只写 4 键而 v2 校验要六键 ⇒ 手机快照会被拒，已补齐 assets/bytes（校验保持严格）；③ 坏基线不再阻断迁移（按无基线 + 明示）；④ 手机快照库改可写打开（自动合并包内 wal/journal）；⑤ **quick_note_assets 图片元数据随包重建**（从 .qnote 正文资源清单，width/height 不丢，原「已知边界」关闭）；⑥ 残余清理 + 设置文案分家（整库备份=本机归档含历史、便携包=跨端迁移不含历史；两个导出保留、说明写清，用户 261122 裁决）。护栏 +5 例。
 
 - **261123 · 复制入口全覆盖（⌘C + 块菜单）**：

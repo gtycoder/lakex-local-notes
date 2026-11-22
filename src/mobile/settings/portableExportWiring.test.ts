@@ -9,10 +9,15 @@ const ROOT = path.resolve(HERE, "../../..");
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 
 describe("移动端导出便携包到文件（D 项）接线", () => {
-  it("UI 入口挂在关于页，组件接导出编排", () => {
+  it("UI 入口 = 备份与恢复 → 迁入迁出（261122 唯一出入口），组件接导出编排", () => {
+    const drawer = read("src/mobile/settings/SettingsDrawer.tsx");
+    expect(drawer).toContain('title="迁入迁出（便携包）"');
+    expect(drawer).toContain("<PortableExportBlock />");
+    expect(drawer).toContain("<PortableImportSection");
+    // 唯一出入口：导出块不再散落在「关于 → 卸载与换机」（只留跳转指引）
     const about = read("src/mobile/settings/BasicSettingsSections.tsx");
-    expect(about).toContain("PortableExportBlock");
-    expect(about).toContain("<PortableExportBlock />");
+    expect(about).not.toContain("<PortableExportBlock />");
+    expect(about).toContain("迁入迁出");
     const block = read("src/mobile/settings/PortableExportBlock.tsx");
     expect(block).toContain("exportPortableSnapshotToDownloads");
     expect(block).toContain("portableExportSummary");

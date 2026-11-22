@@ -124,7 +124,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
         </button>
       </div>
       <div className="mb-set-item__desc">
-        用桌面导出的 .zip.lln 包覆盖本机全部笔记、小记、标签与回收站（不含历史快照）；也支持手机「导出便携包到文件」生成的整机快照（含历史快照/草稿/同步基线）。不需要先配置云同步。包内是明文数据，请自行选择可信的传输方式。
+        迁入：用任一端导出的 .zip.lln 包覆盖本机全部笔记、小记、标签、回收站、草稿与素材（跨端数据全覆盖，**不含历史快照与 AI 会话**；包内带同步基线，配好 S3 即增量）。不需要先配置云同步。包内是明文数据，请自行选择可信的传输方式。
       </div>
       {!native && <div className="mb-set-item__desc">浏览器预览不支持（需要 Android 原生解压与只读 SQLite 读取）。</div>}
       {error && <div className="mb-set-item__desc" role="alert">{error}</div>}

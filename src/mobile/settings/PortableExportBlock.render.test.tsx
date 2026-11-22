@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** 261117 D 项：设置「关于 → 卸载与换机 → 导出便携包到文件」的状态机与文案。 */
+/** 261117 D 项导出动作行；261122 起挂在「备份与恢复 → 迁入迁出」（跨端迁移唯一出入口）。状态机与文案护栏。 */
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

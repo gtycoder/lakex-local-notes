@@ -4,7 +4,6 @@ import type { AppSettings } from "../../lib/settings";
 import type { HistoryMobileSettings } from "../bridge";
 import type { useSettingsSectionData } from "./useSettingsSectionData";
 import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
-import { PortableExportBlock } from "./PortableExportBlock";
 import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
@@ -45,7 +44,7 @@ export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobi
             </Group>
   );
 }
-export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<typeof useSettingsSectionData>["appInfo"]; diag: ReturnType<typeof useSettingsSectionData>["diagnostics"] }) {
+export function AboutSettingsSection({ appInfo, diag, onOpenBackup }: { appInfo: ReturnType<typeof useSettingsSectionData>["appInfo"]; diag: ReturnType<typeof useSettingsSectionData>["diagnostics"]; onOpenBackup?: () => void }) {
   return (
             <>
             <Group title="关于" icon={<Info size={16} />}>
@@ -67,7 +66,7 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">卸载前请先备份</div>
                   <div className="mb-set-item__desc">
-                    卸载会删除这台手机上保存的正文、附件与索引；云同步只是镜像，没同步过的改动会一起丢失。换机或重装前请先备份：在桌面版「备份与恢复 → 导出便携包」，或确认云同步已经同步完成。
+                    卸载会删除这台手机上保存的正文、附件与索引；云同步只是镜像，没同步过的改动会一起丢失。换机或重装前请先备份：用「备份与恢复 → 迁入迁出」导出便携包（跨端迁移的唯一出入口），或确认云同步已经同步完成。
                   </div>
                   <div className="mb-set-item__desc">
                     Android 10 及以上：走系统卸载确认框（应用信息或启动器卸载菜单）一般会出现「保留应用数据」选项，勾选后重装仍在；静默卸载（adb、应用商店）不会询问。Android 9 及以下没有这个选项。
@@ -79,8 +78,17 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                     本机数据量通常超过系统自动备份的 25MB 限额，所以没有启用 Google 云备份；真正的迁移出口是便携包与云同步。
                   </div>
                 </div>
-                {/* 261117 D 项（用户已批准）：导出便携包到系统「下载」，卸载后仍留存、可再导入恢复。 */}
-                <PortableExportBlock />
+                {/* 261122 大统一：导出/导入便携包收进「备份与恢复 → 迁入迁出」（跨端迁移的唯一出入口），
+                    这里只留指引，不再放动作行。 */}
+                <div className="mb-set-block">
+                  <div className="mb-set-block__actions">
+                    <button
+                      type="button"
+                      className="mb-btn mb-btn--outlined"
+                      onClick={() => onOpenBackup?.()}
+                    >去「迁入迁出」导出便携包</button>
+                  </div>
+                </div>
             </Group>
 
             {diag && (

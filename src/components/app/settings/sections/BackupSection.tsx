@@ -1,7 +1,7 @@
 // 261112 R2-S7：设置页「backup」分组（纯搬移自 SettingsPanel.tsx；只改文件位置，不改任何设置项/文案）。
 import type { SettingsPanelContext } from "../useSettingsPanelScope";
 import { Group, Block, Switch, Item, NumField } from "../../../ui/settingsPrimitives";
-import { Archive, RotateCcw, Download, HardDrive } from "lucide-react";
+import { Archive, RotateCcw, Download } from "lucide-react";
 import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import { hostCapabilities } from "../../../../lib/hostCapabilities";
 
@@ -35,47 +35,6 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
                       <div className="config-stats"><span>读取自动备份配置…</span></div>
                     )}
                   </Block>
-
-                </Group>
-
-                <Group title="恢复" icon={<RotateCcw size={16} />}>
-                  <Item itemId="backup-restore-dir" name="从整库备份恢复（完整目录）" desc="选择「整库备份」产生的目录，整库替换当前工作区：数据库 + 正文/资源/历史快照 + 小记。覆盖式恢复：当前工作区会整体改名隔离（不删除、可找回），重启应用后生效。与「从数据库快照恢复」（只换库）互补。">
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackupDir()} disabled={backup.busy}>选择备份目录…</button>
-                  </Item>
-                  <Item itemId="backup-import" name="从数据库快照恢复" desc="选择一个数据库快照（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。只恢复数据库；正文/资源/历史需用整库备份。">
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
-                  </Item>
-                  <Item itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
-                    <button className="ln-btn ln-btn--outlined ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
-                  </Item>
-                </Group>
-
-                <Group title="迁移包（便携包）" icon={<Download size={16} />}>
-                  {/* 261116 用户验收：说明回位到标题下（descAfter 会把说明甩到最后，中间留空带）。 */}
-                  <Block itemId="backup-portable-export" name="导出便携包（全量迁移包）" desc="跨端迁移：把本机全部跨端数据（正文/表格/多维表/画板/手写板/小记/标签/回收站/草稿/素材/同步基线）打成一个 .zip.lln（上限 4GiB），可在手机或其它桌面互导。与「整库备份」的分工：便携包**不含历史快照与 AI 会话**（仅本机数据，要用历史请走整库备份）、有 4GiB 上限，但任何端都能导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，包内带云端基线，导入端配好 S3 即增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
-                    <div className="config-block__actions">
-                      <button
-                        className="ln-btn ln-btn--outlined"
-                        onClick={() => void runPortableExport()}
-                        disabled={portable.busy || !hostCapabilities().localFileSystem}
-                      >
-                        {portable.busy ? "导出中…" : "选择目录并导出…"}
-                      </button>
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
-                    </div>
-                    <div className="config-stats">
-                      <span>{portableStatusText}</span>
-                    </div>
-                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
-                    {portable.message && <div className="block__text">{portable.message}</div>}
-                  </Block>
-                  <Item itemId="backup-portable-import" name="从便携包导入（覆盖本机）" desc="选择 .zip.lln 便携包（来自手机或其它桌面）整库替换当前工作区：跨端数据全覆盖，包内同步基线随行，配好 S3 即增量。覆盖式导入：当前工作区会整体改名隔离（不删除、可找回），重启应用后生效。历史快照与 S3 密钥不随包。">
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void runPortableImport()} disabled={portable.busy || !hostCapabilities().localFileSystem}>选择便携包导入…</button>
-                  </Item>
-                </Group>
-
-                <Group title="存储占用" icon={<HardDrive size={16} />}>
-                  {/* 261116 用户验收：说明回位到标题下（原 descAfter 会把说明甩到操作行之后，中间留一条空带）；操作与统计统一在右。 */}
                   <Block itemId="backup-usage" name="数据库快照占用" desc="只读统计 userData/backups 里的数据库快照份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--outlined" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
@@ -109,6 +68,42 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
                       <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份数据库」）。</div>
                     )}
                   </Block>
+                </Group>
+
+                <Group title="恢复" icon={<RotateCcw size={16} />}>
+                  <Item itemId="backup-restore-dir" name="从整库备份恢复（完整目录）" desc="选择「整库备份」产生的目录，整库替换当前工作区：数据库 + 正文/资源/历史快照 + 小记。覆盖式恢复：当前工作区会整体改名隔离（不删除、可找回），重启应用后生效。与「从数据库快照恢复」（只换库）互补。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackupDir()} disabled={backup.busy}>选择备份目录…</button>
+                  </Item>
+                  <Item itemId="backup-import" name="从数据库快照恢复" desc="选择一个数据库快照（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。只恢复数据库；正文/资源/历史需用整库备份。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
+                  </Item>
+                  <Item itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
+                    <button className="ln-btn ln-btn--outlined ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                  </Item>
+                </Group>
+
+                <Group title="迁入迁出（便携包）" icon={<Download size={16} />}>
+                  {/* 261116 用户验收：说明回位到标题下（descAfter 会把说明甩到最后，中间留空带）。 */}
+                  <Block itemId="backup-portable-export" name="迁出：导出便携包（.zip.lln）" desc="跨端迁移（迁出）：把本机全部跨端数据（正文/表格/多维表/画板/手写板/小记/标签/回收站/草稿/素材/同步基线）打成一个 .zip.lln（上限 4GiB），可在手机或其它桌面互导。与「整库备份」的分工：便携包**不含历史快照与 AI 会话**（仅本机数据，要用历史请走整库备份）、有 4GiB 上限，但任何端都能导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，包内带云端基线，导入端配好 S3 即增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                    <div className="config-block__actions">
+                      <button
+                        className="ln-btn ln-btn--outlined"
+                        onClick={() => void runPortableExport()}
+                        disabled={portable.busy || !hostCapabilities().localFileSystem}
+                      >
+                        {portable.busy ? "导出中…" : "选择目录并导出…"}
+                      </button>
+                      <button className="ln-btn ln-btn--outlined" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                    </div>
+                    <div className="config-stats">
+                      <span>{portableStatusText}</span>
+                    </div>
+                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
+                    {portable.message && <div className="block__text">{portable.message}</div>}
+                  </Block>
+                  <Item itemId="backup-portable-import" name="迁入：从便携包导入（覆盖本机）" desc="跨端迁移（迁入）：选择 .zip.lln 便携包（来自手机或其它桌面）整库替换当前工作区：跨端数据全覆盖，包内同步基线随行，配好 S3 即增量。覆盖式导入：当前工作区会整体改名隔离（不删除、可找回），重启应用后生效。历史快照与 S3 密钥不随包。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void runPortableImport()} disabled={portable.busy || !hostCapabilities().localFileSystem}>选择便携包导入…</button>
+                  </Item>
                 </Group>
 
                 {backupText && <Block name={backupText} />}

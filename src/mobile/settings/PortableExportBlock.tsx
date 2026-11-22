@@ -1,5 +1,5 @@
 /**
- * 261117 D 项（用户已批准）：设置「关于 → 卸载与换机」里的「导出便携包到文件」动作行。
+ * 261117 D 项（用户已批准）导出动作行；261122 大统一后收进「备份与恢复 → 迁入迁出」（跨端迁移的唯一出入口）。
  *
  * 为什么需要它：卸载会删掉 App 私有目录里的全部数据（正文/附件/历史/回收站都在里面），
  * S3 只是镜像。导出便携包 = 用户可见「下载」目录里的单个文件，卸载 App 后仍留存，重装后可再导入恢复。
@@ -35,7 +35,7 @@ export function PortableExportBlock() {
         </button>
       </div>
       <div className="mb-set-item__desc">
-        导出到系统「下载」目录的一个 .zip.lln 文件，卸载 App 后仍然留存；换机或重装后可从「备份与恢复」再导入。包里是明文全量数据（含历史与回收站），请妥善保管，不要随意发给他人。
+        迁出：导出到系统「下载」目录的一个 .zip.lln 文件，卸载 App 后仍然留存；换机或重装后在任一端「迁入迁出 → 从便携包导入」恢复。包里是明文跨端数据（不含历史快照与 AI 会话），请妥善保管，不要随意发给他人。
       </div>
       {outcome && outcome.ok && (
         <div className="mb-set-item__desc" role="status" aria-live="polite">{portableExportSummary(outcome)}</div>

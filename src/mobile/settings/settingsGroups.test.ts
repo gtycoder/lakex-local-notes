@@ -1,6 +1,6 @@
 /**
  * 261105 晚用户验收：移动端设置分组对齐桌面。
- * 「云端与同步」只放联网配置与同步；「备份与恢复」只放恢复动作（移动端没有整库备份/导出）；
+ * 「云端与同步」只放联网配置与同步；「备份与恢复」= 恢复 + 修复缺失数据 + 迁入迁出（便携包唯一出入口，261122 起含导出）；
  * 其余分组命名与顺序与桌面同构。
  */
 import { readFileSync } from "node:fs";
@@ -58,12 +58,15 @@ describe("移动端设置分组（对齐桌面）", () => {
     expect(backupBody).toContain("missingBodies.reload()");
   });
 
-  it("备份与恢复拆三组：恢复 / 修复缺失数据 / 从桌面迁移；不含整库备份/导出", () => {
+  it("备份与恢复拆三组：恢复 / 修复缺失数据 / 迁入迁出（便携包 = 跨端唯一出入口，含导出+导入）", () => {
     const backupStart = DRAWER.indexOf('{view === "backup" && (');
     const backupBody = DRAWER.slice(backupStart, DRAWER.indexOf('{view === "cache" && ('));
     expect(backupBody).toContain('title="恢复"');
     expect(backupBody).toContain("修复缺失数据");
-    expect(backupBody).toContain("从桌面迁移");
+    // 261122 大统一：迁入迁出是便携包的唯一出入口（导出块从「关于 → 卸载与换机」迁入）
+    expect(backupBody).toContain("迁入迁出（便携包）");
+    expect(backupBody).toContain("<PortableExportBlock />");
+    expect(backupBody).toContain("<PortableImportSection");
     expect(backupBody).not.toContain("自动备份设置");
     expect(backupBody).not.toContain("移动端不提供整库自动备份");
   });
