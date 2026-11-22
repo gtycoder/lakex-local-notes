@@ -74,7 +74,8 @@ describe("AI 历史对话（多会话）序列化", () => {
       sendIds: ["d1"],
       messages: [{ role: "user", text: "旧对话" }, { role: "assistant", text: "旧回答" }],
     });
-    const migrated = parseLegacyConversation(legacy, "22222222-2222-4222-8222-222222222222")!;
+    // 显式传 now：fixture 的 updatedAt 是固定日期，跟真实时钟跑会在 30 天 TTL 到期后假红（261122 实锤）。
+    const migrated = parseLegacyConversation(legacy, "22222222-2222-4222-8222-222222222222", Date.parse("2026-10-24T00:00:00.000Z"))!;
     expect(migrated.id).toBe("22222222-2222-4222-8222-222222222222");
     expect(migrated.createdAt).toBe("2026-10-23T00:00:00.000Z");
     expect(migrated.title).toBe("旧对话");
