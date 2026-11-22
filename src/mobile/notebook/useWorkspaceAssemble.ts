@@ -78,5 +78,9 @@ export function useWorkspaceAssemble(options: UseWorkspaceAssembleOptions) {
     if (!autoOpenedRef.current) return;
     if (!active || active.loaded) return;
     void loadTabBody(active.id);
-  }, [active?.id, active?.loaded, loadTabBody]);
+    // ⚠️ 261122 真机现场（骨架卡住、再点一下才加载）：autoOpenedRef 是 **ref**，treeReady 翻真后才在
+    // restore effect 里置位，置位本身不触发重渲染；而这里只依赖 active 的原始值 ⇒ 若此时 active.id /
+    // loaded 没变（恢复前后都是同一个未加载的占位），本 effect **永远不会再跑**，活动页一直停在骨架。
+    // 把 treeReady 纳入依赖，让「目录就绪」这一拍必定补读一次。
+  }, [active?.id, active?.loaded, loadTabBody, treeReady]);
 }

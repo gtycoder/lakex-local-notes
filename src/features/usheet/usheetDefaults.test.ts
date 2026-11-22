@@ -125,6 +125,28 @@ describe("表格默认居中 / 自动换行 / 自动行高（用户 261121）", 
     expect(Object.keys(sheet.rowData ?? {})).toHaveLength(500);
   });
 
+
+  it("261122 真机：旧版遗留的自动高度缓存 ah 必须清掉（只打 ia 不清 ah ⇒ 换行文字仍被压扁）", async () => {
+    const core = await import("../../core/usheetDoc");
+    const wb = {
+      sheets: {
+        s1: {
+          rowCount: 3,
+          defaultStyle: { fs: 11 },
+          rowData: { "0": { ah: 34 }, "1": { ah: 50, ia: 1 }, "2": { h: 40, ah: 40 } },
+        },
+      },
+      defaultStyle: {},
+    } as never;
+    core.normalizeUsheetWorkbook(wb);
+    const sheet = (wb as { sheets: Record<string, { rowData: Record<string, Record<string, unknown>> }> }).sheets.s1;
+    // 无显式 h：打 ia、删陈旧 ah（让内核按当前列宽重算）
+    expect(sheet.rowData["0"]).toEqual({ ia: 1 });
+    expect(sheet.rowData["1"]).toEqual({ ia: 1 });
+    // 手动高度：原样保留（h + ah 都不动，也不打 ia）
+    expect(sheet.rowData["2"]).toEqual({ h: 40, ah: 40 });
+  });
+
   it("normalize 对空表幂等（新建正文 = 规范化后字节，打开不产生假改动）", async () => {
     const core = await import("../../core/usheetDoc");
     const wb = emptyUsheetWorkbook();

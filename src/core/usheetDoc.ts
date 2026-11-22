@@ -147,7 +147,13 @@ function applyAutoRowHeight(sheet: Record<string, unknown>): void {
     const entry = rowData[String(row)];
     if (!isRecord(entry)) { rowData[String(row)] = { ia: USHEET_ROW_IS_AUTO_HEIGHT }; continue; }
     // 用户手动设过高度的行保持手动（Excel 同款：手动高度压过自动），只给没有 h 的行打自动标记。
-    if (entry.h === undefined) entry.ia = USHEET_ROW_IS_AUTO_HEIGHT;
+    if (entry.h === undefined) {
+      entry.ia = USHEET_ROW_IS_AUTO_HEIGHT;
+      // 261122 真机现场：旧版本/桌面视口算出的**自动高度缓存 ah** 会压过自动行高 ——
+      // 只打 ia 不清 ah，内核直接用缓存值渲染，换行文字仍被挤在一行的高度里。
+      // ah 是派生值，删掉让内核按当前列宽/字号重算（显式 h 的行不动）。
+      if (entry.ah !== undefined) delete entry.ah;
+    }
   }
   if (total > 0) sheet.rowData = rowData;
 }

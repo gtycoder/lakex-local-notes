@@ -63,7 +63,8 @@ const asset = (id: string, filename: string, mimeType: string, size = 10) => ({
 
 const NOTE: MobileQuickNote = {
   id: "q1", createdAt: T, updatedAt: T, previewText: "一张图 + 一段视频", imageCount: 2,
-  firstImage: "a.png", body: "<p>正文</p>",
+  // 261122：封面只在「正文首块是媒体」时出现 ⇒ 这条 fixture 以图片卡开头（封面去重语义不变）。
+  firstImage: "a.png", body: '<card type="inline" name="image" value="data:%7B%7D"></card><p>正文</p>',
   images: [
     asset("i1", "a.png", "image/png"),
     asset("i2", "b.jpg", "image/jpeg"),

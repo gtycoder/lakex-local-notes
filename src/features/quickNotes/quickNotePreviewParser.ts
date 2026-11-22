@@ -356,6 +356,23 @@ export function restoreEscapedCards(body: string): string {
   });
 }
 
+/** 小记正文的**第一个块**是不是媒体（图片/视频/音频/附件）。
+ *  列表卡只在「首块是媒体」时把首图当封面画在标题上方；文字在前的卡片必须**按正文顺序**渲染
+ *  （用户 261122 现场：编辑态「文字上、图片下」，列表卡却把图片提到最上面，顺序反了）。 */
+export function quickNoteStartsWithMedia(body: string | null | undefined): boolean {
+  if (!body) return false;
+  const html = restoreEscapedCards(body);
+  const card = /<card\b[^>]*name="([a-zA-Z]+)"/.exec(html);
+  const image = /<img\b/i.exec(html);
+  const cardIndex = card ? card.index : Number.POSITIVE_INFINITY;
+  const imageIndex = image ? image.index : Number.POSITIVE_INFINITY;
+  const index = Math.min(cardIndex, imageIndex);
+  if (!Number.isFinite(index)) return false;
+  const before = html.slice(0, index).replace(/<[^>]+>/g, "").replace(/&nbsp;|&#160;/g, " ").trim();
+  if (before.length > 0) return false;
+  return (card !== null && cardIndex === index && MEDIA_CARD_NAMES.has(card[1])) || imageIndex === index;
+}
+
 export function parseQuickNotePreview(body: string, state: { checkbox: number } = { checkbox: 0 }): QuickNotePreviewNode[] {
   if (!body || typeof body !== "string") return [];
   body = restoreEscapedCards(body);

@@ -3,7 +3,7 @@
  * 这样内核方言变了、或我们误加白名单外的格式，测试会先报出来。
  */
 import { describe, expect, it } from "vitest";
-import { parseQuickNotePreview, parsePreviewRuns, toggleTaskInBody } from "./quickNotePreviewParser";
+import { parseQuickNotePreview, parsePreviewRuns, quickNoteStartsWithMedia, toggleTaskInBody } from "./quickNotePreviewParser";
 
 describe("小记预览解析（白名单块）", () => {
   it("段落与标题", () => {
@@ -212,5 +212,32 @@ describe("图片卡显示尺寸（261121：拖动缩小后预览不再留大空�
       const nodes = parseQuickNotePreview(card(JSON.stringify({ src: "http://127.0.0.1:19876/quick-notes/n/c.png", ...bad })));
       expect((nodes[0] as { width?: number }).width).toBeUndefined();
     }
+  });
+});
+describe("首块媒体判定（261122 真机：列表卡封面把图片提到标题上方，正文顺序反了）", () => {
+  const card = (name: string, value = "{}") => `<card type="inline" name="${name}" value="data:${encodeURIComponent(value)}"></card>`;
+
+  it("文字在前、图片在后 ⇒ false（不画封面，图片留在正文原位）", () => {
+    const body = `<p class="ne-p"><span>测试标题</span></p>${card("image", JSON.stringify({ src: "a.png" }))}`;
+    expect(quickNoteStartsWithMedia(body)).toBe(false);
+  });
+
+  it("图片卡第一 ⇒ true", () => {
+    expect(quickNoteStartsWithMedia(card("image", JSON.stringify({ src: "a.png" })) + `<p class="ne-p"><span>后文</span></p>`)).toBe(true);
+  });
+
+  it("转义卡片（&lt;card …&gt;）与裸 <img> 也按首块判定", () => {
+    // 真实形态：textContent 被当成 HTML 渲染后只剩 &lt;/&gt; 转义，引号原样（见 restoreEscapedCards）。
+    const escaped = '&lt;card type="inline" name="image" value="data:%7B%7D"&gt;&lt;/card&gt;<p>x</p>';
+    expect(quickNoteStartsWithMedia(escaped)).toBe(true);
+    // 裸 <img> 在段首也算首块媒体（早期粘贴产物）；文字段在前的 <p><img></p> 属于段落内容，不画封面。
+    expect(quickNoteStartsWithMedia('<img src="a.png"><p>x</p>')).toBe(true);
+    expect(quickNoteStartsWithMedia('<p>x</p><img src="a.png">')).toBe(false);
+  });
+
+  it("空正文 / 纯文字 ⇒ false", () => {
+    expect(quickNoteStartsWithMedia("")).toBe(false);
+    expect(quickNoteStartsWithMedia(null)).toBe(false);
+    expect(quickNoteStartsWithMedia('<p class="ne-p"><span>只有文字</span></p>')).toBe(false);
   });
 });

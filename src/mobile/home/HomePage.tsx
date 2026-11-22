@@ -43,7 +43,7 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 // 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
-import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
+import { quickNoteStartsWithMedia, toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { bridge } from "../bridge";
 import { dismissNoteTabs } from "../notebook/tabDismissal";
 import { clearPersistedNotebookTabsFor } from "../notebook/tabSessionCleanup";
@@ -1310,7 +1310,15 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
    * 注意：QuickNotePreview 的 assets 仍传**全量**（视频/音频/附件卡要 URL），只有画廊用它。
    */
   const galleryAssets = previewAssets.filter((asset) => isQuickNoteImageMime(asset.mimeType));
-  const thumbUrl = note.firstImage
+  /**
+   * 封面只在「正文首块是媒体」时出现（261122 用户现场：编辑态「文字上、图片下」，列表卡却把首图提到最上面）。
+   * 文字在前的卡片保持**正文顺序**：不画封面，图片在预览里按原位置出现。
+   */
+  const leadingMedia = useMemo(
+    () => (note.body ? quickNoteStartsWithMedia(note.body) : Boolean(note.firstImage)),
+    [note.body, note.firstImage],
+  );
+  const thumbUrl = leadingMedia && note.firstImage
     ? quickNoteImageUrl(withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })))
     : null;
   /** 封面比例盒（宽高元数据可用时先占位，加载完不跳版）。 */
@@ -1389,7 +1397,8 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
           // F-B/F-C/F-H（261119 平滑度审计）：恒定槽位 —— 占位（previewText）与富预览同槽同高，
           // 正文到达/内核兜底落地都不改卡高（判据与槽高见 QuickNotePreview.slotFrame）。
           // 多图卡（封面之外还有图）= 折叠上限恒定槽；纯文本卡 = 摘要槽。
-          slotFrame={note.imageCount > 1 ? "media" : "text"}
+          // 有图且没有封面占位时，图会出现在预览里 ⇒ 同样用恒定媒体槽（避免卡高变化）。
+          slotFrame={note.imageCount > (thumbUrl ? 1 : 0) ? "media" : "text"}
           ellipsisClassName="mb-ellipsis"
           body={note.body ?? ""}
           // 占位/回落文本 = 列表投影里的纯文本摘要（正文没到时的那半帧）。
