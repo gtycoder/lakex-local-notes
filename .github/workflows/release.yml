@@ -127,6 +127,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        # shell: bash 显式带 -o pipefail：否则 2>&1 | tee 会吞掉 gradle 的退出码（261123 v1.5.7 翻车根因一层）
+        shell: bash
         run: |
           chmod +x gradlew
           # SEC-03：出 release 变体（debug keystore 签，debuggable=false）；用 debug 包发版等于
