@@ -26,7 +26,7 @@ function statusText(state: UpdateState | null): string {
   switch (state.status) {
     case "checking": return "正在检查更新…";
     case "up-to-date": return "已是最新版本";
-    case "available": return state.ignored ? "发现新版本（此版本已忽略，下个版本会恢复提示）" : "发现新版本";
+    case "available": return state.ignored ? "发现新版本（已忽略，下版本恢复提示）" : "发现新版本";
     case "downloading": return "正在下载安装包…";
     case "downloaded": return "安装包已下载，可以打开安装";
     case "error": return state.lastError ?? "检查更新失败";
@@ -149,7 +149,7 @@ export function UpdateCenterSection() {
               <MarkdownView source={manifest.notes} />
             </Block>
           )}
-          <Item itemId="update-actions" name="其它操作" desc="前往 GitHub 发布页（当前最新 tag）手动下载；或忽略此版本（下个版本恢复提示）。">
+          <Item itemId="update-actions" name="其它操作" desc="前往 GitHub 发布页手动下载；或忽略此版本（下版本恢复提示）。">
             <span className="config-item__ctl">
               <button type="button" className="ln-btn ln-btn--outlined" disabled={busy} onClick={openReleasePage}>前往发布页</button>
               {!ignored && (
@@ -164,12 +164,12 @@ export function UpdateCenterSection() {
         <Switch
           itemId="update-auto-check"
           name="自动检查"
-          desc="启动时检查一次，并按下面的频率在后台检查（默认开）。"
+          desc="启动时及按下面的频率自动检查更新。"
           checked={settings?.autoCheck ?? true}
           disabled={!settings || busy}
           onChange={(checked) => saveSettings({ autoCheck: checked })}
         />
-        <Item itemId="update-check-interval" name="检查频率" desc="按这个频率在后台检查；不想自动检查就关掉上面的「自动检查」（仍可手动检查）。">
+        <Item itemId="update-check-interval" name="检查频率" desc="后台自动检查的频率；关闭「自动检查」后仍可手动检查。">
           {/* 261116 用户点单：3 档（24 小时 / 每周 / 每月）；逐档只改本机更新策略，disabled 由 AdaptiveSelect 原样透传。
               历史库里可能存着 0（旧「关闭」）或已下线的 6/12 ⇒ 归一后不在档位里时显示默认 24（不会留空）。 */}
           <AdaptiveSelect
@@ -183,7 +183,7 @@ export function UpdateCenterSection() {
         <Switch
           itemId="update-auto-download"
           name="自动下载"
-          desc="仅用于后台自动检查：发现新版本即在后台下载（默认开）。手动点「检查更新」不会自动下载，由你决定下载或前往发布页；下载后也不会自动安装。"
+          desc="「自动检查」发现新版本时后台下载；下载后不自动安装，手动检查不触发下载。"
           checked={settings?.autoDownload ?? true}
           disabled={!settings || busy}
           onChange={(checked) => saveSettings({ autoDownload: checked })}
@@ -191,7 +191,7 @@ export function UpdateCenterSection() {
       </Group>
 
       <Group title="更新日志">
-        <Item itemId="update-release-notes" name="更新日志（当前版本及历史）" desc="与 GitHub Release body 同源：docs/RELEASE-NOTES.md。">
+        <Item itemId="update-release-notes" name="更新日志（当前版本及历史）" desc="与 GitHub Release 同源（docs/RELEASE-NOTES.md）。">
           <button type="button" className="ln-btn ln-btn--outlined" onClick={() => setNotesOpen((value) => !value)}>
             {notesOpen ? "收起" : "查看更新日志"}
           </button>

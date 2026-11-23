@@ -99,7 +99,7 @@ describe("云端与同步 · S3 行（261116 用户验收）", () => {
 
   it("未配置时行内说明给指路文案（不是空白）", () => {
     renderSection(makeContext({ cloudConfigured: false }));
-    expect(host.querySelector('[data-set-id="s3-config"]')!.textContent).toContain("还没有配置 S3 同步服务");
+    expect(host.querySelector('[data-set-id="s3-config"]')!.textContent).toContain("未配置。点「设置」填写");
   });
 
   it("点「设置」打开弹窗：7 个字段都在弹窗里，且弹窗内没有 data-set-id", async () => {

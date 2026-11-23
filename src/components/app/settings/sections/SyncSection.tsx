@@ -34,7 +34,7 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
   /** 行内说明：已配置时显示当前 Endpoint · Bucket（这是用户最常确认的两项）；未配置时给指路文案。 */
   const s3Summary = cloudConfigured
     ? [s3.endpoint, s3.bucket].filter(Boolean).join(" · ") || "已保存 S3 配置"
-    : "还没有配置 S3 同步服务；点右侧「设置」填写 Endpoint、密钥与 Bucket。";
+    : "未配置。点「设置」填写 Endpoint、密钥与 Bucket。";
   return (
     <>
               <>
@@ -53,17 +53,17 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                       </header>
                       <div className="ln-dialog__body">
                         <div className="s3-config-dialog__body">
-                          <Field name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
+                          <Field name="Endpoint" desc="七牛 Kodo 示例：https://s3.cn-north-1.qiniucs.com"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
                           <Field name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
-                          <Field name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
+                          <Field name="Secret Key" desc="留空或保持 ******** = 沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
                           <Field name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
                           <Field name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
                           <Field name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
                           <Switch
                             name="使用 Path-style URL"
                             desc={isQiniuEndpoint(s3.endpoint)
-                              ? "当前 Endpoint 是七牛 Kodo，必须关闭 Path-style（保存或测试时会自动关闭，此项可忽略）。"
-                              : "自建 MinIO 等需要开启；七牛 Kodo 关闭即可。"}
+                              ? "七牛 Kodo 必须关闭（已自动处理）。"
+                              : "自建 MinIO 等开启；七牛 Kodo 关闭。"}
                             checked={isQiniuEndpoint(s3.endpoint) ? false : s3.forcePathStyle}
                             disabled={isQiniuEndpoint(s3.endpoint)}
                             onChange={(checked) => setS3Field("forcePathStyle", checked)}
@@ -71,16 +71,9 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                           {/* 原分组里的第三方服务说明整体搬进弹窗（设置页只留一行；免责/计费/私有桶提醒仍可见）。 */}
                           <div className="s3-service-notice" role="note">
                             <div className="s3-service-notice__title">第三方 S3 服务说明</div>
-                            <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
-                            <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
-                            <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
-                            <ul>
-                              <li>接口调用频率、带宽等技术限制；</li>
-                              <li>存储空间、流量、请求次数等计费项目；</li>
-                              <li>服务条款、可用性保障与数据安全责任。</li>
-                            </ul>
-                            <p className="s3-service-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
-                            <p className="s3-service-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                            <p>通过 S3 兼容 API 使用第三方存储（七牛 Kodo、阿里云 OSS、Cloudflare R2 等）；存储、流量与请求由服务商单独计费，本应用不收费、不含套餐。技术限制、计费与数据安全责任以服务商条款为准。</p>
+                            <p className="s3-service-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>笔记正文与附件按原样上传、云端不加密；桶必须为私有、未开放公开读。</span></p>
+                            <p className="s3-service-notice__disclaimer">本应用仅通过 S3 兼容 API 访问你配置的桶，不对第三方服务的可用性、计费与数据安全负责。</p>
                           </div>
                           {syncMsg && <div className="s3-config-dialog__msg" role="status" aria-live="polite">{syncMsg}</div>}
                         </div>
@@ -101,7 +94,7 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                       <Switch
                         itemId="sync-enabled"
                         name="启用云同步"
-                        desc="关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。"
+                        desc="关闭即纯本地（不连 S3、不自动同步）；开启后增量同步并自动补拉云端资源。配置仅存本机。"
                         note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                         // 261114 用户点单：闸门提醒用**红字**（错误色单一来源 .config-item__error），且只出现一处（不再与 desc 重复）。
                         alert={syncGateAlert
@@ -126,9 +119,9 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                             <AdaptiveSelect label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={SYNC_AUTO_MODE_OPTIONS} />
                           </Field>
                           {syncCfg.autoMode === "interval" && (
-                            <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
+                            <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；退出后不后台续跑，下次启动自动对齐。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
-                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="开启后首次同步只拉文档与附件清单，图片和附件在打开或预览时才下载（更快、省流量）；关闭则首次同步全量下载（离线最完整）。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
+                          <Switch itemId="sync-defer-assets" name="按需下载附件" desc="附件改为打开/预览时再下载（省流量）；关闭则首次同步全量下载（离线最完整）。" checked={syncCfg.deferAssets === true} onChange={(checked) => void saveSyncCfg({ deferAssets: checked })} />
                         </>
                       )}
                     </>
@@ -138,7 +131,7 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                   {cloudOffline && (
                     <Block desc={cloudStateHint(cloudState) ?? "云同步未启用：按纯本地空间工作，云端相关操作一律不联网。"} />
                   )}
-                  <Block itemId="gc-status" name="回收状态" desc="手动清理会立即删除云端已不再被文档或历史引用的对象；自动对账按回收窗口定期执行。清理数量偏少通常是被引用保护，不是漏删。">
+                  <Block itemId="gc-status" name="回收状态" desc="清理云端已无引用的对象；数量偏少多为引用保护，不是漏删。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--outlined" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
                       <button className="ln-btn ln-btn--outlined ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
@@ -162,7 +155,7 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                   </Block>
                 </Group>
                 <Group title="同步诊断" icon={<Terminal size={16} />}>
-                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的耗时、对象数与失败项（只保存在本机，不上传）。反馈同步变慢或失败时，可复制后发给维护者。">
+                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="最近 3 轮同步的耗时、对象数与失败项，仅存本机；反馈问题时可复制。">
                     {syncDiagText ? (
                       <div className="config-readonly">
                         {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}

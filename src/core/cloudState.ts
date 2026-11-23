@@ -37,8 +37,8 @@ export function isCloudActive(configured: boolean, enabled: boolean): boolean {
 }
 
 export function cloudStateHint(state: CloudState): string | null {
-  if (state === "unconfigured") return "未配置云同步：按纯本地空间处理，没有去云端补拉。";
-  if (state === "offline") return "云同步已关闭：按纯本地空间处理，没有去云端补拉；重新开启后下次同步会自动补拉。";
+  if (state === "unconfigured") return "未配置云同步：纯本地处理，不补拉云端。";
+  if (state === "offline") return "云同步已关闭：纯本地处理；重新开启后下次同步自动补拉。";
   return null;
 }
 
@@ -50,5 +50,5 @@ export function cloudStateHint(state: CloudState): string | null {
  */
 export const CLOUD_PRIVACY_NOTICE = {
   badge: "隐私数据（云端不加密）",
-  text: "开启后笔记正文与附件会上传到你的 S3（按原样存储、不做加密）；请先确认该桶为私有、未开放公开读，且凭据只有你持有。",
+  text: "正文与附件按原样上传到你的 S3、云端不加密；桶须为私有、未开放公开读，凭据仅你持有。",
 } as const;

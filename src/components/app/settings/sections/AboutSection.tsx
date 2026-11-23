@@ -19,11 +19,11 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
                       <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
-                      <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
+                      <Block itemId="about-fonts" name="字体" desc="内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》使用）与 JetBrains Mono（SIL OFL 1.1），离线可用。" />
                     </Group>
 
                     <Group title="数据与存储" icon={<HardDrive size={16} />}>
-                      <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
+                      <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读）。">
                         <div className="config-stats">
                           <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>
                           <span>笔记本 <strong>{sysInfo.storage.notebooks}</strong></span>
@@ -50,7 +50,7 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
                       <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
                         <button className="ln-btn ln-btn--outlined" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
                       </Item>
-                      <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
+                      <Item itemId="about-history-dir" name="历史快照目录" desc="历史快照目录（恢复历史版本时读取）。">
                         <button className="ln-btn ln-btn--outlined" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
@@ -62,23 +62,23 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
 
                     <Group title="诊断" icon={<Search size={16} />}>
                       {/* 261116 用户验收：单动作行统一「说明在左、操作在右」（原 descAfter + 左起按钮会留一条空带）。 */}
-                      <Item itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
+                      <Item itemId="about-diagnostics" name="复制诊断信息" desc="复制版本、环境与本机计数的纯文本，反馈问题时粘贴。">
                         <button className="ln-btn ln-btn--outlined" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
                       </Item>
-                      <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
+                      <Block itemId="about-health-entry" name="一致性检查" desc="只读体检在「文档与历史」页运行。" />
                     </Group>
                     <Group title="版本与运行环境" icon={<Monitor size={16} />}>
                       <Item itemId="about-version" name="应用版本" desc={sysInfo.app.description || undefined}>
                         <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
                       </Item>
-                      <Block itemId="about-tech-stack" name="技术身份" desc="桌面端运行框架、数据层与编辑器内核；框架版本取运行时与 package.json，内核为固定 pin。">
+                      <Block itemId="about-tech-stack" name="技术身份" desc="运行框架、数据层与编辑器内核的版本。">
                         <div className="kv">
                           <div className="kv__row"><span className="kv__k">桌面框架</span><span className="kv__v">Electron {sysInfo.runtime.electron} / React {depVersion(sysInfo.deps, "react")} / better-sqlite3 {depVersion(sysInfo.deps, "better-sqlite3")}</span></div>
                           <div className="kv__row"><span className="kv__k">编辑器内核</span><span className="kv__v">Lake v{LAKE_KERNEL_VERSION}（@dlient/lakex-doc-react {LAKE_WRAPPER_VERSION}）</span></div>
                           <div className="kv__row"><span className="kv__k">同步协议</span><span className="kv__v">S3 v{S3V3_POINTER_VERSION}</span></div>
                         </div>
                       </Block>
-                      <Block itemId="about-runtime" name="运行时" desc="Lake 内核运行在 Electron（Chromium）中；Node 版本决定本地数据库模块能否正常加载。实际版本见下表。">
+                      <Block itemId="about-runtime" name="运行时" desc="各运行时组件的实际版本。">
                         <div className="kv">
                           <div className="kv__row"><span className="kv__k">Electron</span><span className="kv__v">{sysInfo.runtime.electron}</span></div>
                           <div className="kv__row"><span className="kv__k">Chromium</span><span className="kv__v">{sysInfo.runtime.chromium}</span></div>
@@ -86,7 +86,7 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
                           <div className="kv__row"><span className="kv__k">平台</span><span className="kv__v">{sysInfo.runtime.platform} / {sysInfo.runtime.arch}</span></div>
                         </div>
                       </Block>
-                      <Block itemId="about-deps" name="内核与关键依赖" desc="内核按 package.json 锁定版本，请勿随意升级。">
+                      <Block itemId="about-deps" name="内核与关键依赖" desc="内核版本已锁定，请勿随意升级。">
                         <div className="kv">
                           {Object.entries(sysInfo.deps).map(([name, ver]) => (
                             <div key={name} className="kv__row"><span className="kv__k">{name}</span><span className="kv__v">{ver}</span></div>
@@ -96,8 +96,8 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
                     </Group>
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
-                      <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />
-                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源第三方产物，已 pin，并以 vendored 形式随仓库及构建产物包含。MIT 包装层与闭源内核的许可范围不同；本项目与语雀/蚂蚁无关，未取得官方分发授权，详见仓库 NOTICE。" />
+                      <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌参考 SiYuan（AGPL-3.0，github.com/siyuan-note/siyuan），规则收编于 compat.css / kit.css（保留署名）；不构成分发思源代码。" />
+                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="语雀闭源内核，vendored 并 pin（MIT 包装层与内核许可范围不同）；与语雀/蚂蚁无关、未获官方分发授权，详见 NOTICE。" />
                       <Block itemId="about-third-party" name="开源依赖" desc="主要开源依赖：better-sqlite3（MIT）、sharp（Apache-2.0/MIT）、@aws-sdk/client-s3（Apache-2.0）、lucide-react（ISC）、react/react-dom（MIT）、electron-log（MIT）、TypeScript（Apache-2.0）、Vite（MIT）。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>
                   </>

@@ -35,7 +35,7 @@ export const SYNC_AUTO_MODE_OPTIONS: SyncAutoModeOption[] = [
  * 移动端另补一句等价口径（Android 退出不可靠 ⇒ 以「回到前台」代替），见 SettingsDrawer。
  */
 export const SYNC_OPEN_CLOSE_NOTE =
-  "云同步开启时，打开应用与关闭应用都会各同步一次（「按固定间隔」也包含这一次对齐）；「完全手动」不自动出网，只有手动同步与恢复补拉才联网。";
+  "「完全手动」不自动联网（仅手动同步与恢复补拉）；「按固定间隔」与「仅在开启/关闭时」两档在打开/关闭应用时各同步一次。";
 
 /** 间隔预设（分钟）：移动端用底部 Sheet 选档，桌面仍是 1–1440 的自由输入。 */
 export const SYNC_INTERVAL_PRESETS = [5, 15, 30, 60, 120, 360];

@@ -14,7 +14,7 @@ export function MaintenanceSection({ c }: { c: SettingsPanelContext }) {
               <>
               <Group title="回收站" icon={<Trash size={16} />}>
                 {gcCfg && (
-                  <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
+                  <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="到期自动彻底删除（含云端），不可撤销；0 = 关闭。">
                     <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
                   </Item>
                 )}
@@ -22,14 +22,14 @@ export function MaintenanceSection({ c }: { c: SettingsPanelContext }) {
               </Group>
 
               <Group title="全文搜索" icon={<Search size={16} />}>
-                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
+                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="重建标题与正文的全文索引（平时自动维护，异常时手动重建）。">
                   {searchText && <span className="ln-label__text">{searchText}</span>}
                   <button className="ln-btn ln-btn--outlined" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
                 </Item>
               </Group>
 
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
-                  <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
+                  <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文、历史、记录、资源与目录树一致性，不自动修复；问题从备份或云端恢复。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--outlined" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
                       {health && !healthCheck.busy && (
@@ -58,16 +58,16 @@ export function MaintenanceSection({ c }: { c: SettingsPanelContext }) {
                         <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
                       </div>
                     )}
-                    <Item itemId="data-scan-interval" name="后台扫描间隔（小时）" desc="低频文件↔元数据扫描：只报告、不写库/不重建；默认 24 小时。0 = 关闭后台扫描（手动「重建数据 → 扫描」仍可用）。"><NumField label="后台扫描间隔（小时）" min={0} max={720} value={scanIntervalHours ?? health?.fileScanIntervalHours ?? 24} onSave={(v) => saveScanInterval(v)} floor={0} fallback={24} /></Item>
+                    <Item itemId="data-scan-interval" name="后台扫描间隔（小时）" desc="后台低频扫描文件↔元数据，只报告不写库；0 = 关闭（手动扫描仍可用）。"><NumField label="后台扫描间隔（小时）" min={0} max={720} value={scanIntervalHours ?? health?.fileScanIntervalHours ?? 24} onSave={(v) => saveScanInterval(v)} floor={0} fallback={24} /></Item>
                   </Block>
                 </Group>
                 <Group title="数据恢复（手动）" icon={<Archive size={16} />}>
-                  <Block itemId="data-rebuild" name="重建数据" desc="当正文文件还在、笔记行丢失（文件↔元数据候选）时，从正文手动重建元数据行：只补笔记行并标为待同步，不改写、不删除任何正文文件；只允许重建本次扫描出的候选，正文不可解析的条目会被拒绝。">
+                  <Block itemId="data-rebuild" name="重建数据" desc="正文还在但笔记行丢失时，从正文重建元数据行（只补行、不动正文文件；不可解析的条目会被拒绝）。">
                     <RebuildDataBlock scan={() => native.scanRebuildCandidates()} rebuild={(ids) => native.rebuildOrphanNotes(ids)} confirm={confirm} />
                   </Block>
                 </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
-                <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理过程写入 userData/logs/lakex-local-notes.log；按关键字过滤，每条命中附带上下文。">
+                <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理的运行日志，按关键字过滤查看。">
                   <div className="config-block__actions">
                     <input
                       className="ln-text-field logs__filter"

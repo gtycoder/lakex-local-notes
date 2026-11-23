@@ -326,7 +326,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(v) => update({ fontSize: v })}
                 />
               </Item>
-              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限自动关闭该空间最旧的标签；最多 16 个。" stacked>
+              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超出上限自动关闭该空间最旧的标签；最多 16 个。" stacked>
                 <PickerSheet
                   label="最大同时打开标签数"
                   value={settings.maxOpenTabs}
@@ -334,9 +334,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(v) => update({ maxOpenTabs: v })}
                 />
               </Item>
-              <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
+              <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="下次启动不恢复打开的标签；仅本机偏好。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
               {/* 261113 用户点单：常规页顺序对齐桌面 EditorSection（… 标签页 → 附件 → 启动/默认空间）。 */}
-              <Item itemId="editor-max-attachment" name="附件大小上限" desc="图片、视频、PDF 或其他附件的本机上传上限；同步与下载统一按协议上限 100 MiB。">
+              <Item itemId="editor-max-attachment" name="附件大小上限" desc="图片、视频、PDF 等附件的本机上限；同步与下载按协议上限 100 MiB。">
                 <PickerSheet
                   label="附件大小上限"
                   value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))}
@@ -345,7 +345,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 />
               </Item>
               {/* 261110：默认空间 = 打开 App 落在哪个一级页（小记 / 知识库 / 日记 / 标签）。仅本机，不进 S3。 */}
-              <Item itemId="editor-default-space" name="默认空间" desc="打开 App 时落在哪个一级页。仅本机设置，不参与同步。" stacked>
+              <Item itemId="editor-default-space" name="默认空间" desc="打开 App 时落在哪个一级页；仅本机。" stacked>
                 <PickerSheet
                   label="默认空间"
                   value={defaultHomeTab}
@@ -353,8 +353,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(next) => { writeDefaultHomeTab(next); setDefaultHomeTab(next); showToast("已设为默认空间：" + (DEFAULT_SPACE_OPTIONS.find((o) => o.value === next)?.label ?? "")); }}
                 />
               </Item>
-              <Switch itemId="space-ai" name="AI 空间" desc="关闭后底部 Dock 与「默认空间」选项里隐藏；AI 会话保留，可随时重新开启。" checked={!hiddenHomeTabs.includes("ai")} onChange={(checked) => toggleHomeTab("ai", checked)} />
-              <Switch itemId="space-diary" name="日记空间" desc="关闭后底部 Dock 与「默认空间」选项里隐藏；日记数据保留，可随时重新开启。小记 / 知识库 / 标签固定显示。" checked={!hiddenHomeTabs.includes("diary")} onChange={(checked) => toggleHomeTab("diary", checked)} />
+              <Switch itemId="space-ai" name="AI 空间" desc="关闭 = 从 Dock 与「默认空间」隐藏；会话保留，可随时开启。" checked={!hiddenHomeTabs.includes("ai")} onChange={(checked) => toggleHomeTab("ai", checked)} />
+              <Switch itemId="space-diary" name="日记空间" desc="关闭 = 从 Dock 与「默认空间」隐藏；日记保留，可随时开启。小记 / 知识库 / 标签固定显示。" checked={!hiddenHomeTabs.includes("diary")} onChange={(checked) => toggleHomeTab("diary", checked)} />
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button
@@ -384,7 +384,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Block
                 itemId="import-default-notebook"
                 name="默认笔记本"
-                desc="通过系统分享导入的 Markdown 会在这个笔记本下新建文档（仅本机设置，不参与同步）。未设置时首次分享会先让你选一次。"
+                desc="系统分享导入的 Markdown 在此笔记本新建文档（仅本机）；未设置时首次分享会让你选一次。"
               >
                 <div className="mb-set-block__actions">
                   <span className="mb-row__meta">
@@ -407,13 +407,13 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "resources" && (
             <Group>
-              <Block itemId="resources-usage" name="本地资源占用" desc="正文引用的图片与附件实际占用（含手写板 / PDF 页图与表格图片；不含历史快照与数据库）。">
+              <Block itemId="resources-usage" name="本地资源占用" desc="正文引用的图片与附件占用（不含历史快照与数据库）。">
                 <span className="mb-row__meta">
                   {assetUsage ? assetUsage.files + " 个文件，" + formatBytes(assetUsage.bytes) : "统计中…"}
                 </span>
               </Block>
               {/* 261105 用户点单：删除入口不再外露在资源管理首页，必须先点「查看」进入明细面板。 */}
-              <Block itemId="resources-clean" name="未引用的本地文件" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
+              <Block itemId="resources-clean" name="未引用的本地文件" desc="删除正文图片后的残留文件，可安全清理。">
                 <button className="mb-btn mb-btn--outlined" disabled={orphans.length === 0 || orphanBusy} onClick={() => setCleanupSheet("orphans")}>查看（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用文件" desc="删除云端 7 天以上、没有被任何文档或历史版本引用的文件。">
@@ -421,12 +421,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
               {missingBodies.docs.length > 0 && (
-                <Block itemId="resources-missing-bodies" name="缺正文" desc="文档还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或彻底删除。">
+                <Block itemId="resources-missing-bodies" name="缺正文" desc="正文文件缺失的文档：可从云端拉回、恢复历史版本或彻底删除。">
                   <button className="mb-btn mb-btn--outlined" onClick={() => setMissingSheet("docs")}>查看（{missingBodies.docs.length}）</button>
                 </Block>
               )}
               {missingBodies.quickNotes.length > 0 && (
-                <Block itemId="resources-missing-quicknotes" name="缺小记" desc="小记还在列表里，但正文文件已经不在了。可以从云端拉回，或用搜索缓存重建纯文本。">
+                <Block itemId="resources-missing-quicknotes" name="缺小记" desc="正文文件缺失的小记：可从云端拉回或用搜索缓存重建。">
                   <button className="mb-btn mb-btn--outlined" onClick={() => setMissingSheet("quickNotes")}>查看（{missingBodies.quickNotes.length}）</button>
                 </Block>
               )}
@@ -442,16 +442,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Group title="服务说明" icon={<TriangleAlert size={16} />}>
                   <div className="mb-s3-notice" role="note">
                     <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
-                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
-                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
-                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                    <p>通过 S3 兼容 API 使用第三方存储（七牛 Kodo、阿里云 OSS、Cloudflare R2 等）；存储、流量与请求由服务商单独计费，本应用不收费、不含套餐。技术限制、计费与数据安全责任以服务商条款为准。</p>
                     <ul>
                       <li>接口调用频率、带宽等技术限制；</li>
                       <li>存储空间、流量、请求次数等计费项目；</li>
                       <li>服务条款、可用性保障与数据安全责任。</li>
                     </ul>
-                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
-                    <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>笔记正文与附件按原样上传、云端不加密；桶必须为私有、未开放公开读。</span></p>
+                    <p className="mb-s3-notice__disclaimer">本应用仅通过 S3 兼容 API 访问你配置的桶，不对第三方服务的可用性、计费与数据安全负责。</p>
                   </div>
               </Group>
 
@@ -495,7 +493,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               </Group>
 
               <Group title="配置迁移" icon={<Download size={16} />}>
-                  <Block itemId="s3-transfer" name="导入 / 导出迁移码" desc="在桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发到手机后在这里导入；也可以粘贴另一台设备的迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），请只在自己的设备间传递。">
+                  <Block itemId="s3-transfer" name="导入 / 导出迁移码" desc="桌面端「设置 → 云端与同步 → 配置迁移」导出 .json 后在手机导入，或粘贴迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），只在自己的设备间传递。">
                     <div className="mb-set-block__actions">
                       <button className="mb-btn mb-btn--outlined" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
                       <button className="mb-btn mb-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码</button>
@@ -509,7 +507,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Group title="同步策略" icon={<RefreshCw size={16} />}>
                   <Switch
                     name="启用云同步"
-                    desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
+                    desc="关闭即纯本地（不连 S3、不同步、不补拉云端资源）；重新开启后下次同步自动补拉。"
                     note={<><span className="mb-tag mb-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                     checked={syncCfg?.enabled === true}
                     onChange={(next) => {
@@ -533,7 +531,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {syncCfg?.enabled !== false && (
                     <>
                       {/* 261113 用户点单：说明长 + 选项值长（「仅在开启/关闭时同步」）⇒ 上下两段，不挤一行。 */}
-                      <Item itemId="sync-auto-mode" name="自动同步模式" stacked desc={`${SYNC_OPEN_CLOSE_NOTE}移动端可能被系统直接结束，关闭时来不及同步，因此改为回到前台时同步（冷启动和回到前台各一次）。`}>
+                      <Item itemId="sync-auto-mode" name="自动同步模式" stacked desc={`${SYNC_OPEN_CLOSE_NOTE}移动端以「回到前台」代替关闭时同步。`}>
                         <PickerSheet
                           label="自动同步模式"
                           value={syncCfg?.autoMode ?? "manual"}
@@ -544,7 +542,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                         />
                       </Item>
                       {syncCfg?.autoMode === "interval" && (
-                        <Item itemId="sync-auto-interval" name="自动同步间隔" stacked desc="按固定间隔自动同步，到点触发一次；离线或未配置时不会联网。App 没在运行时不会触发，下次打开或回到前台会补一次。">
+                        <Item itemId="sync-auto-interval" name="自动同步间隔" stacked desc="到点触发一次；App 未运行时不触发，下次打开或回到前台补一次。">
                           <PickerSheet
                             label="自动同步间隔"
                             value={syncCfg?.autoIntervalMinutes ?? 15}
@@ -557,7 +555,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       )}
                       <Switch
                         name="按需下载附件"
-                        desc="开启后首次同步只下载文档和附件列表，图片与附件在打开或预览时再下载（更快、省流量）；关闭则首次同步全部下载（离线更完整）。新设备默认开启。"
+                        desc="附件在打开/预览时再下载（省流量）；关闭则首次同步全量下载。新设备默认开启。"
                         checked={syncCfg?.deferAssets === true}
                         onChange={(next) => updateSyncSettings({ deferAssets: next })}
                       />

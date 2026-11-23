@@ -13,11 +13,11 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
               <>
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
                   <Section title="服务">
-                    <Field itemId="ai-provider" name="供应商" desc="支持 OpenAI 兼容接口：内置 OpenAI、DeepSeek、通义千问、智谱、小米 MiMo，也可选「自定义」指向任意兼容端点（如 Ollama、vLLM）。切换供应商会重置为该家默认值。">
+                    <Field itemId="ai-provider" name="供应商" desc="OpenAI 兼容接口：内置 OpenAI、DeepSeek、通义千问、智谱、MiMo，或「自定义」指向任意兼容端点（Ollama、vLLM 等）；切换时重置为该家默认值。">
                       {/* 261116 用户裁决「做吧，都做」：闭态方向键会逐档触发写盘，属该设置项既有语义（切换供应商会重置默认值）。 */}
                       <AdaptiveSelect label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
-                    <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
+                    <Field itemId="ai-base-url" name="Base URL" desc="留空用该家默认，可改为任意兼容端点。" error={aiErr.baseUrl}>
                       <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
                       <button className="ln-btn ln-btn--outlined" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
                     </Field>
@@ -27,7 +27,7 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                     <Field
                       itemId="ai-api-key"
                       name={<>API Key <span className={"badge " + (activeAi?.hasApiKey ? "badge--accent" : "badge--muted")}>{activeAi?.hasApiKey ? "已保存" : "未配置"}</span></>}
-                      desc="加密保存在本机（macOS Keychain），不同步、不上传；留空即沿用已保存的，输入新值即替换。"
+                      desc="加密保存在本机（Keychain），不同步不上传；留空沿用已存，输入即替换。"
                       error={aiErr.apiKey}
                     >
                       <span className="ln-input settings-input">
@@ -57,7 +57,7 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                   </Section>
 
                   <Section title="模型与参数">
-                    <Field itemId="ai-model" name="模型" desc="从供应商拉取候选会同时验证连通性；端点不实现 /models 时可手填。" error={aiErr.model}>
+                    <Field itemId="ai-model" name="模型" desc="「获取模型列表」会同时验证连通性；端点不支持 /models 时手填。" error={aiErr.model}>
                       {/* 动态候选 + `__manual__` 哨兵原样保留：选到「手填…」必须切手动输入，不写草稿模型。 */}
                       {aiModels && aiModels.length > 0 && !aiManualModel ? (
                         <AdaptiveSelect label="AI 模型" value={aiPending.model} onChange={(v) => { if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} options={[
@@ -74,12 +74,12 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                       <button className="ln-btn ln-btn--outlined" disabled={aiModelsRun.busy} onClick={() => void fetchAiModels()}>{aiModelsRun.busy ? "拉取中…" : "获取模型列表"}</button>
                     </Field>
                     {activeDef.supportsReasoning && (
-                      <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。思考模式下温度不生效。">
+                      <Item itemId="ai-reasoning" name="思考强度" desc="越高思考越深入、耗时越长；思考模式下温度不生效。">
                         <AdaptiveSelect label="思考强度" className="ln-w-200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
                       </Item>
                     )}
                     {activeDef.supportsThinking && (
-                      <Item itemId="ai-thinking" name="思考模式" desc="关闭可减少 token 消耗与等待时间；开启时温度不生效。">
+                      <Item itemId="ai-thinking" name="思考模式" desc="关闭省 token 与等待时间；开启时温度不生效。">
                         <AdaptiveSelect label="思考模式" className="ln-w-200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
                       </Item>
                     )}
@@ -91,7 +91,7 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                   </Section>
 
                   <Section title="连通性">
-                    <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：密钥或模型错误会拦住保存，网络或限流错误可以选择仍要保存。">
+                    <Block itemId="ai-test" name="测试并保存" desc="保存前先发最小请求验证：密钥/模型错误拦下保存，网络错误可「仍要保存」。">
                       <div className="config-block__actions">
                         <button className="ln-btn ln-btn--outlined" disabled={aiRun.busy} onClick={() => void testAndSaveAi()}>{aiRun.busy ? "测试中…" : "测试并保存"}</button>
                         <button className="ln-btn ln-btn--outlined" disabled={aiRun.busy} onClick={() => void testAi()}>仅测试</button>
@@ -103,7 +103,7 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                     <Switch
                       itemId="ai-enabled"
                       name="AI 助手"
-                      desc="关闭后 AI 助手不出网，配置与 API Key 保留；重新打开即可继续使用。"
+                      desc="关闭即不出网；配置与 API Key 保留。"
                       alert={aiEnableAlert}
                       checked={aiEnabled}
                       onChange={(checked) => {
@@ -120,8 +120,8 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                   </Section>
                 </Group>
                 <Group title="说明">
-                  <Block name="内容只在你主动触发时外发" desc="AI 只把你要处理的文本发给你配置的供应商；API Key 只保存在本机，不参与同步、S3 与备份。" />
-                  <Block name="多轮对话只保留最近 40 条消息" desc="同一个 AI 面板内会记住上下文（把前面的问答一起发给模型），但最多只带最近 40 条消息（一问一答算 2 条），更早的不会再发送；关闭面板后记忆即清空，不做长期记忆。" />
+                  <Block name="内容只在你主动触发时外发" desc="只在你触发时把所选内容发给所配供应商；API Key 仅存本机、不参与同步与备份。" />
+                  <Block name="多轮对话只保留最近 40 条消息" desc="同一面板内携带最近 40 条上下文（一问一答算 2 条），更早不发送；关闭面板即清空。" />
                 </Group>
               </>
     </>

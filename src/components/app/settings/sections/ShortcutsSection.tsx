@@ -10,7 +10,7 @@ export function ShortcutsSection({ c: _c }: { c: SettingsPanelContext }) {
   return (
     <>
               <Group title="快捷键" icon={<Keyboard size={16} />}>
-                <Block desc="当前版本先展示固定快捷键（参考思源口径），暂不支持自定义。" />
+                <Block desc="固定快捷键一览，暂不支持自定义。" />
                 {SHELL_COMMANDS.map((command) => (
                   <Shortcut
                     key={command.id}

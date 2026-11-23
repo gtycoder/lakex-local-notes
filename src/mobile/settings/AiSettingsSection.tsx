@@ -39,10 +39,10 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 <TextField label="接口地址" value={aiForm.baseUrl} placeholder={activeProviderDef?.defaultBaseUrl ?? "https://api.deepseek.com/v1"} onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
               </Field>
               {/* 凭据：Key 与「清除」紧邻（与桌面 AiSection 的凭据段同构） */}
-              <Field itemId="ai-api-key" name="API Key" desc="只保存在本机安全存储，页面里看不到明文；这里只显示尾号。移动端只保存一份 Key，切换供应商后请确认它属于该家。">
+              <Field itemId="ai-api-key" name="API Key" desc="仅存本机安全存储、只显示尾号；移动端只存一份 Key，切换供应商后需确认归属。">
                 <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
               </Field>
-              <Block itemId="ai-key-clear" name="清除 API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置，无需清除。"}>
+              <Block itemId="ai-key-clear" name="清除 API Key" desc={aiMeta?.hasKey ? "已配置（" + aiMeta.keyTail + "）；清除后需重新填写。" : "尚未配置，无需清除。"}>
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger-text" disabled={!aiMeta?.hasKey} onClick={() => {
                     void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法联网，直到重新填写。", confirmText: "清除", danger: true })
@@ -59,7 +59,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 </div>
               </Block>
               {/* 模型与参数（思考强度 / 思考模式只在该家支持时出现；温度在思考模式开启时隐藏） */}
-              <Field itemId="ai-model" name="模型" desc="可手填模型名，也可以从供应商拉取候选（需要先填 API Key）。">
+              <Field itemId="ai-model" name="模型" desc="可手填，或拉取供应商候选（需先填 API Key）。">
                 <TextField label="模型" value={aiForm.model} placeholder={activeProviderDef?.defaultModel || "模型名"} onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--outlined" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>
@@ -76,7 +76,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 </div>
               </Field>
               {activeProviderDef?.supportsReasoning && (
-                <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。">
+                <Item itemId="ai-reasoning" name="思考强度" desc="越高思考越深入、耗时越长。">
                   <PickerSheet
                     label="思考强度"
                     value={aiForm.reasoningEffort || (activeProviderDef.defaultReasoningEffort ?? "high")}
@@ -86,7 +86,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 </Item>
               )}
               {supportsThinking && (
-                <Item itemId="ai-thinking" name="思考模式" desc="关闭可减少 token 消耗与等待时间；开启时温度不生效。">
+                <Item itemId="ai-thinking" name="思考模式" desc="关闭省 token 与等待时间；开启时温度不生效。">
                   <PickerSheet
                     label="思考模式"
                     value={aiForm.thinking === "disabled" ? "disabled" : "enabled"}
@@ -130,7 +130,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 }}
               />
               {/* 本机对话（移动端独有；桌面无此项 ⇒ 排在最后，不打断配置段的桌面顺序） */}
-              <Block itemId="ai-history" name="已保存的对话" desc="最多保留 50 条、30 天；保存在本机，含资料快照，不含 API Key，也不参与云同步。">
+              <Block itemId="ai-history" name="已保存的对话" desc="本机保留最近 50 条、30 天；含资料快照，不含 API Key、不参与云同步。">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--secondary" onClick={() => {
                     void confirmMobile({ title: "清空全部历史对话？", body: "只影响本机保存的 AI 对话，不影响笔记与同步。", confirmText: "清空", danger: true })
