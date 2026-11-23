@@ -240,7 +240,7 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 ## 数据与隐私
 
 - 无账号、无云端登录；数据默认只在本机
-- S3 凭证保存在本机（桌面 safeStorage / Android Keystore），不会写入正文或日志
+- S3 凭证保存在本机（桌面 AES-256-GCM 本机加密 + 本地钥匙文件，防误读、非安全边界 / Android Keystore），不会写入正文或日志
 - 迁移码内层加密仅用于防误读，**不是安全边界**；不要外传
 - 仓库内不含任何真实笔记数据或密钥
 

@@ -264,6 +264,8 @@ components:
 
 **The One Declaration Rule.** 一个面要么靠 0.5px 边，要么靠阴影，不要「细边 + 大软阴影」同时上（那是幽灵卡片）。
 
+**树展开高度动画例外（261123 用户点单：Finder 式丝滑展开）**：目录树 `.tree-children` 展开/收起允许动 `height` —— 唯一放开布局属性的语义面；时长/曲线走既有档（`--lake-motion-fast` 250ms / ease-out）；过渡只存在于 `.is-animating` 开合窗口内（稳态计算样式零过渡）；收起动画结束才卸载子树；reduced-motion 由 a11y 层兜底自动瞬时。**不推广**到其它列表/面板。
+
 **输入卡例外（261116）**：AI 助手 / AI 写作的 composer 卡片允许 **0.5px 边 + `--lake-shadow-card`** 同时存在 —— 「可输入」需要可见的控件边，轻卡片阴影表达浮起；这是 composer 的登记例外（`.quick-note-composer` 同型），不推广到普通卡片/行。
 
 ## Motion

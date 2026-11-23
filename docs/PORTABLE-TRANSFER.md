@@ -15,7 +15,7 @@
 | 历史快照 | **不进包**（history/ 不收集；导出端把快照库 `note_history` / `history_fallback_state` 索引行一并清掉，包内自洽无悬空条目）。整库备份**目录**是本机归档，历史随目录保留 |
 | AI 会话 | **不随包**（ai_writing_* / ai-attachments/ 维持本地专属；桌面整库目录恢复因是镜像天然带回） |
 | 草稿/素材 | **随包**（draft-journal/、quick-notes/staging/、materials/ —— 用户内容，跨端不丢） |
-| 密钥 | **永不进包**（S3/AI；safeStorage/Keystore 机器绑定）⇒ 导入端重配 S3 或导入 `LLN1.` 迁移码；包内 baseline ⇒ 配好即增量 |
+| 密钥 | **永不进包**（S3/AI；本机加密 machine.key/Keystore 机器绑定）⇒ 导入端重配 S3 或导入 `LLN1.` 迁移码；包内 baseline ⇒ 配好即增量 |
 | 兼容 | formatVersion **2**；v1 包拒绝（可执行提示：新版重导 / 整库目录） |
 | 零基线合并底稿（261123） | 纯离线包（从未配 S3）导入 = **合成「合并底稿」基线（bootstrap baseline）**：以导出时刻内容快照当三方合并 base，谱系字段留空打 `bootstrap: true` ⇒ 配 S3 后首同步走**三方合并**（增量、不误删），不是拉全轮。详见 §3.1（261123 真机报障修复的设计决定） |
 

@@ -96,7 +96,7 @@ files/
 | 同步账本 | `sync-v3/baseline.json.gz`、`sync-v3/state.json`（删除意图/恢复标记/待补资产/小记待删） |
 | UI / 视图偏好 | localStorage：`lakex-local-notes-v3.dialog-states`、`…sidebar-width`、`…bitable-nav.<noteId>`、`…quick-notes-sort`、`lakex-local-notes-mobile.pad-panels` 等（完整清单 grep `lakex-local-notes`） |
 | 历史 / 回收站状态 | `history/`、`note_history`、`deleted_notes`、回收站父/时间戳等本端表示 |
-| 密钥 | S3/AI 密钥（桌面 safeStorage 密文；移动 Keystore 密文）——**永不进 S3、永不导出明文** |
+| 密钥 | S3/AI 密钥（桌面本机加密密文 enc:v2，钥匙 = <userData>/machine.key，不随备份/便携包；移动 Keystore 密文）——**永不进 S3、永不导出明文** |
 | 同步审计 | 同步记录账本（本机表，500 条 / 90 天轮转） |
 
 ## 3. L2 · S3 镜像（v3 对象布局）

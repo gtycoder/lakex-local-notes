@@ -242,7 +242,7 @@ CI releases produce `assembleRelease` APKs **signed with the release keystore** 
 ## Data & Privacy
 
 - No accounts and no cloud login; data stays on the local machine by default
-- S3 credentials are kept on the local machine (desktop safeStorage / Android Keystore) and are never written into note bodies or logs
+- S3 credentials are kept on the local machine (desktop AES-256-GCM local encryption with a local key file (obfuscation, not a security boundary) / Android Keystore) and are never written into note bodies or logs
 - The inner encryption of the transfer code only guards against misreading and is **not a security boundary**; do not share it
 - The repository contains no real note data or keys
 
