@@ -38,6 +38,7 @@ function lakeAssetPort() {
 
 contextBridge.exposeInMainWorld("lakeNative", {
   rendererReady: () => ipcRenderer.send("renderer-ready"),
+  setTitleBarOverlayScheme: (scheme) => ipcRenderer.send("set-title-bar-overlay", scheme),
   assetPort: lakeAssetPort(),
   assetToken: process.env.LAKE_ASSET_TOKEN ?? "",
   bootstrap: () => invoke("bootstrap_workspace"),

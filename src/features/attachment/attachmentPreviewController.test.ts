@@ -60,4 +60,11 @@ describe("附件预览层（源码级围栏）", () => {
     // portal 到 body ⇒ 拿不到壳上的 .platform-mac，组件必须自己判定平台
     expect(PREVIEW_TSX).toMatch(/\/Mac\|iPhone\|iPad\//);
   });
+
+  it("win32 融合标题栏让位：原生窗口控制按钮浮右上 ⇒ 右侧按钮让 138px，否则「关闭」被压住（261123）", () => {
+    expect(PREVIEW_CSS).toMatch(/\.attachment-preview\.is-win \.attachment-preview__toolbar \{[^}]*padding-right: 138px/);
+    expect(PREVIEW_TSX).toMatch(/is-win/);
+    // 同 is-mac：portal 到 body ⇒ 拿不到壳上的 .platform-win，组件必须自己判定平台
+    expect(PREVIEW_TSX).toMatch(/\/Win\//);
+  });
 });

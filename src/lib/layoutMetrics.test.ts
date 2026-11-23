@@ -24,7 +24,8 @@ describe("top bar ↔ macOS traffic light alignment", () => {
   });
 
   it("centers the traffic lights on the visible header (topbar + seam) instead of hardcoding y", () => {
-    const src = readFileSync(path.join(ROOT, "electron/main.ts"), "utf8");
+    // 261123：窗口选项抽进 electron/mainWindowOptions.ts（纯函数，平台分支单测在 mainWindowOptions.test.ts）
+    const src = readFileSync(path.join(ROOT, "electron/mainWindowOptions.ts"), "utf8");
     // 必须用共享常量算（头区 = 顶栏 + 拼接缝），且不能再出现字面量 y
     expect(src).toContain("(TOPBAR_HEIGHT + TOPBAR_SEAM - TRAFFIC_LIGHT_DIAMETER) / 2");
     expect(src).not.toMatch(/trafficLightPosition:\s*\{\s*x:\s*\d+,\s*y:\s*\d+\s*\}/);

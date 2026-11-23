@@ -114,6 +114,14 @@
   -webkit-app-region: no-drag;
 }
 
+.platform-win .tab-bar {
+  /* win32 融合标题栏（261123 用户点单「顶部 2 层太臃肿」）：顶栏即标题栏——同 mac 的拖拽区；
+     左侧无红绿灯让位，右侧给原生窗口控制按钮（titleBarOverlay）让位 138px = 3 × 46 DIP（Win10/11 恒定、DPI 无关）。 */
+  padding-left: 10px;
+  padding-right: 138px;
+  -webkit-app-region: drag;
+}
+
 .tab-items {
   display: flex;
   align-items: center;

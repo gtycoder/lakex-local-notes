@@ -432,6 +432,8 @@ export interface LakeNative {
   onNoteBodyChanged(callback: (detail: import("./types").NoteBodyChangedDetail) => void): () => void;
   /** 窗口全屏（macOS 独立 Space）状态变化 → 顶栏据此去掉红绿灯让位（返回取消订阅）。 */
   onWindowFullscreen(callback: (fullscreen: boolean) => void): () => void;
+  /** win32 融合标题栏：把主题色阶（light/dark 档）上报给原生窗口控制按钮配色；非 win32 主进程忽略。 */
+  setTitleBarOverlayScheme?(scheme: "light" | "dark"): void;
   /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（返回取消订阅）。 */
   onOpenSettings(callback: () => void): () => void;
 }
@@ -683,5 +685,6 @@ export const native = {
     return host.onNoteBodyChanged(callback);
   },
   onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),
+  setTitleBarOverlayScheme: (scheme: "light" | "dark") => { api().setTitleBarOverlayScheme?.(scheme); },
   onOpenSettings: (callback: () => void) => api().onOpenSettings(callback),
 };

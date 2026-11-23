@@ -70,9 +70,13 @@ export function AttachmentPreview() {
   // （260928 用户报「文件名盖到了红绿灯」）⇒ 与 .platform-mac .tab-bar 用同一套让位内距。
   // 预览是 portal 到 body 的，拿不到壳上的 .platform-mac，只能就地判定（与 App.tsx 同口径）。
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  // win32 融合标题栏（261123）：原生窗口控制按钮（titleBarOverlay）浮在窗口右上 ⇒ 工具栏右侧的
+  // 「打开 / 在文件夹中显示 / 关闭」要让位 138px，否则被系统按钮压住点不到（mac「文件名盖红绿灯」的右侧版）。
+  // 同 is-mac：portal 到 body 拿不到壳上的 .platform-win，就地判定（与 App.tsx 同口径）。
+  const isWin = typeof navigator !== "undefined" && /Win/.test(navigator.platform);
 
   return createPortal(
-    <div className={"attachment-preview" + (isMac ? " is-mac" : "")} role="dialog" aria-modal="true" aria-label="附件预览"
+    <div className={"attachment-preview" + (isMac ? " is-mac" : "") + (isWin ? " is-win" : "")} role="dialog" aria-modal="true" aria-label="附件预览"
       onClick={(e) => { if (e.target === e.currentTarget) closeAttachmentPreview(); }}>
       <div className="attachment-preview__toolbar" data-mb-topbar data-edge="overlay">
         <span className="attachment-preview__title"><Paperclip size={15} />{item.name}

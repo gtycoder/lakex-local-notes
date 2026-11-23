@@ -26,6 +26,9 @@
    按钮底下（260928 用户报「文件名盖到了红绿灯」）。与 .platform-mac .tab-bar 用同一个内距值。
    预览是 portal 到 body 的，拿不到壳上的 .platform-mac，由组件按平台加 .is-mac。 */
 .attachment-preview.is-mac .attachment-preview__toolbar { padding-left: 82px; }
+/* win32 融合标题栏（261123）：原生窗口控制按钮浮右上 ⇒ 右侧按钮让位 138px（与 .platform-win .tab-bar 同值）。
+   同 is-mac：portal 到 body，由组件按平台加 .is-win。 */
+.attachment-preview.is-win .attachment-preview__toolbar { padding-right: 138px; }
 .attachment-preview__title {
   display: inline-flex;
   align-items: center;

@@ -54,7 +54,7 @@ import { pickBackupDatabaseDialog } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import type { PortableExportProgress } from "../src/core/portable/portableFormat.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
-import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
+import { buildMainWindowOptions, shouldHideMenuBar, titleBarOverlayFor } from "./mainWindowOptions.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
 import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
 import { buildAppMenuTemplate } from "./appMenu.js";
@@ -367,36 +367,16 @@ async function createWindow() {
   const windowStateFile = windowStatePath();
   const workArea = screen.getPrimaryDisplay().workArea;
   const restored = clampWindowState(readWindowState(windowStateFile), workArea);
-  const win = new BrowserWindow({
-    x: restored.x,
-    y: restored.y,
-    width: restored.width,
-    height: restored.height,
-    minWidth: 560,
-    minHeight: 480,
-    show: false,
-    // 与 boot 窗同一个主题底色：渲染进程重载/首帧失败时也不能闪纯白。
-    // 同 boot 窗：浅色档纯白（首帧前的那一层）；深色档 #1e2126。
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#FFFFFF",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    // 红绿灯垂直居中到「可见头区」中心：y + 直径/2 = (TOPBAR_HEIGHT + TOPBAR_SEAM)/2。
-    // **别再把 y 写成常数**：曾因顶栏 38→32 而红绿灯没跟、中心错位 3px（用户 260923 报）。
-    // 头区高单一来源 = src/lib/layoutMetrics.ts 的 TOPBAR_HEIGHT + TOPBAR_SEAM（与 CSS 有单测对齐）。
-    trafficLightPosition: { x: 14, y: (TOPBAR_HEIGHT + TOPBAR_SEAM - TRAFFIC_LIGHT_DIAMETER) / 2 },
-    webPreferences: {
-      // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）。
-      // 两条分支的路径规则是构建产物契约的一部分，统一在 electron/buildTarget.ts::preloadPath。
-      preload: preloadPath(BUILD_DIR, app.isPackaged),
-      contextIsolation: true,
-      nodeIntegration: false,
-      // 260923：preload 已在 package.json 的 build.asarUnpack 中（asar 内沙箱 preload 的旧 Bug 不适用）；
-      // 开渲染进程沙箱 = OS 级纵深防御，contextIsolation 仍开启。
-      sandbox: true,
-      // PDF 内联预览：plugins 默认 false（electron.d.ts 注释确认）会禁用 <embed> 插件渲染
-      // → PDF viewer 空白（实测）。plugins: true 启用 Chromium PDF viewer。
-      plugins: true,
-    },
-  });
+  // 窗口选项（含 win32 融合标题栏 / macOS 红绿灯居中等平台差异）= 纯函数构造，见 electron/mainWindowOptions.ts。
+  const win = new BrowserWindow(buildMainWindowOptions({
+    platform: process.platform,
+    bounds: { x: restored.x, y: restored.y, width: restored.width, height: restored.height },
+    dark: nativeTheme.shouldUseDarkColors,
+    preload: preloadPath(BUILD_DIR, app.isPackaged),
+  }));
+  // win32 融合标题栏：菜单栏只藏视觉、保留默认菜单的快捷键（shouldHideMenuBar 单一判据）；
+  // 窗口 show:false 到 renderer-ready，不会闪出菜单栏。
+  if (shouldHideMenuBar(process.platform)) win.setMenuBarVisibility(false);
 
   mainWindow = win;
   let mainWindowRevealed = false;
@@ -428,11 +408,21 @@ async function createWindow() {
     sendWindowFullscreen();
   };
   ipcMain.on("renderer-ready", onRendererReady);
+  /** win32 融合标题栏：渲染层把主题色阶（light/dark 档）上报给原生窗口控制按钮配色（setTitleBarOverlay）。
+   *  只收两档字符串（白名单校验，渲染层输入不直接下传）；非 win32 / 主进程外发件方一律忽略。 */
+  const onTitleBarOverlayScheme = (event: IpcMainEvent, scheme: unknown) => {
+    if (event.sender.id !== win.webContents.id) return;
+    if (process.platform !== "win32" || win.isDestroyed()) return;
+    if (scheme !== "light" && scheme !== "dark") return;
+    win.setTitleBarOverlay(titleBarOverlayFor(scheme));
+  };
+  ipcMain.on("set-title-bar-overlay", onTitleBarOverlayScheme);
   bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
   win.once("closed", () => {
     if (mainWindow === win) mainWindow = null;
     if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
     ipcMain.removeListener("renderer-ready", onRendererReady);
+    ipcMain.removeListener("set-title-bar-overlay", onTitleBarOverlayScheme);
     if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
     bootWindow = null;
   });
@@ -455,6 +445,15 @@ async function createWindow() {
   win.on("unmaximize", persistWindowState);
   win.on("enter-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
   win.on("leave-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
+  // win32 的 F11 全屏不触发 enter/leave-full-screen（那对事件只在 macOS 触发）⇒ 用 resize 边沿检测补广播，
+  // 渲染层才能在全屏时撤掉融合标题栏的窗口控制按钮让位（window-chrome.css 同款收口）。
+  if (process.platform === "win32") {
+    let lastFullScreen = win.isFullScreen();
+    win.on("resize", () => {
+      const fs = win.isFullScreen();
+      if (fs !== lastFullScreen) { lastFullScreen = fs; sendWindowFullscreen(); }
+    });
+  }
   win.on("close", persistWindowState);
   if (restored.maximized) win.maximize();
   if (restored.fullscreen) win.setFullScreen(true);

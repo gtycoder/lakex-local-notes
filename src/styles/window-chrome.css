@@ -13,6 +13,13 @@
   -webkit-app-region: no-drag;
 }
 
+:root.window-fullscreen .platform-win .tab-bar {
+  /* win32 全屏（F11）：原生窗口控制按钮随系统隐藏 ⇒ 撤掉右侧 138px 让位；全屏没有标题栏可拖。 */
+  padding-left: 10px;
+  padding-right: 10px;
+  -webkit-app-region: no-drag;
+}
+
 :root.window-fullscreen .attachment-preview.is-mac .attachment-preview__toolbar {
   /* 预览工具栏回到基础内距 16px（正常窗口是 82px，见 attachment-preview.css 的说明）。 */
   padding-left: 16px;

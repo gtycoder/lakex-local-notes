@@ -343,7 +343,11 @@ export function App() {
     setPinnedNoteIds,
     setDraftEntries,
   });
-  const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
+  // 261123 win32 融合标题栏：Windows 复用 mac 的「顶栏即标题栏」形态（拖拽区 + 窗口控制按钮让位）。
+  // 平台判据仍是 navigator.platform（与附件预览 .is-mac 同口径），别另立第二套。
+  const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform)
+    ? "platform-mac"
+    : /Win/.test(navigator.platform) ? "platform-win" : "platform-native-titlebar";
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
