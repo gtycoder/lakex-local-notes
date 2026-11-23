@@ -40,6 +40,7 @@ import { EMPTY_TAG_SELECTION, computeTagVisibleIds, type TagAggregateItem, type 
 import { createConflictCopy } from "./hooks/saveConflictCopy";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
+import { FirstEncounterDialog } from "./components/app/FirstEncounterDialog";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { ImageLightbox } from "./features/editor/ImageLightbox";
 import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
@@ -1524,6 +1525,8 @@ export function App() {
         onOverwrite={() => void resolveSaveConflict("overwrite")}
         onDiscardAndReload={() => void resolveSaveConflict("discard")}
       />
+      {/* 「云端首次相遇」询问弹窗（SYNC-PROTOCOL §21）：仅手动同步路径触发；选定后注入决策并重跑。 */}
+      <FirstEncounterDialog onRetry={() => void runSync()} />
 
     </div>
   );

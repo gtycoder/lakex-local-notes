@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyEncounterAction,
+  probeCloudTarget,
+  s3SettingsChanged,
   applyQuickEncounterAction,
   classifyCloudProbe,
   encounterFactsText,
@@ -138,5 +140,28 @@ describe("合并层接线（planLakeMerge / planQuickNotesMerge 消费映射）"
     const qbase = { v: 3 as const, space: "quickNotes" as const, items: [{ id: "q1", contentHash: h("c"), createdAt: now, updatedAt: now, assetsHash: "" }], purged: [] };
     const qplan = planQuickNotesMerge(qbase, { ...qbase }, { v: 3 as const, space: "quickNotes" as const, items: [], purged: [] }, new Set(), new Set(), new Set(), new Set(), "additive", now);
     expect(qplan.items.map((i) => i.kind)).toEqual(["upload"]);
+  });
+});
+describe("配置探测（功能一）：变更即重探判定 + 三态探测", () => {
+  const t = (prefix: string) => ({ endpoint: "https://s3.example.com", region: "r", bucket: "b", prefix });
+  it("s3SettingsChanged：endpoint/region/bucket/prefix 任一变化 ⇒ 重探；全同或首次保存的口径", () => {
+    expect(s3SettingsChanged(null, t("x"))).toBe(true); // 首次保存（此前无配置）⇒ 探
+    expect(s3SettingsChanged(t("x"), t("x"))).toBe(false);
+    expect(s3SettingsChanged(t("x"), t("/x/"))).toBe(false); // 前缀斜杠归一
+    expect(s3SettingsChanged(t("x"), t("y"))).toBe(true);
+    expect(s3SettingsChanged({ ...t("x"), bucket: "b2" }, t("x"))).toBe(true);
+    expect(s3SettingsChanged({ ...t("x"), region: "r2" }, t("x"))).toBe(true);
+    expect(s3SettingsChanged({ ...t("x"), endpoint: "https://other" }, t("x"))).toBe(true);
+  });
+  it("probeCloudTarget：有 pointer 标记 = ours；无标记有对象 = foreign；空 = empty", async () => {
+    const mk = (keys: string[]) => ({
+      list: async () => keys.map((key) => ({ key })),
+      get: async (k: string) => (keys.includes(k) ? new Uint8Array([1]) : null),
+    });
+    expect((await probeCloudTarget(mk([]))).kind).toBe("empty");
+    expect((await probeCloudTarget(mk(["meta/pointer.json", "objects/a-1.lake"]))).kind).toBe("ours");
+    const foreign = await probeCloudTarget(mk(["other/file.txt"]));
+    expect(foreign.kind).toBe("foreign");
+    expect(foreign.hint?.tone).toBe("warn");
   });
 });

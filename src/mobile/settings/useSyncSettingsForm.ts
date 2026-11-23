@@ -5,6 +5,7 @@ import { writeSyncSettings } from "../sync/syncSettingsStore";
 import { describeSyncBreakdown, describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import type { S3v3DiagnosticReport } from "../../core/s3v3Report";
+import { parseEncounterFacts, setPendingFirstEncounterMode, type EncounterFacts, type FirstEncounterMode } from "../../core/firstEncounter.js";
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 
@@ -12,6 +13,8 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual",
 export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void>) {
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
+  /** 「云端首次相遇」询问（SYNC-PROTOCOL §21）：手动「立即同步」命中询问错误时亮事实 + 选项。 */
+  const [encounterFacts, setEncounterFacts] = useState<EncounterFacts | null>(null);
   // task-67：跳过项摘要随「上次同步」落盘 ⇒ 冷启动/重启先显示上次留下的摘要（最多 20 条）。
   const [warnings, setWarnings] = useState<SyncWarning[]>(() => readSyncStatus()?.warnings ?? []);
   const [supersededNotes, setSupersededNotes] = useState<Array<{ id: string; title: string }>>([]);
@@ -64,23 +67,42 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     setSyncMsg("同步中…");
     try {
       const result = await bridge.syncNow();
+      setEncounterFacts(null);
       setSyncMsg(result.message);
       // v3 把结构化回执放在顶层（warningDetails / supersededNotes 都要读）；v2 notes 字段已删（D-7）。
       setWarnings(result.warnings ?? []);
       setSupersededNotes(result.supersededNotes ?? []);
       await onRefresh();
     } catch (error) {
-      setSyncMsg("同步失败：" + (error as Error).message);
+      // 「云端首次相遇」（SYNC-PROTOCOL §21）：不报失败，亮事实 + 五选项（消息含 facts JSON，桥裹层也能解析）。
+      const facts = parseEncounterFacts((error as Error).message ?? "");
+      if (facts) {
+        setEncounterFacts(facts);
+        setSyncMsg("首次同步：请选择合并方式");
+      } else {
+        setSyncMsg("同步失败：" + (error as Error).message);
+      }
     }
     // 成功/失败都读一次：诊断由 bridge.syncNow 写在本轮结束时。
     await reloadSyncReports();
     await reloadConflicts();
   }, [onRefresh, reloadSyncReports, reloadConflicts]);
 
+  /** 选定合并方式（一次性注入决策 + 重跑同步；此后建立共同基线永不再问）。 */
+  const chooseEncounter = useCallback((mode: FirstEncounterMode) => {
+    setEncounterFacts(null);
+    setPendingFirstEncounterMode(mode);
+    return runSync();
+  }, [runSync]);
+  const cancelEncounter = useCallback(() => setEncounterFacts(null), []);
+
   return {
     syncSettings,
     updateSyncSettings,
     syncMsg,
+    encounterFacts,
+    chooseEncounter,
+    cancelEncounter,
     syncProgressText: describeSyncProgress(syncProgress),
     warnings,
     /** 完整列表算出的分组计数（列表被截断到 20 条时摘要行仍如实）。 */

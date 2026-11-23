@@ -135,8 +135,12 @@ export function consumePendingFirstEncounterMode(): FirstEncounterMode | null {
 
 /** 从 first-encounter-decision-required 错误消息解析事实（两端 UI 共用）。 */
 export function parseEncounterFacts(message: string): EncounterFacts | null {
+  // 消息可能被桥/包装层裹层（如「同步失败：{...}」）⇒ 从首个 { 到末个 } 截取 JSON 再试。
+  const start = message.indexOf("{");
+  const end = message.lastIndexOf("}");
+  const raw = start >= 0 && end > start ? message.slice(start, end + 1) : message;
   try {
-    const v = JSON.parse(message) as Partial<EncounterFacts>;
+    const v = JSON.parse(raw) as Partial<EncounterFacts>;
     if (typeof v.localNotes === "number" && typeof v.cloudNotes === "number" && typeof v.overlapNotes === "number") {
       return { localNotes: v.localNotes, cloudNotes: v.cloudNotes, overlapNotes: v.overlapNotes };
     }
@@ -151,6 +155,25 @@ export const ENCOUNTER_OPTIONS: ReadonlyArray<{ mode: FirstEncounterMode; label:
   { mode: "local-wins", label: "以本地为准", hint: "本地覆盖云端；云端多出的进回收站（可恢复）" },
   { mode: "cloud-wins", label: "以云端为准", hint: "云端覆盖本地；本地多出的进回收站（可恢复）" },
 ];
+
+/** 探测远端所需的最小端口（S3v3Remote 的子集；桌面主进程/移动 v3 适配器都可直接喂）。 */
+export interface ProbeRemoteLike {
+  list(prefix: string): Promise<Array<{ key: string }>>;
+  get(key: string): Promise<Uint8Array | null>;
+}
+
+/**
+ * 功能一探测（保存变更时跑一次，只提示不提问）：限配置前缀之下。
+ * 本产品库标记 = meta/pointer.json；无标记但有对象 = 疑似前缀/桶配错（宁可提醒不静默）。
+ * 成本：pointer 一次 GET +（无标记时）一次前缀列举；仅在配置变更时执行（s3SettingsChanged）。
+ */
+export async function probeCloudTarget(remote: ProbeRemoteLike): Promise<{ kind: CloudProbeKind; hint: { tone: "info" | "warn"; text: string } | null }> {
+  const marker = await remote.get("meta/pointer.json");
+  if (marker) return { kind: "ours", hint: probeHint("ours") };
+  const objects = await remote.list("");
+  const kind = classifyCloudProbe({ objectCount: objects.length, hasLibraryMarker: false });
+  return { kind, hint: probeHint(kind) };
+}
 
 /** 配置保存「变更即重探」判定（功能一触发条件）：endpoint/region/bucket/prefix 任一变化。 */
 export function s3SettingsChanged(prev: SyncTargetSettings | null, next: SyncTargetSettings): boolean {

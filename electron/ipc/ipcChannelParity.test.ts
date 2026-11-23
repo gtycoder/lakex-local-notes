@@ -171,8 +171,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 191（261116：ai_save_pasted_image —— 第三方剪贴板图片落盘为本地附件并登记 token）。
     // → 193（261122：pick_restore_backup_dir + restore_workspace_from_backup_dir —— 整库导入（目录模式），大统一迁移包）。
     // → 195（261122：portable_import_pick_file + portable_import_run —— 便携包桌面导入，大统一迁移包）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(195);
-    expect(preloadChannels().size).toBe(195);
-    expect(Object.keys(WEB_METHODS).length).toBe(195);
+// → 196（261123：s3_probe_target —— 「云端首次相遇」配置探测：保存变更时前缀列举 + pointer 标记判定）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(196);
+    expect(preloadChannels().size).toBe(196);
+    expect(Object.keys(WEB_METHODS).length).toBe(196);
   });
 });

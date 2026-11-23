@@ -166,6 +166,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   openNoteAssets: (id) => invoke("open_note_assets", id),
   getS3Settings: () => invoke("get_s3_settings"),
   saveS3Settings: (settings) => invoke("save_s3_settings", settings),
+  s3ProbeTarget: () => invoke("s3_probe_target"),
   exportS3ConfigFile: () => invoke("export_s3_config_file"),
   importS3ConfigFile: () => invoke("import_s3_config_file"),
   importS3Config: (code) => invoke("import_s3_config", code),

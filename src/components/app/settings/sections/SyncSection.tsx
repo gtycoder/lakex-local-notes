@@ -9,6 +9,8 @@ import { useState } from "react";
 import type { SettingsPanelContext } from "../useSettingsPanelScope";
 import { Group, Field, TextField, Switch, Block, Item, NumField } from "../../../ui/settingsPrimitives";
 import { NativeDialog } from "../../../ui/Overlay";
+import { native } from "../../../../lib/native";
+import { s3SettingsChanged } from "../../../../core/firstEncounter.js";
 import { Cloud, TriangleAlert, Trash, Terminal, X } from "lucide-react";
 import { isQiniuEndpoint } from "../../../../lib/s3FormState";
 import { CLOUD_PRIVACY_NOTICE, cloudStateHint } from "../../../../core/cloudState";
@@ -29,8 +31,23 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
   /** 261114 用户裁决：没有配置或没通过连接测试 ⇒ 不能开启（两端同一判据/文案，见 core/cloudSyncGate）。 */
   const enableGate = cloudSyncEnableGate({ configured: cloudConfigured, verified: s3Verified });
   const closeS3 = () => setS3Open(false);
+  /** 功能一（SYNC-PROTOCOL §21）：保存变更后的配置探测提示（只提示不提问）。 */
+  const [probeHint, setProbeHint] = useState<string | null>(null);
   /** 保存 = 既有 saveS3（主进程落库）→ 成功失败都由它写 syncMsg，然后关弹窗把结果留给设置页状态条。 */
-  const saveS3AndClose = async () => { await saveS3(); closeS3(); };
+  const saveS3AndClose = async () => {
+    const prev = await native.getS3Settings().catch(() => null);
+    await saveS3();
+    closeS3();
+    // 功能一：endpoint/region/bucket/prefix 变更 ⇒ 限前缀重探三态，只提示不提问（探测失败不影响保存）。
+    try {
+      const next = await native.getS3Settings();
+      const toTarget = (s: { endpoint: string; region: string; bucket: string; prefix: string } | null) => (s ? { endpoint: s.endpoint, region: s.region, bucket: s.bucket, prefix: s.prefix } : null);
+      if (next && s3SettingsChanged(toTarget(prev), toTarget(next)!)) {
+        const probe = await native.s3ProbeTarget();
+        setProbeHint(probe.hint?.text ?? (probe.error ? "配置探测失败：" + probe.error : ""));
+      }
+    } catch { /* 探测失败不影响保存 */ }
+  };
   /** 行内说明：已配置时显示当前 Endpoint · Bucket（这是用户最常确认的两项）；未配置时给指路文案。 */
   const s3Summary = cloudConfigured
     ? [s3.endpoint, s3.bucket].filter(Boolean).join(" · ") || "已保存 S3 配置"
@@ -39,7 +56,7 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
     <>
               <>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
-                  <Item itemId="s3-config" name="同步服务配置" desc={s3Summary}>
+                  <Item itemId="s3-config" name="同步服务配置" desc={probeHint || s3Summary}>
                     {/* 261116 用户定稿：本仓设置行的操作一律**横排**（与全站一致），不再竖排。 */}
                     <button type="button" className="ln-btn ln-btn--outlined" onClick={() => setS3Open(true)}>设置</button>
                     <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>导入</button>

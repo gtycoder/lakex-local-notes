@@ -330,6 +330,8 @@ export interface LakeNative {
   saveAssetAs(noteId: string, filename: string, suggestedName?: string): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
+  /** 功能一（SYNC-PROTOCOL §21）：S3 配置探测三态（限前缀、只提示）。 */
+  s3ProbeTarget(): Promise<{ kind: "empty" | "ours" | "foreign"; hint: { tone: string; text: string } | null; error?: string }>;
   /** 导出 S3 配置文件（主进程弹保存框 + 加密封装；渲染层不接触明文 Secret）。 */
   exportS3ConfigFile(): Promise<{ ok: boolean; canceled?: boolean; path?: string }>;
   /** 导入 S3 配置文件（主进程弹选择框 + 解码/校验/落库；返回脱敏摘要）。 */
@@ -607,6 +609,7 @@ export const native = {
   saveAssetAs: (noteId: string, filename: string, suggestedName?: string) => api().saveAssetAs(noteId, filename, suggestedName),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
+  s3ProbeTarget: () => api().s3ProbeTarget(),
   exportS3ConfigFile: () => api().exportS3ConfigFile(),
   importS3ConfigFile: () => api().importS3ConfigFile(),
   importS3Config: (code: string) => api().importS3Config(code),

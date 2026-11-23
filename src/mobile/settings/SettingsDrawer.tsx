@@ -28,6 +28,7 @@ import { useS3SettingsForm } from "./useS3SettingsForm";
 import { S3ConfigImportSheet } from "./S3ConfigImportSheet";
 import { useSettingsSectionData } from "./useSettingsSectionData";
 import { useSyncSettingsForm } from "./useSyncSettingsForm";
+import { ENCOUNTER_OPTIONS } from "../../core/firstEncounter.js";
 import { useMissingBodies } from "./useMissingBodies";
 import { MissingBodiesSheet, type MissingBodiesMode } from "./MissingBodiesSheet";
 import { ResourceCleanupSheet, type ResourceCleanupMode } from "./ResourceCleanupSheet";
@@ -128,6 +129,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     conflictUnacked,
     reloadConflicts,
     runSync,
+    encounterFacts, chooseEncounter, cancelEncounter,
   } = useSyncSettingsForm(open, onRefresh);
   /** 「同步记录」列表页（261105 P1 第 4 项）：入口在「上次同步」下方。 */
   const [conflictsOpen, setConflictsOpen] = useState(false);
@@ -488,6 +490,18 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
+                    {/* 「云端首次相遇」（SYNC-PROTOCOL §21）：手动同步命中询问 ⇒ 亮事实 + 五选项 + 取消。 */}
+                    {encounterFacts && (
+                      <div className="mb-set-item__desc" data-testid="first-encounter-ask">
+                        本机 {encounterFacts.localNotes} 篇 / 云端 {encounterFacts.cloudNotes} 篇 / 重合 {encounterFacts.overlapNotes} 篇。请选择这次怎么合并（选定后不再询问）：
+                        <div className="mb-set-block__actions">
+                          {ENCOUNTER_OPTIONS.map((o) => (
+                            <button key={o.mode} className="mb-btn mb-btn--outlined" title={o.hint} onClick={() => void chooseEncounter(o.mode)}>{o.label}</button>
+                          ))}
+                          <button className="mb-btn mb-btn--ghost" onClick={cancelEncounter}>取消</button>
+                        </div>
+                      </div>
+                    )}
                     {syncProgressText && <div className="mb-set-item__desc" aria-live="polite">{syncProgressText}</div>}
                   </Block>
               </Group>

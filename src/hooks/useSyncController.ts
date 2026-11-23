@@ -6,6 +6,8 @@ import type { SyncToastData } from "../components/app/SyncToast";
 import type { SyncStatus } from "../lib/types";
 import type { NoticeState } from "../desktop/desktopTypes";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../core/cloudState.js";
+import { parseEncounterFacts } from "../core/firstEncounter.js";
+import { askFirstEncounter } from "../lib/firstEncounterAsk";
 import {
   SYNC_EPOCH_MISMATCH_ACTION_LABEL, SYNC_EPOCH_MISMATCH_MESSAGE, SYNC_EPOCH_MISMATCH_TITLE,
   SYNC_RETRYABLE_TITLE, SYNC_RETRY_DELAY_MS, SYNC_RETRY_SUCCEEDED_MESSAGE,
@@ -126,6 +128,14 @@ export function useSyncController({
             showSyncToast({ kind: "busy", title: SYNC_RETRYABLE_TITLE, message: retryableRetryMessage(syncError.code, detail) });
             await new Promise<void>((resolve) => { window.setTimeout(resolve, SYNC_RETRY_DELAY_MS); });
             continue;
+          }
+          // 「云端首次相遇」（SYNC-PROTOCOL §21）：无共同历史 + 双非空 ⇒ 弹窗询问合并方式。
+          // 只有手动同步路径走本 hook ⇒ 「手动弹窗、后台只挂状态」红线由结构保证（自动同步走 useSyncProgress）。
+          if (syncError?.code === "first-encounter-decision-required") {
+            const encounterFacts = parseEncounterFacts(detail);
+            setSync((current) => ({ ...current, phase: "idle", message: "首次同步：请选择合并方式" }));
+            if (encounterFacts) askFirstEncounter(encounterFacts);
+            return;
           }
           // epoch 不一致：本机与云端不是同一套数据，必须人工处理 ⇒ 直接给「从云端恢复」的指路入口。
           if (syncError?.className === "action-required" && syncError.code === "epoch-mismatch") {

@@ -14,6 +14,8 @@ import { decodeS3ConfigTransfer, s3ConfigTransferFileName, summarizeS3Settings }
 import { readS3ConfigFile, writeS3ConfigFile } from "../s3ConfigTransferFile.js";
 import { IpcInputError } from "../ipcLimits.js";
 import { normalizeEndpoint, validateS3Settings, type S3Settings } from "../../src/core/syncUtils.js";
+import { probeCloudTarget } from "../../src/core/firstEncounter.js";
+import { S3v3S3Remote } from "../s3v3/s3Remote.js";
 import type { IpcRegistrar } from "./registrar.js";
 
 const MAX_S3_STRING_LENGTH = 2048;
@@ -93,6 +95,22 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     const settings = store.getS3Settings();
     if (!settings) return null;
     return { ...settings, secretAccessKey: S3_SECRET_MASK };
+  });
+  // 功能一（SYNC-PROTOCOL §21）：S3 配置探测三态（限配置前缀之下、只提示不提问）。
+  // 由渲染层在「保存且 endpoint/region/bucket/prefix 变更」时调用（s3SettingsChanged 判定）。
+  ipc.handle("s3_probe_target", async () => {
+    const s = store.getS3Settings();
+    if (!s) return { kind: "empty", hint: null };
+    try {
+      const remote = new S3v3S3Remote({
+        endpoint: s.endpoint, region: s.region, bucket: s.bucket,
+        accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey,
+        prefix: s.prefix, forcePathStyle: s.forcePathStyle,
+      });
+      return await probeCloudTarget(remote);
+    } catch (e) {
+      return { kind: "empty", hint: null, error: String((e as Error)?.message ?? e) };
+    }
   });
   ipc.handle("save_s3_settings", (settings: unknown) => {
     assertS3Settings(settings);

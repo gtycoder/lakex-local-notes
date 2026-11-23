@@ -177,6 +177,7 @@ export const WEB_METHODS: Record<string, string> = {
   getS3Settings: "get_s3_settings",
   saveS3Settings: "save_s3_settings",
   exportS3ConfigFile: "export_s3_config_file",
+  s3ProbeTarget: "s3_probe_target",
   importS3ConfigFile: "import_s3_config_file",
   importS3Config: "import_s3_config",
   testS3Connection: "test_s3_connection",
