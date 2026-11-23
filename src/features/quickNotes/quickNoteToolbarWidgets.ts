@@ -380,6 +380,9 @@ export class QuickNoteAttachmentToolbarItem extends QuickNoteToolbarButton {
     if (eventName !== "click") return;
     void this.pickFiles().then((files) => {
       if (!files.length) return;
+      // 卡片保护区（261123 P1-B）：insertFiles 与 insertAtSelection 同语义（非折叠选区被替换）⇒
+      // 整卡选中态下插附件会把卡整卡顶掉（文档侧实测）⇒ 拦下并提示（判据共享 insertGuard）。
+      if (selectionTouchesCard()) { notifyInsertBlocked(); return; }
       this.editor.execCommand("insertFiles", files, { from: "ui", category: "file" });
     });
   }

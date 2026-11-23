@@ -48,6 +48,23 @@ describe("插入卡片保护区（261123）", () => {
     expect(MOBILE_MAIN).toContain("showToast");
   });
 
+  it("P1-B：媒体五项 / 表格 / 小记附件同过卡片保护区（insertFiles/table 实测同样吞卡）", () => {
+    const HOST = read("src/mobile/editor/EditorDockHost.tsx");
+    expect(HOST).toContain('from "../../features/editor/insertGuard"');
+    expect(HOST).toContain("selectionTouchesCard()");
+    expect(HOST).toContain("notifyInsertBlocked()");
+    // 守卫至少两处：insertFile（媒体五项共用通道）+ onInsertTable
+    expect(HOST.match(/blockedByCardGuard\(\)/g)?.length).toBeGreaterThanOrEqual(2);
+    // insertFile 必须先过守卫再 exec（顺序即语义）
+    const guardIdx = HOST.indexOf("if (blockedByCardGuard()) return;");
+    const execIdx = HOST.indexOf('execEditorCommandResult(ed, "insertFiles"');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(execIdx).toBeGreaterThan(guardIdx);
+    // 小记附件 insertFiles 同守卫（共享判据第三处）
+    expect(QN_WIDGETS).toContain('execCommand("insertFiles", files, { from: "ui", category: "file" })');
+    expect(QN_WIDGETS.match(/selectionTouchesCard\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
   it("焦点交还正文时放行输入面（插完表情能就地继续输入）", () => {
     expect(DOCK).toContain("isTextEntryField(document.activeElement)");
   });

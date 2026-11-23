@@ -13,6 +13,8 @@
 import { useRef } from "react";
 import { EditorDock } from "./EditorDock";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
+// 261123 P1-B：媒体/表格与表情同一条内核插入语义（「非折叠选区被替换」）⇒ 同一片区守卫（判据共享）。
+import { notifyInsertBlocked, selectionTouchesCard } from "../../features/editor/insertGuard";
 import { showToast } from "../ui/toastBus";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { mediaKindOfFilename } from "../../core/assetNaming.js";
@@ -45,10 +47,23 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
     input.click();
   };
 
+  /**
+   * 卡片保护区（261123 P1-B，与 EditorDock 的 insertAtSelection/insertCard 守卫同一判据）：
+   * 内核通用插入 `insertFiles`/`table` 与 insertAtSelection 同语义——**非折叠选区被替换**。
+   * 实测（模拟器，整卡非折叠选中）：插图片 / 插表格都把「加密文本」卡**整卡顶掉**（数据破坏级）。
+   * ⇒ 选区触卡一律拦下并走同一提示通道（features/editor/insertGuard）。
+   */
+  const blockedByCardGuard = (): boolean => {
+    if (!selectionTouchesCard()) return false;
+    notifyInsertBlocked();
+    return true;
+  };
+
   /** 选到的文件 → 内核 insertFiles（图片/拍照/附件/音频/视频的唯一插入通道）。 */
   const insertFile = (file: File) => {
     const ed = editorRef.current;
     if (!ed) return;
+    if (blockedByCardGuard()) return;
     const kind = mediaKindOfFilename(file.name);
     const opts = kind ? { category: kind, from: "ui" } : undefined;
     const result = execEditorCommandResult(ed, "insertFiles", [file], opts);
@@ -78,6 +93,7 @@ export function EditorDockHost({ editor, editing, undoBackend = "kernel", undoLi
         onInsertAudio={() => insertFileViaInput("audio/*")}
         onInsertVideo={() => insertFileViaInput("video/*")}
         onInsertTable={() => {
+          if (blockedByCardGuard()) return;   // 261123 P1-B：table 同样会顶掉整卡（实测）
           // lakex 的 table 命令需要 rows/columns 配置（缺省会读 width 报错）；默认 3×3
           runCommand("table", { rows: 3, columns: 3 });
         }}
