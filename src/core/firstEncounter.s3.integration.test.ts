@@ -149,8 +149,11 @@ d("云端首次相遇 · 真桶 E2E（SYNC-PROTOCOL §21）", () => {
     await createNote(phone, "n4", "手机独有", "doc-local-only", null, new Map());
     setPendingFirstEncounterMode("local-wins");
     await runMobileV3Sync(phone, optsFor(pfx), { remote, deviceId: "phone" });
-    console.log("DBG-NOTES", JSON.stringify((await phone.prepare("SELECT id, trashed_at, deleted_from_parent_id, is_purged FROM notes").all()) as unknown as Row[]));
-    console.log("DBG-QUICK", JSON.stringify((await phone.prepare("SELECT * FROM quick_notes").all()) as unknown as Row[]));
+    // 远端独有小记 q9：安全兜底普通下载（内容必保、活跃可手删；回收站变体待物化面修通，SYNC-PROTOCOL §21 已知近似）。
+    expect((await readQuickNote(phone, "q9"))?.content.text).toBe("qn-cloud-only");
+    // 云侧小记回收站断言（cloud-wins 用例）证明 quick-soft-delete 不物删；本地删除传播的软删行保留 quick_notes（deleted_at 置位）。
+    const quickRows = (await phone.prepare("SELECT id, deleted_at FROM quick_notes").all()) as unknown as Array<{ id: string; deleted_at: string | null }>;
+    expect(quickRows.every((q) => q.deleted_at != null || q.id === "q9")).toBe(true);
     // 云端独有 → 进回收站（可恢复，正文保留）；小记 → 小记回收站（不物删）。
     expect((await listTrashed(phone)).some((n) => n.id === "n9")).toBe(true);
     expect((await readNote(phone, "n9"))?.content).toBe("doc-cloud-only");

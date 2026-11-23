@@ -135,9 +135,13 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
   );
   let sd = sd0;
   if (quickDeleted.size > 0) {
+    // 「远端独有 → 本轮落小记回收站」（首次相遇 local-wins 的 download-to-trash）：条目**保留**在 wanted
+    // 里让 saveQuickNotes 先物化行（内容随 apply-remote 已下载），再由清扫的 quickDeletes 分支软删进回收站；
+    // 其余（本地已有行的软删/他端删除跟随）照旧移出 wanted。判据 = 本轮有 apply-remote 的 quick 写。
+    const quickTrashDownloads = new Set(round.plan.writes.filter((w) => w.kind === "apply-remote" && w.space === "quickNotes").map((w) => w.id));
     sd = {
       ...sd,
-      quickNotes: { ...sd.quickNotes, items: sd.quickNotes.items.filter((q) => !quickDeleted.has(q.id)) },
+      quickNotes: { ...sd.quickNotes, items: sd.quickNotes.items.filter((q) => !quickDeleted.has(q.id) || quickTrashDownloads.has(q.id)) },
       quickDeletes: [...new Set([...(sd.quickDeletes ?? []), ...quickDeleted])],
     };
   }

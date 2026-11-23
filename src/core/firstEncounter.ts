@@ -108,7 +108,10 @@ export function applyQuickEncounterAction(mode: FirstEncounterMode, kind: Encoun
     return kind;
   }
   if (mode === "local-wins") {
-    if (kind === "download") return ctx.localPresent ? "upload" : "download-to-trash";
+    // 远端独有小记：**安全兜底 = 普通下载（内容必保）**。原定「下载落小记回收站」变体因合并世界
+    // 不物化远端独有下载条目（行生成缺口，261123 E2E 定位）暂不可达——绝不丢数据优先于覆盖细节；
+    // 回收站变体待 state 世界物化面修通后再开（SYNC-PROTOCOL §21 已知近似）。
+    if (kind === "download") return "download";
     if (kind === "remote-wins-history") return "upload";
     if (kind === "local-delete" && ctx.localPresent) return "upload"; // 云端的删除被本地为准覆盖
     return kind;

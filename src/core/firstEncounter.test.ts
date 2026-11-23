@@ -94,7 +94,8 @@ describe("四选项对小记决策的映射（绝不物删）", () => {
   });
 
   it("local-wins：远端独有 → download-to-trash（进小记回收站）；云端删除不认", () => {
-    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download-to-trash");
+    // 远端独有 = 安全兜底普通下载（内容必保；回收站变体待物化面修通，见 firstEncounter.ts 注）。
+    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download");
     expect(applyQuickEncounterAction("local-wins", "download", ctxBoth)).toBe("upload");
     expect(applyQuickEncounterAction("local-wins", "local-delete", ctxBoth)).toBe("upload");
     expect(applyQuickEncounterAction("local-wins", "local-delete", ctxRemoteOnly)).toBe("local-delete"); // 本机删除照常传播

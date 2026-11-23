@@ -57,6 +57,15 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
     expect(css).not.toMatch(/\.sidebar\.sidebar-docked\s*\{[^}]*--lake-dir-peek/);
   });
 
+  it("「已收起」分区规则必须限定在 .sidebar 内（261123 撞名修复防回退）", () => {
+    const css = read("styles/chrome.css");
+    // 裸 .sidebar-collapsed 会命中 .app-shell.sidebar-collapsed / .sidebar.sidebar-collapsed
+    // （侧栏「收起」状态类同名）⇒ max-height:33.333% 把整壳压成窗口 1/3 高
+    // （用户 261123 现场：空态挤顶部一小块 + 灰底大空，目录栏收起悬浮即触发）。
+    expect(css).not.toMatch(/^\.sidebar-collapsed\b/m);
+    expect(css).toContain(".sidebar .sidebar-collapsed {");
+  });
+
   it("过期字面值不得回归（112px 曾是大纲回退值）", () => {
     expect(read("features/outline/outline.css")).not.toContain("112px");
   });

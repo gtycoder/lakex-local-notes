@@ -584,7 +584,11 @@
 /* 261120 用户点单：目录底部「已收起」笔记本分区（= 置顶的反向：置底）。
    默认收起（展开态记忆见 features/sidebar/collapsedNotebooks），展开后行行为与目录完全一致。
    高度 = 内容自适应，**最多 1/3 目录栏高度**（父级是 flex 列的侧栏 ⇒ 百分比 max-height 可解析），超出区内滚动。 */
-.sidebar-collapsed {
+/* 261123 修复：本块选择器必须限定在 .sidebar 内 —— 裸 .sidebar-collapsed 会命中
+   .app-shell.sidebar-collapsed / .sidebar.sidebar-collapsed（侧栏「收起」状态类同名）
+   ⇒ 整壳被 max-height:33% 压成窗口 1/3 高（用户 261123 现场：空态挤顶部 + 灰底大空）。
+   防回退护栏见 styles/geometrySources.test.ts「sidebar-collapsed 选择器必须收窄」。 */
+.sidebar .sidebar-collapsed {
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
@@ -594,7 +598,7 @@
   border-top: 0.5px solid var(--lake-border-1);
 }
 /* 手动高度模式（拖过分隔条）：固定高度、取消 1/3 自适应上限；双击分隔条复位回自适应。 */
-.sidebar-collapsed.is-manual {
+.sidebar .sidebar-collapsed.is-manual {
   flex: 0 0 auto;
   max-height: none;
 }

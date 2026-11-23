@@ -536,8 +536,17 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     //    桌面不实现 discardQuickNote ⇒ 回落 cloud-delete = 迁移前桌面行为（语义不变）。
     const remoteDeletedQuickIds: string[] = [];
     for (const cur of current.values()) {
-      if (wanted.has(cur.id)) continue;
       if (cur.deletedAt) continue; // 已在 quick 回收站（移动 cloudDeleted 副本）：保持原状
+      // 本轮计划显式软删（quick-soft-delete / 首次相遇「下载落回收站」，经 quickDeletes 账本到此）：
+      // 一律进小记回收站（可恢复），**绝不走 discardQuickNote 物理删**（SYNC-PROTOCOL §21「绝不物删」红线）。
+      // 曾同步过（baseline 有 / cloudDeleted）的补「云端已删除·仅本地」标。deleted_at 已置的行在上一行跳过 ⇒
+      // 用户手删/既有回收站行的时间戳不被重打（软删时刻参与「他端恢复」判定）。
+      if ((state.quickDeletes ?? []).includes(cur.id)) {
+        await p.deleteQuickNote(cur.id);
+        if (cur.cloudDeleted === true || baselineQuickIds.has(cur.id)) remoteDeletedQuickIds.push(cur.id);
+        continue;
+      }
+      if (wanted.has(cur.id)) continue;
       const purge = (state.intents ?? []).some((it) => it.noteId === cur.id) || (state.quickPurges ?? []).includes(cur.id);
       const knownCloud = cur.cloudDeleted === true || baselineQuickIds.has(cur.id);
       try {
