@@ -71,7 +71,8 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     ...(mode === "throw" ? {} : { onEmptyCloud: mode }),
     ...(opts.deferAssets ? { deferAssets: true } : {}),
     ...(encounterMode ? { firstEncounter: { mode: encounterMode } } : {}),
-    targetKey: targetKeyOf({ endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket, prefix: settings.prefix }),
+    // 无设置（注入式 remote / 测试路径）= 无目标身份：跳过盖章，绝不抛（SYNC-PROTOCOL §21）。
+    ...(settings ? { targetKey: targetKeyOf({ endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket, prefix: settings.prefix }) } : {}),
   });
   // task-44 / task-66：单篇 apply 失败 = 「本地这篇本轮没落地」，独立 kind apply_skipped（内部类型，非 wire）。
   // 不得复用 remote_incomplete（那是「远端内容不全」，文案会误导用户）；桌面端 desktopSync 同口径。

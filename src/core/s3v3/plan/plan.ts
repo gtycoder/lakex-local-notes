@@ -140,6 +140,10 @@ export function planSync(input: PlanInput): SyncPlan {
   for (const p of lakePlan.notes) {
     const l = p.local;
     const r = p.remote;
+    // 发布排除项（remote-purged-trash = 「云端已删除·仅本地」，本就不在云端）：其位置/锁/标签
+    // 变化**绝不许置 indexChanged**（418 行发布过滤本就排除它）⇒ 否则零变更也发布 = 索引
+    // 代际空涨（261123 pullAllSafety 实测 published=true 空发布；同 idlePublish 回归守护面）。
+    const publishExcluded = p.kind === "remote-purged-trash";
     // task-44：位置字段（parentId / trashedAt / deletedFromParentId）**独立三方合并**（判据见 plan/positionMerge）。
     // 内容与位置是两个正交维度：位置本地赢 ⇒ 必须发布本地位置（纯移动轮也要 indexChanged）；
     // 位置远端赢 ⇒ 本地应用远端位置（apply-position）。两边都动 ⇒ updatedAt LWW 兜底。
@@ -150,7 +154,7 @@ export function planSync(input: PlanInput): SyncPlan {
       localUpdatedAt: l?.updatedAt ?? "",
       remoteUpdatedAt: r?.updatedAt ?? "",
     });
-    if (posMerge.winner === "local") indexChanged = true;
+    if (!publishExcluded && posMerge.winner === "local") indexChanged = true;
     // task-47：**编辑锁字段独立合并**（与 tagIds 同一层，脱离内容判定；判据 = 云端基线 + lockedAt LWW）。
     // 锁不是分布式租约/合并屏障；它不 bump updatedAt，所以只按内容判定永远发不出去。
     //  - 锁赢家=本地 ⇒ 必须发布（indexChanged + publishedLakeIds），与他端是否正在编辑正文无关；
@@ -163,7 +167,7 @@ export function planSync(input: PlanInput): SyncPlan {
     });
     const lockLocalWins = lockMerge.winner === "local";
     const lockRemoteWins = lockMerge.winner === "remote";
-    if (lockLocalWins) {
+    if (lockLocalWins && !publishExcluded) {
       indexChanged = true;
       publishedLakeIds.add(p.id);
     }
@@ -271,11 +275,10 @@ export function planSync(input: PlanInput): SyncPlan {
           const tagMeta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
           writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: tagMeta, bodyHash: r.contentHash });
         } else if (lt > rt || (lt === rt && localSet !== remoteSet)) {
-          indexChanged = true;
-          publishedLakeIds.add(p.id);
+          if (!publishExcluded) { indexChanged = true; publishedLakeIds.add(p.id); }
         }
       }
-    } else if (!suspiciousBody && l && (l.tagIds?.length ?? 0) > 0) {
+    } else if (!suspiciousBody && !publishExcluded && l && (l.tagIds?.length ?? 0) > 0) {
       // 远端（旧索引）没有标签字段：本地有关系 ⇒ 发布一次把字段带出去（绝不反向清空）。
       indexChanged = true;
       publishedLakeIds.add(p.id);
@@ -288,8 +291,11 @@ export function planSync(input: PlanInput): SyncPlan {
   // 目录：只有本地要发布（uploadLocal）才改索引；纯下载/应用远端不重发。
   // P1-b（261112 真实 S3 验收）：**本地 purge 也必须标记 indexChanged**——purge 后本地已无该目录，
   // 若本轮没有别的变更就会走「零变更短路」不发布，云端索引 folders[] 永久保留已删目录（对端会重新导入）。
+  // 「以云端为准」（首次相遇）：目录映射无对应改写（applyEncounterAction 只覆盖文档/小记）⇒
+  // 本地目录的 uploadLocal/本地删一律**不发布不上行**（云端为准；本地保留不丢数据，§21 已知近似）。
+  const folderCloudWins = input.encounter === "cloud-wins";
   for (const f of lakePlan.folders) {
-    if (f.uploadLocal || f.kind === "local-delete" || f.kind === "local-purge") indexChanged = true;
+    if (!folderCloudWins && (f.uploadLocal || f.kind === "local-delete" || f.kind === "local-purge")) indexChanged = true;
     // 261113（P2 #4 真实桶实测）：目录的**位置三件套同样独立三方合并**（与文档同口径）。
     // 他端改名会把 updatedAt 抬高，若只按 updatedAt 判，本地「移入/移出回收站」这一动作永远不会
     // 发布（删除不传播，对端一直可用）；恢复方向同理。位置本地赢 ⇒ 必须发布；远端赢 ⇒ 应用远端位置。
@@ -301,7 +307,7 @@ export function planSync(input: PlanInput): SyncPlan {
       remoteUpdatedAt: f.remote?.updatedAt ?? "",
     });
     const folderPosLocalWins = fPos.winner === "local";
-    if (folderPosLocalWins) indexChanged = true;
+    if (folderPosLocalWins && !folderCloudWins) indexChanged = true;
     // 目录元数据也要真正落到本地状态（否则对端永远显示活跃：回收站/父级变更传不过去）。
     // 本地位置赢时把本地位置塞进 meta，避免远端后台元数据把本地「已进回收站」又拉回活跃。
     if (f.applyRemote && f.remote) {
@@ -413,6 +419,7 @@ export function planSync(input: PlanInput): SyncPlan {
 
   // 发布索引：只在本轮会改变索引时构建（零变更轮 publish=null，只读 pointer）。
   let publish: SyncPlan["publish"] = null;
+  if (process.env.DBG_PLAN) console.log("DBG-PLAN", JSON.stringify({ indexChanged, notes: lakePlan.notes.map((n) => ({ id: n.id, kind: n.kind, up: n.uploadLocal, ar: n.applyRemote, to: !!n.trashOverride })), folders: lakePlan.folders.map((f) => ({ id: f.id, kind: f.kind, up: f.uploadLocal, ar: f.applyRemote })), quick: quickPlan.items.map((q) => ({ id: q.id, kind: q.kind, up: q.uploadLocal, ar: q.applyRemote, to: !!q.trashOverride })) }));
   if (indexChanged) {
     const lakeNotes = lakePlan.notes
       .filter((p) => p.kind !== "local-purge" && p.kind !== "remote-purged-trash")

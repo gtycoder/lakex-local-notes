@@ -196,7 +196,9 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
         break;
       }
       case "remote-wins-keep-history": {
-        const localChanged = !!l && !!b && l.contentHash !== b.contentHash;
+        // 无基线（首次相遇空底稿轮）：拿不出「本地是否改过」的证据 ⇒ 以「本地与将被覆盖的远端不同」
+        // 保守判留档（远端胜留历史，SYNC-PROTOCOL §21；多留一份历史无害，丢本地编辑有害，261123）。
+        const localChanged = !!l && (!b ? !!r && l.contentHash !== r.contentHash : l.contentHash !== b.contentHash);
         notes.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: localChanged, local: l ?? undefined, remote: r ?? undefined });
         break;
       }
@@ -212,11 +214,15 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
         const localLockNewer = !!l && localLockAt > remoteLockAt;
         // 环检测（C4）：本地父在远端树中位于本节点之下 ⇒ 上传会把远端树弄成环，必须跟随远端断开。
         const wouldCycle = !!l && !!r && !!l.parentId && isRemoteDescendant(l.parentId, id, remoteNoteParents);
-        notes.push({
+        // 「以云端为准」：元数据分歧一律**采纳远端**（把本地时间戳/锁漂移就地归一）——否则
+      // 首相遇轮抑制上行后漂移仍在，下一个普通轮又对齐发布 = 索引抖动（261123 idlePublish 实测）。
+          const cloudWinsMeta = ctx.encounter === "cloud-wins";
+          const metaDrift = localMetaNewer || remoteMetaNewer || localLockNewer || remoteLockNewer;
+          notes.push({
           id,
           kind: "none",
-          applyRemote: wouldCycle || remoteMetaNewer || remoteLockNewer,
-          uploadLocal: !wouldCycle && (localMetaNewer || (!remoteMetaNewer && localLockNewer)),
+          applyRemote: wouldCycle || remoteMetaNewer || remoteLockNewer || (cloudWinsMeta && metaDrift),
+          uploadLocal: !cloudWinsMeta && !wouldCycle && (localMetaNewer || (!remoteMetaNewer && localLockNewer)),
           archiveLocal: false,
           local: l ?? undefined,
           remote: r ?? undefined,
@@ -266,12 +272,18 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     else if (lChanged && rChanged) {
       // 环检测（C4）：本地 new parent 在远端目录树中位于本目录之下 ⇒ 上传会成环，跟随远端断开。
       const wouldCycle = !!l.parentId && isRemoteDescendant(l.parentId, id, remoteFolderParents);
-      if (!wouldCycle && l.updatedAt > r.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
+      if (!wouldCycle && l.updatedAt > r.updatedAt && ctx.encounter !== "cloud-wins") folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
       else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
     } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
   }
   const normalizedFolders = enforceDiarySpaceMonotone(folders);
   if (cycleWarnings.length > 0) return { notes, folders: normalizedFolders, warnings: cycleWarnings };
+  // 「以云端为准」（首次相遇）：本地一切变更不上行（内容/元数据/目录）——云端覆盖本地；
+  // 恢复（restorePending）是唯一显式例外（AGENTS §3#4）。
+  if (ctx.encounter === "cloud-wins") {
+    for (const n of notes) if (!ctx.restorePending.has(n.id)) n.uploadLocal = false;
+    for (const f of normalizedFolders) f.uploadLocal = false;
+  }
   return { notes, folders: normalizedFolders };
 }
 
@@ -361,11 +373,23 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
       continue;
     }
     if (!ll || !rr) continue;
+    // 无基线（首次相遇空底稿）：与 decideItem 的 !basePresent 分支同语义——同 hash = none，
+    // 异 = 远端胜留历史。旧判据 `bb?.contentHash ?? null` 在无基线时把 lChanged/rChanged 恒判 true
+    // ⇒ 无谓的 remote-wins-history 下载 + 留档（261123 pullAllDiff 实测 downloaded=1）。
+    if (!bb) {
+      if (ll.contentHash === rr.contentHash) {
+        const remoteMetaNewer0 = rr.updatedAt > ll.updatedAt;
+        items.push({ id, kind: "none", applyRemote: remoteMetaNewer0 || (encounter === "cloud-wins" && ll.updatedAt !== rr.updatedAt), uploadLocal: encounter !== "cloud-wins" && !remoteMetaNewer0 && ll.updatedAt > rr.updatedAt, archiveLocal: false, local: ll, remote: rr });
+      } else {
+        items.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: true, local: ll, remote: rr });
+      }
+      continue;
+    }
     const lChanged = ll.contentHash !== (bb?.contentHash ?? null);
     const rChanged = rr.contentHash !== (bb?.contentHash ?? null);
     if (!lChanged && !rChanged) {
       const remoteMetaNewer = rr.updatedAt > ll.updatedAt;
-      items.push({ id, kind: "none", applyRemote: remoteMetaNewer, uploadLocal: !remoteMetaNewer && ll.updatedAt > rr.updatedAt, archiveLocal: false, local: ll, remote: rr });
+      items.push({ id, kind: "none", applyRemote: remoteMetaNewer || (encounter === "cloud-wins" && ll.updatedAt !== rr.updatedAt), uploadLocal: encounter !== "cloud-wins" && !remoteMetaNewer && ll.updatedAt > rr.updatedAt, archiveLocal: false, local: ll, remote: rr });
       continue;
     }
     if (lChanged && !rChanged) {
@@ -396,6 +420,10 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
       it.uploadLocal = mapped === "upload";
       it.archiveLocal = mapped === "remote-wins-history";
     }
+  }
+  // 「以云端为准」：小记本地变更同样不上行（恢复例外）；软删/回收站语义由上方映射照常。
+  if (encounter === "cloud-wins") {
+    for (const it of items) if (!restorePending.has(it.id)) it.uploadLocal = false;
   }
   return { items };
 }

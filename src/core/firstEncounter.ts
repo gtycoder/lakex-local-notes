@@ -21,7 +21,9 @@ export interface SyncTargetSettings {
   prefix: string;
 }
 
-export function targetKeyOf(s: SyncTargetSettings): string {
+export function targetKeyOf(s: SyncTargetSettings | null | undefined): string | undefined {
+  // 无设置行/注入式 remote（测试与降级路径）＝ 无云端目标身份 ⇒ undefined（闸门按「无 targetKey」处理，绝不抛）。
+  if (!s || !s.endpoint || !s.bucket) return undefined;
   return [s.endpoint.trim().toLowerCase(), s.region.trim(), s.bucket.trim(), s.prefix.trim().replace(/^\/+|\/+$/g, "")].join("\u0000");
 }
 

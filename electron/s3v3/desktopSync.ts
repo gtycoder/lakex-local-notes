@@ -161,7 +161,8 @@ export async function syncWithV3(
       ...(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode }),
       ...(deferAssets ? { deferAssets: true } : {}),
       ...(encounterMode ? { firstEncounter: { mode: encounterMode } } : {}),
-      targetKey: targetKeyOf({ endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket, prefix: settings!.prefix }),
+      // 无设置行（注入式 remote 的测试路径）= 无目标身份：targetKey 留空、跳过盖章，绝不抛（SYNC-PROTOCOL §21）。
+      ...(settings ? { targetKey: targetKeyOf({ endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket, prefix: settings.prefix }) } : {}),
     });
     // SD-04 + Del-6（261027/261029）：本轮成功同步后推进「墓碑发布水线」（替代逐行 published_at 记账）。
     // 判据 = deleted_at > 水线 ⇒ 本轮之前（含本轮）的 purge 墓碑清零；下一轮新增 purge 仍待同步。

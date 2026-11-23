@@ -380,6 +380,9 @@ export class S3v3SyncEngine {
     const noRelationship = !rawBaseline || bootstrap || staleTarget;
     const localNonEmpty = state.lake.notes.length > 0 || state.quickNotes.items.length > 0 || state.folders.length > 0;
     const encounter = noRelationship ? opts.firstEncounter?.mode : undefined;
+    // 门控（261123）：mode 只对首次相遇轮生效——非首相遇轮把 firstEncounter 从下传 opts 剥掉，
+    // 否则用户后续每次编辑都会被覆盖映射吃掉（idlePublish 实测：A 的 v2 编辑被 cloud-wins 映射成远端胜）。
+    const roundOpts: S3v3SyncOptions = noRelationship ? opts : { ...opts, firstEncounter: undefined };
     if (noRelationship && pointer && localNonEmpty && !encounter) {
       const remoteLake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
       const localActive = new Set(state.lake.notes.filter((n) => !n.trashedAt).map((n) => n.id));
@@ -403,17 +406,19 @@ export class S3v3SyncEngine {
           throw new S3v3SyncError("fork", "同 generation 不同 commit：分叉/迟到覆盖");
         }
       }
-      return await this.syncOnceRound(state, baseline, pointer, report, opts);
+      return await this.syncOnceRound(state, baseline, pointer, report, roundOpts);
     }
     if (!rawBaseline || bootstrap || staleTarget) {
       if (pointer) {
-        if (encounter) {
+        // 本地为空 ⇒ 保留既有「全量重拉」路径（含资产 getToFile 原生下载，PORTABLE-TRANSFER §3.1）；
+        // encounter 合并轮只对「本地非空」的首次相遇生效（261123 nativeUpload 实测被误路由）。
+        if (encounter && localNonEmpty) {
           // 首次相遇选定合并方式：以「合并底稿」走四相合并轮（旧目标基线换目标后作废，用空底稿；
           // bootstrap 底稿（便携包）保留——它就是为「首次相遇判真删」准备的三方 base）。
           const draft = rawBaseline && bootstrap && !staleTarget ? rawBaseline : buildBootstrapBaseline({ notes: [], folders: [], quickItems: [] });
-          return await this.syncOnceRound(state, rebaseBootstrapBaseline(draft, lineageOf(pointer)), pointer, report, opts);
+          return await this.syncOnceRound(state, rebaseBootstrapBaseline(draft, lineageOf(pointer)), pointer, report, roundOpts);
         }
-        return await this.syncPullAllRound(pointer, state, report, opts);
+        return await this.syncPullAllRound(pointer, state, report, roundOpts);
       }
       // 首轮并发现身竞态（两个新设备同时首传）：pointer 还没写、对象已在云上 ⇒ 短暂重试再判。
       // 只做**一次**前缀列举判空（旧实现 objects/ + meta/index/ 各列一次 = 空桶也 2~4 次 RTT）。
@@ -423,13 +428,13 @@ export class S3v3SyncEngine {
         const again = await this.readPointer();
         if (again) {
           // bootstrap 竞态同样不落 pullAll：血缘对齐走合并轮。
-          if (rawBaseline && bootstrap && !staleTarget) return await this.syncOnceRound(state, rebaseBootstrapBaseline(rawBaseline, lineageOf(again)), again, report, opts);
-          if (encounter) return await this.syncOnceRound(state, rebaseBootstrapBaseline(buildBootstrapBaseline({ notes: [], folders: [], quickItems: [] }), lineageOf(again)), again, report, opts);
-          return await this.syncPullAllRound(again, state, report, opts);
+          if (rawBaseline && bootstrap && !staleTarget) return await this.syncOnceRound(state, rebaseBootstrapBaseline(rawBaseline, lineageOf(again)), again, report, roundOpts);
+          if (encounter && localNonEmpty) return await this.syncOnceRound(state, rebaseBootstrapBaseline(buildBootstrapBaseline({ notes: [], folders: [], quickItems: [] }), lineageOf(again)), again, report, roundOpts);
+          return await this.syncPullAllRound(again, state, report, roundOpts);
         }
       }
       if ((await this.remote.list("")).length > 0) throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
-      return await this.syncFirstRound(state, report, opts);
+      return await this.syncFirstRound(state, report, roundOpts);
     }
     // 有基线却没有 pointer：被清空或换桶 ⇒ 必须显式失败（走「从云端恢复」）。
     throw new S3v3SyncError("pointer-corrupt", "本机有基线但云端 pointer 缺失（被清空或换桶），请走「从云端恢复」");
@@ -844,6 +849,7 @@ export class S3v3SyncEngine {
         this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
       },
       deferAssets: opts.deferAssets === true,
+      // opts 已在 syncOnceInner 按「仅首相遇轮生效」门控（roundOpts 剥离后续轮的 firstEncounter）。
       encounter: opts.firstEncounter?.mode,
       now: this.iso(),
       commitOptions: { lockWaitMs: this.publishLockWaitMs } }, ports);
