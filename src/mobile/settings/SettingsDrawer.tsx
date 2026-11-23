@@ -84,7 +84,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     importFromFile: importS3ConfigFromFile,
     importFromCode: importS3ConfigFromCode,
     closeExport: closeS3Export,
-  } = useS3SettingsForm(open);
+  } = useS3SettingsForm(open && view === "s3"); // 页面级水合（261123 E2E：只按抽屉 open 拉一次 ⇒ 进页面不重拉，表单停在空值）
   /** 「粘贴迁移码」导入面板（与桌面 S3ConfigImportDialog 同形同构）。 */
   const [s3ImportOpen, setS3ImportOpen] = useState(false);
   const {

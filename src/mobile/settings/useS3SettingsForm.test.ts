@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { S3Settings } from "../../lib/types";
 
@@ -192,5 +193,44 @@ describe("useS3SettingsForm", () => {
       await expect(form.importFromCode("not-a-code")).rejects.toThrow("不是 LakexLocalNotes 的 S3 迁移码");
     });
     expect(mocks.saveS3Settings).not.toHaveBeenCalled();
+  });
+
+  // 261123 E2E「S3 表单不从存储水合」回归钉（lead 转办）。
+  it("已保存 → 重开表单 → 各字段水合正确", async () => {
+    mocks.getS3Settings.mockResolvedValue(null);
+    await render(true);
+    expect(form.form.bucket).toBe("");
+    // 配置在表单之外落库（E2E 现场：脚本/他处 saveS3Settings）⇒ 关闭再开必须从存储水合。
+    mocks.getS3Settings.mockResolvedValue(saved);
+    await render(false);
+    await render(true);
+    expect(form.form).toMatchObject({
+      endpoint: saved.endpoint,
+      region: saved.region,
+      bucket: saved.bucket,
+      prefix: saved.prefix,
+      accessKeyId: saved.accessKeyId,
+      secretAccessKey: S3_SECRET_MASK,
+    });
+    expect(form.settingsLoaded).toBe(true);
+  });
+
+  it("已保存过场景：留空 = 沿用已存值，不误报保存失败", async () => {
+    await render();
+    act(() => form.updateForm({ bucket: "", accessKeyId: "", secretAccessKey: "", prefix: "" }));
+    await act(async () => { expect(await form.save()).toBe(true); });
+    expect(mocks.saveS3Settings).toHaveBeenLastCalledWith(expect.objectContaining({
+      bucket: saved.bucket,
+      accessKeyId: saved.accessKeyId,
+      secretAccessKey: saved.secretAccessKey,
+      prefix: saved.prefix,
+      endpoint: saved.endpoint,
+      region: saved.region,
+    }));
+  });
+
+  it("接线钉：SettingsDrawer 用页面级 open 水合 S3 表单（open && view === \"s3\"）", () => {
+    const src = readFileSync(`${process.cwd()}/src/mobile/settings/SettingsDrawer.tsx`, "utf8");
+    expect(src).toContain('useS3SettingsForm(open && view === "s3")');
   });
 });

@@ -85,14 +85,19 @@ export function useS3SettingsForm(open: boolean) {
       reportNativeActionError("保存前读取 S3 设置", error);
       return null;
     });
-    const secret = form.secretAccessKey === S3_SECRET_MASK ? (prev?.secretAccessKey ?? "") : form.secretAccessKey;
+    // 261123（E2E S3 表单水合修复）：**留空 = 沿用已保存值**——与桌面 Secret Key「留空或保持 ******** = 沿用」同口径，
+    // 扩展到全部连接字段；无已存值时留空照旧交给 validateS3Settings 拦截（全新配置仍必填）。
+    const keep = (draft: string, savedValue: string | undefined) => (draft.trim() ? draft : (savedValue ?? draft));
+    const secret = form.secretAccessKey === S3_SECRET_MASK || !form.secretAccessKey.trim()
+      ? (prev?.secretAccessKey ?? form.secretAccessKey)
+      : form.secretAccessKey;
     // D2 261017：移动端只支持虚拟托管（阿里云/腾讯云/AWS/七牛）。
     const cfg: S3Settings = {
-      endpoint: form.endpoint,
-      region: form.region,
-      bucket: form.bucket,
-      prefix: form.prefix,
-      accessKeyId: form.accessKeyId,
+      endpoint: keep(form.endpoint, prev?.endpoint),
+      region: keep(form.region, prev?.region),
+      bucket: keep(form.bucket, prev?.bucket),
+      prefix: keep(form.prefix, prev?.prefix),
+      accessKeyId: keep(form.accessKeyId, prev?.accessKeyId),
       secretAccessKey: secret,
       forcePathStyle: false,
     };
