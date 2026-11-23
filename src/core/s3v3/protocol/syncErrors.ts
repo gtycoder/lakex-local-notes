@@ -14,7 +14,7 @@ export type S3v3ErrorClass = "retryable" | "action-required" | "fatal";
 export function classifyS3v3Error(error: unknown): S3v3ErrorClass {
   const code = error instanceof S3v3SyncError ? error.code : (error as { code?: string } | null)?.code;
   if (code === "lock-busy" || code === "publish-conflict" || code === "cloud-changed") return "retryable";
-  if (code === "empty-cloud" || code === "epoch-mismatch" || code === "generation-rollback" || code === "fork") return "action-required";
+  if (code === "empty-cloud" || code === "epoch-mismatch" || code === "generation-rollback" || code === "fork" || code === "first-encounter-decision-required") return "action-required";
   if (code === "pointer-corrupt") return "fatal";
   // 网络/未知错误按可重试处理（S3 SDK 自身有重试；上层每轮同步会再试）
   return "retryable";

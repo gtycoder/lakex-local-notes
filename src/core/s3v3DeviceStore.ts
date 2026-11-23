@@ -88,6 +88,8 @@ export interface DeviceBaseline {
    * 首个同步轮对齐云端谱系并把基线推进为真基线后，本标记消失。**设备本地、绝不上传**。
    */
   bootstrap?: boolean;
+  /** 基线所属的云端目标（targetKeyOf）：换桶/换前缀 ⇒ 不符 = 新的首次相遇（SYNC-PROTOCOL §21）。设备本地、绝不上传。 */
+  targetKey?: string;
 }
 
 /** 单条小记推送的轻量状态（261110「保存并同步」提速）：只含这条小记与同步标记，

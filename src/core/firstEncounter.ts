@@ -1,6 +1,6 @@
 /**
  * 「云端首次相遇」探测与询问机制（261123 用户两轮讨论定稿）—— 纯逻辑单一来源，两端共用。
- * 规格：docs/SYNC-PROTOCOL.md §16 / docs/PORTABLE-TRANSFER.md §3.2。
+ * 规格：docs/SYNC-PROTOCOL.md §21 / docs/PORTABLE-TRANSFER.md §3.2。
  *
  * 业务背景：没有共同历史时「云端没有我这批笔记」分不清是「被删了」还是「没传上去」；
  * 原规则猜前者 ⇒ 配错桶/顺序走反时全库进回收站（可恢复但体验灾难）。裁决：不猜，问用户。
@@ -118,6 +118,44 @@ export function applyQuickEncounterAction(mode: FirstEncounterMode, kind: Encoun
   if (kind === "local-purge") return "download";
   if (kind === "local-delete" && !ctx.localPresent) return "download"; // 云端为准：云端条目回拉，不从云端删除
   return kind;
+}
+
+/**
+ * 一次性决策注入（设备本地、会话级）：弹窗选定后写入，下一次同步入口消费掉。
+ * 免改两端 IPC/桥签名；「仅这一次」语义天然成立（该轮建立共同基线后不再需要）。
+ * 后台同步若先跑到，执行的也是用户已选定的模式（用户裁决优先于触发方式）。
+ */
+let pendingMode: FirstEncounterMode | null = null;
+export function setPendingFirstEncounterMode(mode: FirstEncounterMode): void { pendingMode = mode; }
+export function consumePendingFirstEncounterMode(): FirstEncounterMode | null {
+  const m = pendingMode;
+  pendingMode = null;
+  return m;
+}
+
+/** 从 first-encounter-decision-required 错误消息解析事实（两端 UI 共用）。 */
+export function parseEncounterFacts(message: string): EncounterFacts | null {
+  try {
+    const v = JSON.parse(message) as Partial<EncounterFacts>;
+    if (typeof v.localNotes === "number" && typeof v.cloudNotes === "number" && typeof v.overlapNotes === "number") {
+      return { localNotes: v.localNotes, cloudNotes: v.cloudNotes, overlapNotes: v.overlapNotes };
+    }
+  } catch { /* 非事实消息 */ }
+  return null;
+}
+
+/** 五选项文案单一来源（顺序 = 弹窗按钮顺序；「取消」由 UI 自行渲染为关闭）。 */
+export const ENCOUNTER_OPTIONS: ReadonlyArray<{ mode: FirstEncounterMode; label: string; hint: string }> = [
+  { mode: "smart", label: "智能合并", hint: "推荐：按真实历史判定删除（顺序正确时即增量同步）" },
+  { mode: "additive", label: "只增不删", hint: "仅这一次：本机内容全部上传，本轮双向都不删" },
+  { mode: "local-wins", label: "以本地为准", hint: "本地覆盖云端；云端多出的进回收站（可恢复）" },
+  { mode: "cloud-wins", label: "以云端为准", hint: "云端覆盖本地；本地多出的进回收站（可恢复）" },
+];
+
+/** 配置保存「变更即重探」判定（功能一触发条件）：endpoint/region/bucket/prefix 任一变化。 */
+export function s3SettingsChanged(prev: SyncTargetSettings | null, next: SyncTargetSettings): boolean {
+  if (!prev) return true;
+  return targetKeyOf(prev) !== targetKeyOf(next);
 }
 
 /** 询问结果的事实行文案（弹窗用；两端 UI 各自排版）。 */

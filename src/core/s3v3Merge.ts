@@ -169,7 +169,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       restorePending: ctx.restorePending.has(id),
       localPurgeIntent: ctx.purgeIntents.has(id),
     });
-    // 首次相遇改写层（SYNC-PROTOCOL §16）：undefined = 既有语义；四选项对缺席/冲突判定的映射见 firstEncounter.ts。
+    // 首次相遇改写层（SYNC-PROTOCOL §21）：undefined = 既有语义；四选项对缺席/冲突判定的映射见 firstEncounter.ts。
     const action: ItemAction | "download-to-trash" = ctx.encounter
       ? applyEncounterAction(ctx.encounter, rawAction, { localPresent: !!l, remotePresent: !!r })
       : rawAction;
@@ -378,7 +378,7 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
     }
     items.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: true, local: ll, remote: rr });
   }
-  // 首次相遇改写层（SYNC-PROTOCOL §16）：小记版映射（download-to-trash = 下载内容 + 落小记回收站 + 发布缺席）。
+  // 首次相遇改写层（SYNC-PROTOCOL §21）：小记版映射（download-to-trash = 下载内容 + 落小记回收站 + 发布缺席）。
   if (encounter) {
     for (const it of items) {
       const mapped = applyQuickEncounterAction(encounter, it.kind as EncounterQuickAction, { localPresent: !!it.local, remotePresent: !!it.remote });

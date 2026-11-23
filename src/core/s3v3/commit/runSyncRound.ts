@@ -38,6 +38,10 @@ export interface RoundInput {
   state?: PlanState;
   deferAssets?: boolean;
   commitOptions?: CommitOptions;
+  /** 首次相遇四选项（SYNC-PROTOCOL §21）：透传给 planSync 决策映射层。 */
+  encounter?: import("../../firstEncounter.js").FirstEncounterMode;
+  /** 首次相遇落回收站用时间戳（trashedAt）。 */
+  now?: string;
   /** 进度上报（引擎桥到 UI；纯可选，缺省不报）。 */
   progress?: (p: { phase: "archives" | "reads" | "uploads" | "deletes" | "asset-put" | "asset-get"; done: number; total: number; bytesDone: number }) => void;
 }
@@ -60,7 +64,7 @@ export interface RoundResult {
 export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promise<RoundResult> {
   if (!input.basePointer) throw new Error("runSyncRound 需要 basePointer（无基线请先走首拉路径）");
   const basePointer = input.basePointer;
-  const plan = planSync({ local: input.local, base: input.base, remote: input.remote, state: input.state ?? { restorePending: [], purgeIntents: [], folderPurgeIntents: [] }, deferAssets: input.deferAssets });
+  const plan = planSync({ local: input.local, base: input.base, remote: input.remote, state: input.state ?? { restorePending: [], purgeIntents: [], folderPurgeIntents: [] }, deferAssets: input.deferAssets, encounter: input.encounter, now: input.now });
 
   const apply = await applyPlan(plan, ports, {
     // 261113（P2 #10）：user-purge 的对象删除推迟到发布成功之后（先发布后清理）。

@@ -146,7 +146,9 @@ describe("合并底稿首同步（261123 四步换机路径）", () => {
   it("不报错；增量合并：改过的下载、本地新增上传、远端删的传播出活跃集、未改零传输；基线推进为真基线", async () => {
     const { remote, device } = seedScenario();
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "phone" });
-    const report = await engine.sync({ onEmptyCloud: "upload" });
+    // 261123 闸门（SYNC-PROTOCOL §21）：bootstrap 底稿也算未建立关系 ⇒ 需要显式选择；
+    // 「智能合并」= 本用例钉的既有语义（按包内基线判真删）。
+    const report = await engine.sync({ onEmptyCloud: "upload", firstEncounter: { mode: "smart" } });
 
     // 首同步成功（旧实现这里抛「基线丢失/中止」类失败）。
     expect(report.warnings ?? []).toEqual([]);
@@ -174,9 +176,9 @@ describe("合并底稿首同步（261123 四步换机路径）", () => {
   it("第二轮幂等：零下载零发布（基线已推进，不会拿导出快照反复重下）", async () => {
     const { remote, device } = seedScenario();
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "phone" });
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ onEmptyCloud: "upload", firstEncounter: { mode: "smart" } });
     const writesAfterFirst = device.writtenBodies.length;
-    const report2 = await engine.sync({ onEmptyCloud: "upload" });
+    const report2 = await engine.sync({ onEmptyCloud: "upload" }); // 已建立关系：不再询问（ask-once）
     expect(device.writtenBodies.length).toBe(writesAfterFirst);
     expect(report2.downloadedNotes ?? 0).toBe(0);
     expect(report2.uploadedNotes ?? 0).toBe(0);

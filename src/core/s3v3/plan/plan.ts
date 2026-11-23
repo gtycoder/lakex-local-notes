@@ -59,7 +59,7 @@ export interface PlanInput {
   state: PlanState;
   /** false = 首拉只搬正文/声明（资产按需），与引擎 deferAssets 同义。 */
   deferAssets?: boolean;
-  /** 首次相遇四选项（SYNC-PROTOCOL §16）：undefined = 既有语义。 */
+  /** 首次相遇四选项（SYNC-PROTOCOL §21）：undefined = 既有语义。 */
   encounter?: import("../../firstEncounter.js").FirstEncounterMode;
   /** 首次相遇落回收站用时间戳（trashedAt）。 */
   now?: string;

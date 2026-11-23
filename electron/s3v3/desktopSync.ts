@@ -11,6 +11,7 @@ import { assertQuickNotesSyncAvailable } from "../quickNotesAvailability.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../src/core/s3v3Report.js";
 import { countRemoteOps, remoteOpSummary } from "../../src/core/s3v3/remoteStats.js";
+import { consumePendingFirstEncounterMode, targetKeyOf } from "../../src/core/firstEncounter.js";
 import { runQuickPush } from "../../src/core/s3v3/quickPush/pipeline.js";
 import { perfMessage } from "../../src/core/logFormat.js";
 import { mergeSyncWarnings, syncWarningOfApplyFailure } from "../../src/core/syncWarningMerge.js";
@@ -154,7 +155,14 @@ export async function syncWithV3(
   // 按需资产（P0-4，与移动端同口径）：设置里打开时首拉只同步正文/声明，媒体打开/预览时补拉。
   const deferAssets = store.getSyncSettings().deferAssets === true;
   try {
-    const r = await engine.sync({ ...(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode }), ...(deferAssets ? { deferAssets: true } : {}) });
+    // 「云端首次相遇」（SYNC-PROTOCOL §21）：弹窗决策一次性注入（setPendingFirstEncounterMode）；targetKey 随基线盖章。
+    const encounterMode = consumePendingFirstEncounterMode();
+    const r = await engine.sync({
+      ...(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode }),
+      ...(deferAssets ? { deferAssets: true } : {}),
+      ...(encounterMode ? { firstEncounter: { mode: encounterMode } } : {}),
+      targetKey: targetKeyOf({ endpoint: settings!.endpoint, region: settings!.region, bucket: settings!.bucket, prefix: settings!.prefix }),
+    });
     // SD-04 + Del-6（261027/261029）：本轮成功同步后推进「墓碑发布水线」（替代逐行 published_at 记账）。
     // 判据 = deleted_at > 水线 ⇒ 本轮之前（含本轮）的 purge 墓碑清零；下一轮新增 purge 仍待同步。
     // 记账失败不影响同步结果；下一轮成功后水线继续前进即可覆盖。

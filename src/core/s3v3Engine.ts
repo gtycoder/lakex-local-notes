@@ -26,7 +26,7 @@ import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } f
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
 import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
-import { isBootstrapBaseline, rebaseBootstrapBaseline } from "./portable/bootstrapBaseline.js";
+import { buildBootstrapBaseline, isBootstrapBaseline, rebaseBootstrapBaseline } from "./portable/bootstrapBaseline.js";
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { selectConflictEvents, type SyncConflictEvent } from "./syncConflictLog.js";
@@ -70,6 +70,10 @@ export interface S3v3SyncOptions {
   /** 按需资产（P0-4，261026）：首拉只拉 pointer/索引/正文，媒体字节延后到打开/预览时补拉。
    *  默认 false（保持全量语义）；移动端可由「按需下载附件」开关打开。 */
   deferAssets?: boolean;
+  /** 「云端首次相遇」（SYNC-PROTOCOL §21）：弹窗选定的合并方式；判定需要询问且缺省时抛 first-encounter-decision-required。 */
+  firstEncounter?: { mode: import("./firstEncounter.js").FirstEncounterMode };
+  /** 当前云端目标身份（targetKeyOf）：随基线盖章，换目标 = 重新判定首次相遇。 */
+  targetKey?: string;
 }
 export interface S3v3SyncReport {
   downloadedNotes: number;
@@ -162,6 +166,8 @@ const emptyState = (): DeviceState => ({
   restorePending: [] });
 
 export class S3v3SyncEngine {
+  /** 当前云端目标身份（targetKeyOf）：syncOnce 开头从 opts 捕获，供 stampTargetKey 盖章。 */
+  private targetKey?: string;
   private readonly remote: S3v3Remote;
   private readonly device: S3v3DeviceStore;
   private readonly deviceId: string;
@@ -338,6 +344,22 @@ export class S3v3SyncEngine {
   }
 
   private async syncOnce(opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
+    this.targetKey = opts.targetKey;
+    const out = await this.syncOnceInner(opts);
+    // targetKey 盖章（SYNC-PROTOCOL §21）：基线属于具体云端目标；换目标 = 新的首次相遇。
+    // 只在缺失/变化时写一次（老基线无 targetKey ⇒ 首轮补盖；此后稳定不重写）。
+    await this.stampTargetKey();
+    return out;
+  }
+
+  /** targetKey 盖章：基线记录它属于哪个云端目标（endpoint/region/bucket/prefix 身份）。 */
+  private async stampTargetKey(): Promise<void> {
+    if (!this.targetKey) return;
+    const b = await this.device.loadBaseline();
+    if (b && b.targetKey !== this.targetKey) await this.device.saveBaseline({ ...b, targetKey: this.targetKey });
+  }
+
+  private async syncOnceInner(opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
     const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
     const state = (await this.device.loadState()) ?? emptyState();
     // 待补资产账本（261027）：与 state 同一引用；适配器持久化，失败记账、成功销账。
@@ -350,8 +372,27 @@ export class S3v3SyncEngine {
     // 绝不落进 syncPullAllRound（拉全会把迁移数据当「云端已删」收敛：小记物删/文档假删除）。
     const bootstrap = isBootstrapBaseline(rawBaseline);
     const lineageOf = (p: S3v3Pointer) => ({ epoch: p.epoch, generation: p.generation, lakeCommit: p.lake.commit, quickNotesCommit: p.quickNotes.commit });
+    // =====「云端首次相遇」闸门（SYNC-PROTOCOL §21，261123 用户裁决）=====
+    // 没有共同历史（无基线 / 仅 bootstrap 底稿 / 基线属于别的云端目标）且云端与本地都非空时，
+    // 「云端缺席」分不清「被删了」还是「没传上去」⇒ 不猜：要求用户先选合并方式（弹窗五选一）。
+    // 选定任一选项该轮即建立共同基线（此后永不再问）；换桶/换前缀（targetKey 变）= 新的首次相遇。
+    const staleTarget = !!(rawBaseline && rawBaseline.targetKey && opts.targetKey && rawBaseline.targetKey !== opts.targetKey);
+    const noRelationship = !rawBaseline || bootstrap || staleTarget;
+    const localNonEmpty = state.lake.notes.length > 0 || state.quickNotes.items.length > 0 || state.folders.length > 0;
+    const encounter = noRelationship ? opts.firstEncounter?.mode : undefined;
+    if (noRelationship && pointer && localNonEmpty && !encounter) {
+      const remoteLake = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
+      const localActive = new Set(state.lake.notes.filter((n) => !n.trashedAt).map((n) => n.id));
+      const cloudActive = remoteLake.notes.filter((n) => !n.trashedAt);
+      const facts = {
+        localNotes: localActive.size,
+        cloudNotes: cloudActive.length,
+        overlapNotes: cloudActive.filter((n) => localActive.has(n.id)).length,
+      };
+      throw new S3v3SyncError("first-encounter-decision-required", JSON.stringify(facts));
+    }
     // v4 四相内核是唯一实现（旧 v3 增量/首拉/重拉路径已删除）。四条分支覆盖全部入口。
-    if (pointer && rawBaseline) {
+    if (pointer && rawBaseline && !noRelationship) {
       const baseline = bootstrap ? rebaseBootstrapBaseline(rawBaseline, lineageOf(pointer)) : rawBaseline;
       if (!bootstrap) {
         // 云端状态分类（原判据不变）：epoch 不一致 / 代际回滚 / 同代不同 commit（分叉）都必须显式失败，
@@ -364,8 +405,16 @@ export class S3v3SyncEngine {
       }
       return await this.syncOnceRound(state, baseline, pointer, report, opts);
     }
-    if (!rawBaseline || bootstrap) {
-      if (pointer) return await this.syncPullAllRound(pointer, state, report, opts);
+    if (!rawBaseline || bootstrap || staleTarget) {
+      if (pointer) {
+        if (encounter) {
+          // 首次相遇选定合并方式：以「合并底稿」走四相合并轮（旧目标基线换目标后作废，用空底稿；
+          // bootstrap 底稿（便携包）保留——它就是为「首次相遇判真删」准备的三方 base）。
+          const draft = rawBaseline && bootstrap && !staleTarget ? rawBaseline : buildBootstrapBaseline({ notes: [], folders: [], quickItems: [] });
+          return await this.syncOnceRound(state, rebaseBootstrapBaseline(draft, lineageOf(pointer)), pointer, report, opts);
+        }
+        return await this.syncPullAllRound(pointer, state, report, opts);
+      }
       // 首轮并发现身竞态（两个新设备同时首传）：pointer 还没写、对象已在云上 ⇒ 短暂重试再判。
       // 只做**一次**前缀列举判空（旧实现 objects/ + meta/index/ 各列一次 = 空桶也 2~4 次 RTT）。
       for (let i = 0; i < 3; i++) {
@@ -374,7 +423,8 @@ export class S3v3SyncEngine {
         const again = await this.readPointer();
         if (again) {
           // bootstrap 竞态同样不落 pullAll：血缘对齐走合并轮。
-          if (rawBaseline) return await this.syncOnceRound(state, rebaseBootstrapBaseline(rawBaseline, lineageOf(again)), again, report, opts);
+          if (rawBaseline && bootstrap && !staleTarget) return await this.syncOnceRound(state, rebaseBootstrapBaseline(rawBaseline, lineageOf(again)), again, report, opts);
+          if (encounter) return await this.syncOnceRound(state, rebaseBootstrapBaseline(buildBootstrapBaseline({ notes: [], folders: [], quickItems: [] }), lineageOf(again)), again, report, opts);
           return await this.syncPullAllRound(again, state, report, opts);
         }
       }
@@ -794,6 +844,8 @@ export class S3v3SyncEngine {
         this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
       },
       deferAssets: opts.deferAssets === true,
+      encounter: opts.firstEncounter?.mode,
+      now: this.iso(),
       commitOptions: { lockWaitMs: this.publishLockWaitMs } }, ports);
   }
 
