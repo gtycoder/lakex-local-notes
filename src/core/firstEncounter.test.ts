@@ -93,7 +93,7 @@ describe("四选项对小记决策的映射（绝不物删）", () => {
     expect(applyQuickEncounterAction("additive", "remote-wins-history", ctxBoth)).toBe("upload");
   });
 
-  it("local-wins：远端独有 → download-to-trash（进小记回收站）；云端删除不认", () => {
+  it("local-wins：远端独有 → 安全兜底下载；双方都在=本机胜；云端删除不认", () => {
     // 远端独有 = 安全兜底普通下载（内容必保；回收站变体待物化面修通，见 firstEncounter.ts 注）。
     expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download");
     expect(applyQuickEncounterAction("local-wins", "download", ctxBoth)).toBe("upload");

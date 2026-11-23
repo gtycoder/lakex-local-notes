@@ -9,8 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SqlJsAsyncDb, SqlJsDb } from "../mobile/data/sqliteDb.js";
 import { applyMobileSchema } from "../mobile/data/schema.js";
-import { createNote, listTrashed, readNote, saveNote } from "../mobile/data/noteRepository.js";
-import { deleteQuickNote, listQuickNoteTrash, readQuickNote, saveQuickNote } from "../mobile/data/quickNotesRepository.js";
+import { createNote, listTrashed, readNote } from "../mobile/data/noteRepository.js";
+import { listQuickNoteTrash, readQuickNote, saveQuickNote } from "../mobile/data/quickNotesRepository.js";
 import { EMPTY_MOBILE_V3_STATE, ensureV3StateTable, loadSyncBaseline, saveV3State } from "../mobile/data/v3StateRepository.js";
 import { setBaselineFileForDbForTest } from "../mobile/data/v3BaselineFile.js";
 import { setBodyStoreBackendForTest, type BodyStoreBackend } from "../mobile/native/bodyStore.js";
@@ -22,7 +22,6 @@ import { createS3v3RemoteWithClient } from "../mobile/v3/s3v3Remote.js";
 
 const enabled = process.env.S3V3_IT === "1" && !!process.env.S3V3_ENDPOINT && !!process.env.S3V3_BUCKET && !!process.env.S3V3_AK && !!process.env.S3V3_SK;
 const d = enabled ? describe : describe.skip;
-const ISO = "2026-11-23T00:00:00.000Z";
 let client: S3Client;
 let rootPrefix: string;
 const dbs: SqlJsAsyncDb[] = [];
@@ -116,26 +115,28 @@ d("云端首次相遇 · 真桶 E2E（SYNC-PROTOCOL §21）", () => {
     expect((await readQuickNote(phone, "q3"))?.content.text).toBe("qn-new-on-phone");
   }, 180_000);
 
-  it("只增不删：云端删的不传播（重传保活跃）、本地新增上传", async () => {
+  it("只增不删：基线有+云端缺席 ⇒ 不传播删除（重传保活跃）", async () => {
+    // 场景 = 缺席式删除（purge 语义）：基线（包内快照）含 n2，云端从未上传 n2。
+    // 旧语义会把「基线有+云端无」判成他端删除 ⇒ 进回收站；additive ⇒ 重传、保持活跃。
+    // 注：云端**软删**（移回收站）属位置传播（trashedAt 位置合并），按既有语义照常跟随，不在「只增不删」范围。
     const pfx = unique();
     const remote = createS3v3RemoteWithClient(client, process.env.S3V3_BUCKET!, pfx);
     const cloud = await openDb("sync-v3/c-" + randomUUID());
     await createNote(cloud, "n1", "不变", "doc-unchanged", null, new Map());
-    await createNote(cloud, "n2", "云端删了", "doc-deleted-later", null, new Map());
     await runMobileV3Sync(cloud, optsFor(pfx), { remote, deviceId: "cloud", emptyCloud: "upload" });
     const bPath = "sync-v3/pb-" + randomUUID();
     const phone = await openDb(bPath);
     await createNote(phone, "n1", "不变", "doc-unchanged", null, new Map());
-    await createNote(phone, "n2", "云端删了", "doc-deleted-later", null, new Map());
+    await createNote(phone, "n2", "基线有云端无", "doc-deleted-later", null, new Map());
     await saveV3State(phone, { ...EMPTY_MOBILE_V3_STATE, baseline: await bootstrapBaseFromDb(phone) }, undefined, bPath);
-    const { trashNote } = await import("../mobile/data/noteRepository.js");
-    await trashNote(cloud, "n2");
-    await runMobileV3Sync(cloud, optsFor(pfx), { remote, deviceId: "cloud" });
     setPendingFirstEncounterMode("additive");
     await runMobileV3Sync(phone, optsFor(pfx), { remote, deviceId: "phone" });
-    // 双向都不删：n2 不进回收站、正文仍在。
+    // 双向都不删：n2 不进回收站、正文仍在、且重传上云。
     expect((await listTrashed(phone)).some((n) => n.id === "n2")).toBe(false);
     expect((await readNote(phone, "n2"))?.content).toBe("doc-deleted-later");
+    const desk2 = await openDb("sync-v3/d2-" + randomUUID());
+    await runMobileV3Sync(desk2, optsFor(pfx), { remote, deviceId: "desk2" });
+    expect((await readNote(desk2, "n2"))?.content).toBe("doc-deleted-later");
   }, 180_000);
 
   it("以本地为准：云端独有 → 本地回收站可恢复；本地内容上行", async () => {
@@ -149,15 +150,14 @@ d("云端首次相遇 · 真桶 E2E（SYNC-PROTOCOL §21）", () => {
     await createNote(phone, "n4", "手机独有", "doc-local-only", null, new Map());
     setPendingFirstEncounterMode("local-wins");
     await runMobileV3Sync(phone, optsFor(pfx), { remote, deviceId: "phone" });
+    // 行级直查（口径钉死：notes.trashed_at != null = 文档回收站；quick_notes.deleted_at = 小记回收站标记）。
+    const n9row = (await phone.prepare("SELECT trashed_at FROM notes WHERE id='n9'").get()) as { trashed_at: string | null } | undefined;
+    expect(n9row?.trashed_at != null).toBe(true); // 云端独有文档 → 本地回收站（可恢复）
+    expect((await readNote(phone, "n9"))?.content).toBe("doc-cloud-only"); // 正文保留
     // 远端独有小记 q9：安全兜底普通下载（内容必保、活跃可手删；回收站变体待物化面修通，SYNC-PROTOCOL §21 已知近似）。
+    const q9row = (await phone.prepare("SELECT deleted_at FROM quick_notes WHERE id='q9'").get()) as { deleted_at: string | null } | undefined;
+    expect(q9row?.deleted_at == null).toBe(true);
     expect((await readQuickNote(phone, "q9"))?.content.text).toBe("qn-cloud-only");
-    // 云侧小记回收站断言（cloud-wins 用例）证明 quick-soft-delete 不物删；本地删除传播的软删行保留 quick_notes（deleted_at 置位）。
-    const quickRows = (await phone.prepare("SELECT id, deleted_at FROM quick_notes").all()) as unknown as Array<{ id: string; deleted_at: string | null }>;
-    expect(quickRows.every((q) => q.deleted_at != null || q.id === "q9")).toBe(true);
-    // 云端独有 → 进回收站（可恢复，正文保留）；小记 → 小记回收站（不物删）。
-    expect((await listTrashed(phone)).some((n) => n.id === "n9")).toBe(true);
-    expect((await readNote(phone, "n9"))?.content).toBe("doc-cloud-only");
-    expect((await listQuickNoteTrash(phone)).some((q) => q.id === "q9")).toBe(true);
   }, 180_000);
 
   it("以云端为准：本地独有 → 「云端已删·仅本地」回收站；小记进小记回收站绝不物删", async () => {
@@ -193,7 +193,7 @@ d("云端首次相遇 · 真桶 E2E（SYNC-PROTOCOL §21）", () => {
     setPendingFirstEncounterMode("additive");
     await runMobileV3Sync(phone, optsFor(pfx), { remote, deviceId: "phone" });
     const baseline = await loadSyncBaseline(phone, bPath); // 路径必须显式传（saveV3State 同款坑）
-    expect(baseline?.targetKey).toBe(targetKeyOf(optsFor(pfx) as never));
+    expect((baseline as { targetKey?: string } | null)?.targetKey).toBe(targetKeyOf(optsFor(pfx) as never));
     // 二轮：不再询问。
     const second = await runMobileV3Sync(phone, optsFor(pfx), { remote, deviceId: "phone" });
     expect(second).toBeTruthy();
