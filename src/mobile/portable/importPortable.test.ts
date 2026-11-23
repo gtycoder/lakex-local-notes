@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   savedBaseline: null as unknown,
   batches: [] as Array<{ statement: string; values: unknown[] }>,
   restoreOk: true,
+  restoreHasBaseline: true,
 }));
 
 vi.mock("../native/portablePackage", () => ({
@@ -33,7 +34,7 @@ vi.mock("../native/portablePackage", () => ({
   nativeRestorePortableSnapshot: async () => {
     state.calls.push("restore");
     return state.restoreOk
-      ? { ok: true, counts: { notes: 2, folders: 1, quickNotes: 1, tags: 1 }, hasBaseline: true, files: 4, bytes: 500 }
+      ? { ok: true, counts: { notes: 2, folders: 1, quickNotes: 1, tags: 1 }, hasBaseline: state.restoreHasBaseline, files: 4, bytes: 500 }
       : { ok: false, error: "快照损坏" };
   },
   nativeCommitPortableImport: async () => {
@@ -49,9 +50,27 @@ vi.mock("../native/portablePackage", () => ({
   nativeDiscardPortableStaging: async () => undefined,
 }));
 
+/** 手机快照恢复后的活库行（供合成合并底稿基线读取；按 SQL 里的表名分派）。字面量避免 TDZ（本段在 H/TS 声明之前）。 */
+const liveRows: Record<string, Array<Record<string, unknown>>> = {
+  notes: [{ id: "n1", title: "文档1", parent_id: "nb1", sort_order: 0, updated_at: "2026-11-09T00:00:00.000Z", content_hash: "a".repeat(64), is_conflict: 0, is_locked: 0, locked_at: null, doc_kind: "doc", trashed_at: null, deleted_from_parent_id: null }],
+  folders: [{ id: "nb1", title: "个人笔记", parent_id: null, sort_order: 0, node_type: "notebook", space: null, icon: null, updated_at: "2026-11-09T00:00:00.000Z", trashed_at: null, deleted_from_parent_id: null }],
+  quick_notes: [{ id: "q1", created_at: "2026-11-09T00:00:00.000Z", updated_at: "2026-11-09T00:00:00.000Z", content_hash: "b".repeat(64), is_conflict: 0, tags_updated_at: "" }],
+  quick_note_deleted: [],
+  tags: [{ id: "t1", name: "标签", created_at: "2026-11-09T00:00:00.000Z", updated_at: "2026-11-09T00:00:00.000Z" }],
+  tag_links: [{ target_kind: "quickNote", target_id: "q1", tag_id: "t1", position: 0 }],
+  tag_link_versions: [],
+};
+
 vi.mock("../bridge/context", () => ({
   closeDbForPortableImport: async () => { state.calls.push("close-db"); },
-  reopenDbForPortableImport: async () => ({ executeSet: async (set: Array<{ statement: string; values: unknown[] }>) => { state.batches.push(...set); } }),
+  reopenDbForPortableImport: async () => ({
+    executeSet: async (set: Array<{ statement: string; values: unknown[] }>) => { state.batches.push(...set); },
+    prepare: (sql: string) => ({
+      all: async () => liveRows[/FROM (\w+)/.exec(sql)?.[1] ?? ""] ?? [],
+      get: async () => undefined,
+      run: async () => ({ changes: 0, lastInsertRowid: 0 }),
+    }),
+  }),
   ensureDb: async () => { state.calls.push("ensure-db"); return {}; },
 }));
 
@@ -153,13 +172,19 @@ describe("便携包导入编排", () => {
     expect(statements.some((sql) => sql.startsWith("INSERT OR REPLACE INTO notes"))).toBe(true);
   });
 
-  it("纯离线包（manifest.baseline=null）：只读内容哈希、不写云端基线", async () => {
+  it("261123 报障回归：纯离线包合成「合并底稿」基线（不再落「有信封无基线」假丢失态）", async () => {
     const offline = staged();
     (offline.manifest as unknown as { baseline: unknown }).baseline = null;
     state.baselineJson = JSON.stringify({ localOnly: true, notes: { n1: H("a") }, quickNotes: { q1: H("b") } });
     const result = await runPortableImport(offline as ReturnType<typeof staged>);
     expect(result.hasCloudBaseline).toBe(false);
-    expect(state.savedBaseline).toBeNull();
+    // 修复（docs/PORTABLE-TRANSFER.md §3.1）：写入合并底稿基线（bootstrap），
+    // 首同步走三方合并而不是被 SyncBaselineLostError 中止；内容底稿 = 导出时刻哈希。
+    expect(state.savedBaseline).toMatchObject({ bootstrap: true, epoch: "" });
+    const saved = state.savedBaseline as { lake: { notes: Array<{ id: string; contentHash: string }>; folders: Array<{ id: string }> }; quickNotes: { items: Array<{ id: string; contentHash: string }> } };
+    expect(saved.lake.notes).toMatchObject([{ id: "n1", contentHash: H("a") }]);
+    expect(saved.lake.folders).toMatchObject([{ id: "nb1" }]);
+    expect(saved.quickNotes.items).toMatchObject([{ id: "q1", contentHash: H("b") }]);
     expect(state.calls).toContain("commit");
   });
 
@@ -194,6 +219,20 @@ describe("手机整机快照恢复（261117 D 项）", () => {
     expect(result.counts).toMatchObject({ notes: 2, folders: 1, quickNotes: 1, tags: 1, assets: 4, bytes: 500 });
     expect(result.hasCloudBaseline).toBe(true);
     expect(result.warnings.join()).toContain("整机快照");
+  });
+
+  it("261123：零基线快照（manifest.baseline=null 且快照内无基线）恢复后合成合并底稿基线", async () => {
+    state.calls = [];
+    state.restoreOk = true;
+    state.restoreHasBaseline = false;
+    state.savedBaseline = null;
+    const offline = snapshotStaged();
+    const result = await runPortableImport(offline as never);
+    expect(result.hasCloudBaseline).toBe(false);
+    expect(state.savedBaseline).toMatchObject({ bootstrap: true });
+    const saved = state.savedBaseline as { lake: { notes: Array<{ id: string; contentHash: string }> } };
+    expect(saved.lake.notes).toMatchObject([{ id: "n1", contentHash: "a".repeat(64) }]);
+    expect(state.calls).toContain("restore");
   });
 
   it("原生恢复失败：报错并尽量回滚/重开数据库", async () => {

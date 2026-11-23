@@ -40,7 +40,16 @@ import {
   parsePortableContentHashes,
   type DesktopRow,
   type MappedQuickData,
+  type MobileFolderRow,
+  type MobileNoteRow,
+  type MobileQuickNoteDeletedRow,
+  type MobileQuickNoteRow,
+  type MobileTagLinkRow,
+  type MobileTagLinkVersionRow,
+  type MobileTagRow,
 } from "./portableMapping";
+import { buildBootstrapBaseline, type BootstrapRowSet } from "../../core/portable/bootstrapBaseline";
+import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../core/s3v3/protocol/s3v3Index";
 
 /**
  * 便携包清单统一走 core 单一校验（261122 大统一 v2）：desktop-workspace 与 mobile-snapshot
@@ -214,6 +223,103 @@ function quickStatements(data: MappedQuickData) {
   return statements;
 }
 
+/**
+ * 移动端行 → 合并底稿基线输入（261123，PORTABLE-TRANSFER §3.1）：条目与真基线同形，
+ * contentHash = 导出时刻哈希；标签关系/版本取 quick 库链接与版本行。桌面布局包与手机快照两条路共用。
+ */
+export function bootstrapRowsFromMobileRows(input: {
+  notes: MobileNoteRow[];
+  folders: MobileFolderRow[];
+  quickNotes: MobileQuickNoteRow[];
+  quickNoteDeleted: MobileQuickNoteDeletedRow[];
+  tags: MobileTagRow[];
+  tagLinks: MobileTagLinkRow[];
+  tagLinkVersions: MobileTagLinkVersionRow[];
+}): BootstrapRowSet {
+  const tagIdsByTarget = new Map<string, string[]>();
+  for (const link of input.tagLinks) {
+    const key = link.target_kind + ":" + link.target_id;
+    const list = tagIdsByTarget.get(key) ?? [];
+    if (!list.includes(link.tag_id)) list.push(link.tag_id);
+    tagIdsByTarget.set(key, list);
+  }
+  const versionByTarget = new Map<string, string>();
+  for (const v of input.tagLinkVersions) versionByTarget.set(v.target_kind + ":" + v.target_id, v.links_updated_at);
+  const tagsFor = (kind: "note" | "quickNote", id: string): string[] | undefined => {
+    const ids = tagIdsByTarget.get(kind + ":" + id);
+    return ids && ids.length > 0 ? [...ids].toSorted() : undefined;
+  };
+  const notes: LakeNoteEntry[] = input.notes.map((row) => {
+    const tagIds = tagsFor("note", row.id);
+    const tagsUpdatedAt = versionByTarget.get("note:" + row.id);
+    return {
+      id: row.id,
+      title: row.title,
+      parentId: row.parent_id,
+      sortOrder: row.sort_order,
+      updatedAt: row.updated_at,
+      contentHash: row.content_hash ?? "",
+      kind: row.doc_kind,
+      icon: row.icon,
+      isLocked: row.is_locked === 1,
+      lockedAt: row.locked_at,
+      isConflict: row.is_conflict === 1,
+      trashedAt: row.trashed_at,
+      deletedFromParentId: row.deleted_from_parent_id,
+      ...(tagIds ? { tagIds } : {}),
+      ...(tagsUpdatedAt !== undefined ? { tagsUpdatedAt } : {}),
+    };
+  });
+  const folders: LakeFolderEntry[] = input.folders.map((row) => ({
+    id: row.id,
+    title: row.title,
+    parentId: row.parent_id,
+    sortOrder: row.sort_order,
+    nodeType: row.node_type === "group" ? "group" : "notebook",
+    icon: row.icon,
+    updatedAt: row.updated_at,
+    space: row.space as LakeFolderEntry["space"],
+    trashedAt: row.trashed_at,
+    deletedFromParentId: row.deleted_from_parent_id,
+  }));
+  const quickItems: QuickNoteEntry[] = input.quickNotes.map((row) => {
+    const tagIds = tagsFor("quickNote", row.id);
+    const tagsUpdatedAt = row.tags_updated_at || versionByTarget.get("quickNote:" + row.id);
+    return {
+      id: row.id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      contentHash: row.content_hash,
+      isConflict: row.is_conflict === 1,
+      ...(tagIds ? { tagIds } : {}),
+      ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
+    };
+  });
+  const quickTags: QuickNoteTagEntry[] = input.tags.map((t) => ({ id: t.id, name: t.name, createdAt: t.created_at, updatedAt: t.updated_at }));
+  const quickPurged = input.quickNoteDeleted.filter((q) => q.purged_at != null).map((q) => q.id);
+  return { notes, folders, quickItems, quickTags, quickPurged };
+}
+
+/** 手机快照路：从已恢复的移动端库读行（形状与映射行一致，复用同一合成入口）。 */
+async function readBootstrapRowsFromDb(db: MobileDb): Promise<BootstrapRowSet> {
+  const notes = (await db.prepare(
+    "SELECT id,title,parent_id,sort_order,updated_at,content_hash,is_conflict,is_locked,locked_at,doc_kind,trashed_at,deleted_from_parent_id FROM notes WHERE is_purged=0",
+  ).all()) as unknown as MobileNoteRow[];
+  const folders = (await db.prepare(
+    "SELECT id,title,parent_id,sort_order,node_type,space,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders WHERE is_purged=0",
+  ).all()) as unknown as MobileFolderRow[];
+  const quickNotes = (await db.prepare(
+    "SELECT id,created_at,updated_at,content_hash,is_conflict,tags_updated_at FROM quick_notes",
+  ).all()) as unknown as MobileQuickNoteRow[];
+  const quickNoteDeleted = (await db.prepare(
+    "SELECT id,created_at,updated_at,deleted_at,purged_at FROM quick_note_deleted",
+  ).all()) as unknown as MobileQuickNoteDeletedRow[];
+  const tags = (await db.prepare("SELECT id,name,created_at,updated_at FROM tags").all()) as unknown as MobileTagRow[];
+  const tagLinks = (await db.prepare("SELECT target_kind,target_id,tag_id,position FROM tag_links").all()) as unknown as MobileTagLinkRow[];
+  const tagLinkVersions = (await db.prepare("SELECT target_kind,target_id,links_updated_at FROM tag_link_versions").all()) as unknown as MobileTagLinkVersionRow[];
+  return bootstrapRowsFromMobileRows({ notes, folders, quickNotes, quickNoteDeleted, tags, tagLinks, tagLinkVersions });
+}
+
 async function writeInBatches(db: MobileDb, statements: MobileBatchStatement[], onProgress?: (progress: PortableImportProgress) => void): Promise<void> {
   for (let index = 0; index < statements.length; index += WRITE_BATCH) {
     const batch = statements.slice(index, index + WRITE_BATCH);
@@ -293,8 +399,18 @@ async function restoreMobileSnapshot(
     const restored = await nativeRestorePortableSnapshot(staged.stagingPath);
     if (!restored.ok) throw new Error(restored.error || "恢复手机快照失败");
     onProgress?.({ phase: "commit", detail: "重开数据库…" });
-    await reopenDbForPortableImport();
+    const db = await reopenDbForPortableImport();
     dbClosed = false;
+    // 261123（PORTABLE-TRANSFER §3.1）：零基线手机快照合成「合并底稿」基线（与桌面布局包同口径）；
+    // 快照自带基线（hasBaseline）则原样沿用。合成失败按「无基线」处理，不阻断恢复。
+    if (staged.manifest.baseline === null && restored.hasBaseline !== true) {
+      try {
+        await ensureV3StateTable(db);
+        await saveV3State(db, { ...EMPTY_MOBILE_V3_STATE, baseline: buildBootstrapBaseline(await readBootstrapRowsFromDb(db)) });
+      } catch (error) {
+        console.warn("[portable] 合成合并底稿基线失败（按无基线处理）", error);
+      }
+    }
     onProgress?.({ phase: "done", detail: "恢复完成" });
     const counts = restored.counts ?? {};
     return {
@@ -383,7 +499,19 @@ async function runPortableImportInner(
 
     onProgress?.({ phase: "baseline", detail: "写入已同步基线…" });
     await ensureV3StateTable(db);
-    await saveV3State(db, { ...EMPTY_MOBILE_V3_STATE, baseline: parsedBaseline.baseline });
+    // 261123（PORTABLE-TRANSFER §3.1）：纯离线包合成「合并底稿」基线（导出时刻快照当三方合并 base），
+    // 不再写「有信封、无基线」的假丢失态（首同步会被 SyncBaselineLostError 中止——261123 真机报障）。
+    const baselineToWrite = parsedBaseline.baseline
+      ?? buildBootstrapBaseline(bootstrapRowsFromMobileRows({
+        notes: treeData.notes,
+        folders: treeData.folders,
+        quickNotes: quickData.quickNotes,
+        quickNoteDeleted: quickData.quickNoteDeleted,
+        tags: quickData.tags,
+        tagLinks: quickData.tagLinks,
+        tagLinkVersions: quickData.tagLinkVersions,
+      }));
+    await saveV3State(db, { ...EMPTY_MOBILE_V3_STATE, baseline: baselineToWrite });
     await executeBatch(db, [
       { statement: "DELETE FROM note_history", values: [] },
       { statement: "UPDATE notes SET text_cache=NULL", values: [] },

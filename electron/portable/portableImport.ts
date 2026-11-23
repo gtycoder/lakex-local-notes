@@ -19,6 +19,11 @@ import { readCentralDirectory, readEntryData, extractEntryToFile, type ZipDirect
 import { inspectBackupDatabase, inspectQuickNotesDatabase } from "../workspaceRestoreFromBackup.js";
 import { replaceWorkspaceWith } from "../workspaceBackup.js";
 import { importMobileSnapshotPackageOnDesktop } from "./importMobileSnapshot.js";
+import {
+  buildBootstrapBaselineFromDesktopWorkspace,
+  parseOfflineHashMaps,
+  writeBootstrapBaselineGz,
+} from "./bootstrapFromWorkspace.js";
 
 const MANIFEST_NAME = "portable.json";
 const DESKTOP_PREFIX = "desktop/";
@@ -119,6 +124,14 @@ export function importDesktopWorkspacePackage(options: PortableImportOptions, in
         baselineWarning = "（包内同步基线损坏，已按无基线导入：配好 S3 后会先拉取云端再增量）";
       }
     } else {
+      // 261123（PORTABLE-TRANSFER §3.1）：纯离线包合成「合并底稿」基线（导出时刻快照当三方合并 base），
+      // 不再「不写桌面基线」——那会让首同步走拉全轮，把迁移数据当「云端已删」收敛（小记物删/文档假删除）。
+      try {
+        const hashMaps = fs.existsSync(baselineJson) ? parseOfflineHashMaps(fs.readFileSync(baselineJson, "utf8")) : undefined;
+        writeBootstrapBaselineGz(stagingDesktop, buildBootstrapBaselineFromDesktopWorkspace(stagingDesktop, hashMaps));
+      } catch (error) {
+        baselineWarning = "（合成合并底稿基线失败，已按无基线导入：" + (error instanceof Error ? error.message : String(error)) + "）";
+      }
       fs.rmSync(baselineJson, { force: true });
     }
 

@@ -152,13 +152,18 @@ describe("importMobileSnapshot（手机快照包 → 桌面，反向映射）", 
     expect(fs.readFileSync(path.join(result.quarantinePath!, "notes", "old.lake"), "utf8")).toBe("<p>old</p>");
   });
 
-  it("纯离线手机快照（无基线文件）：不写桌面基线", async () => {
+  it("261123：纯离线手机快照（无基线文件）合成「合并底稿」基线", async () => {
     const tmp = tempDir("lakex-mob-ws-");
     const zipPath = await makeMobilePackage(path.join(tmp, "out"), { withBaseline: false });
     const ws = makeWorkspace(tmp);
     const result = importPortablePackageOnDesktop({ zipPath, workspaceRoot: ws, stagingParent: path.join(tmp, "portable-import") });
     expect(result.ok, "导入失败原因：" + result.reason).toBe(true);
-    expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
+    // 修复（docs/PORTABLE-TRANSFER.md §3.1）：从映射后的桌面两库合成合并底稿基线（bootstrap）。
+    const gz = path.join(ws, "sync-v3", "baseline.json.gz");
+    expect(fs.existsSync(gz)).toBe(true);
+    const parsed = JSON.parse(gunzipSync(fs.readFileSync(gz)).toString("utf8")) as { bootstrap?: boolean; epoch: string; lake: { notes: unknown[] } };
+    expect(parsed.bootstrap).toBe(true);
+    expect(parsed.epoch).toBe("");
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json"))).toBe(false);
   });
 

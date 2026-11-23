@@ -138,13 +138,19 @@ describe("portableImport（桌面导入大统一迁移包 v2）", () => {
     expect(fs.readFileSync(path.join(result.quarantinePath!, "notes", "old.lake"), "utf8")).toBe("<p>old</p>");
   });
 
-  it("纯离线包（baseline=null）：内容哈希清单不写桌面基线", async () => {
+  it("261123：纯离线包合成「合并底稿」基线（bootstrap，内容哈希清单只进底稿不落原 JSON）", async () => {
     const tmp = tempDir("lakex-pkg-ws-");
     const zipPath = await makeDesktopPackage(path.join(tmp, "out"), { baseline: "offline" });
     const ws = makeWorkspace(tmp);
     const result = importPortablePackageOnDesktop({ zipPath, workspaceRoot: ws, stagingParent: path.join(tmp, "portable-import") });
     expect(result.ok).toBe(true);
-    expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
+    // 修复（docs/PORTABLE-TRANSFER.md §3.1）：写合成合并底稿基线（首同步走三方合并，不走拉全轮）。
+    const gz = path.join(ws, "sync-v3", "baseline.json.gz");
+    expect(fs.existsSync(gz)).toBe(true);
+    const parsed = JSON.parse(gunzipSync(fs.readFileSync(gz)).toString("utf8")) as { bootstrap?: boolean; epoch: string; lake: { notes: unknown[] } };
+    expect(parsed.bootstrap).toBe(true);
+    expect(parsed.epoch).toBe("");
+    expect(Array.isArray(parsed.lake.notes)).toBe(true);
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json"))).toBe(false);
   });
 

@@ -274,6 +274,13 @@ retryPendingAssets（上轮失败附件先补）
 纯逻辑：`s3v3Decision.decideItem` + `s3v3Merge.planLakeMerge / planQuickNotesMerge`。
 位置字段（`parentId` / `trashedAt` / `deletedFromParentId`）不参与下面的内容判定，走 §9.5 独立三方合并。
 
+**合并底稿基线（bootstrap baseline，261123）**：便携包零基线迁移合成的设备本地基线（`bootstrap: true`、谱系留空，
+内容底稿 = 导出时刻快照；合成单一来源 `src/core/portable/bootstrapBaseline.ts`，规格 `docs/PORTABLE-TRANSFER.md` §3.1）。
+引擎入口对它**血缘对齐**（采纳云端 epoch/generation/commit，跳过谱系校验——从未同步过的设备没有谱系可校验）后走正常
+三方合并（下面 §9 全部语义照常生效：删除传播、远端胜留历史、本地新增上传）；本轮结束基线推进为真基线（bootstrap 消失）。
+三个引擎级差异（`s3v3Engine.syncOnce/syncOnceRound`）：① 不落 `syncPullAllRound`（拉全会把迁移数据当「云端已删」收敛）；
+② 「基线内容 = 远端内容」的零变更快路径对 bootstrap 不生效（必须真读索引）；③ 纯拉取/零变更轮也强制把基线推进到当前 pointer。
+
 ### 9.1 单条顺序（文档）
 
 1. `restorePending && 本地有内容` → `restore-upload`（local-wins）。

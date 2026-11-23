@@ -26,6 +26,7 @@ import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } f
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
 import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
+import { isBootstrapBaseline, rebaseBootstrapBaseline } from "./portable/bootstrapBaseline.js";
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { selectConflictEvents, type SyncConflictEvent } from "./syncConflictLog.js";
@@ -341,20 +342,29 @@ export class S3v3SyncEngine {
     const state = (await this.device.loadState()) ?? emptyState();
     // 待补资产账本（261027）：与 state 同一引用；适配器持久化，失败记账、成功销账。
     state.pendingAssets ??= [];
-    const baseline = await this.device.loadBaseline();
+    const rawBaseline = await this.device.loadBaseline();
     const pointer = await this.readPointer();
+    // 261123（便携包零基线迁移，docs/PORTABLE-TRANSFER.md §3.1）：bootstrap 基线 = 导出时刻内容快照当
+    // 三方合并底稿、谱系未定。有 pointer ⇒ **血缘对齐**后走正常合并轮（谱系检查免做：从未同步过的设备
+    // 没有谱系可校验，与新设备首连既有口径一致）；无 pointer ⇒ 与「无基线」同路径（空桶首传/竞态）。
+    // 绝不落进 syncPullAllRound（拉全会把迁移数据当「云端已删」收敛：小记物删/文档假删除）。
+    const bootstrap = isBootstrapBaseline(rawBaseline);
+    const lineageOf = (p: S3v3Pointer) => ({ epoch: p.epoch, generation: p.generation, lakeCommit: p.lake.commit, quickNotesCommit: p.quickNotes.commit });
     // v4 四相内核是唯一实现（旧 v3 增量/首拉/重拉路径已删除）。四条分支覆盖全部入口。
-    if (pointer && baseline) {
-      // 云端状态分类（原判据不变）：epoch 不一致 / 代际回滚 / 同代不同 commit（分叉）都必须显式失败，
-      // 不能带着错基线继续跑（会把两端都"修"成同一份错误数据）。
-      if (pointer.epoch !== baseline.epoch) throw new S3v3SyncError("epoch-mismatch", "云端是另一套数据（epoch 不一致）");
-      if (pointer.generation < baseline.generation) throw new S3v3SyncError("generation-rollback", "云端回滚到旧备份");
-      if (pointer.generation === baseline.generation && (pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
-        throw new S3v3SyncError("fork", "同 generation 不同 commit：分叉/迟到覆盖");
+    if (pointer && rawBaseline) {
+      const baseline = bootstrap ? rebaseBootstrapBaseline(rawBaseline, lineageOf(pointer)) : rawBaseline;
+      if (!bootstrap) {
+        // 云端状态分类（原判据不变）：epoch 不一致 / 代际回滚 / 同代不同 commit（分叉）都必须显式失败，
+        // 不能带着错基线继续跑（会把两端都"修"成同一份错误数据）。
+        if (pointer.epoch !== baseline.epoch) throw new S3v3SyncError("epoch-mismatch", "云端是另一套数据（epoch 不一致）");
+        if (pointer.generation < baseline.generation) throw new S3v3SyncError("generation-rollback", "云端回滚到旧备份");
+        if (pointer.generation === baseline.generation && (pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+          throw new S3v3SyncError("fork", "同 generation 不同 commit：分叉/迟到覆盖");
+        }
       }
       return await this.syncOnceRound(state, baseline, pointer, report, opts);
     }
-    if (!baseline) {
+    if (!rawBaseline || bootstrap) {
       if (pointer) return await this.syncPullAllRound(pointer, state, report, opts);
       // 首轮并发现身竞态（两个新设备同时首传）：pointer 还没写、对象已在云上 ⇒ 短暂重试再判。
       // 只做**一次**前缀列举判空（旧实现 objects/ + meta/index/ 各列一次 = 空桶也 2~4 次 RTT）。
@@ -362,7 +372,11 @@ export class S3v3SyncEngine {
         if ((await this.remote.list("")).length === 0) break;
         await sleep(150 + Math.floor(Math.random() * 250));
         const again = await this.readPointer();
-        if (again) return await this.syncPullAllRound(again, state, report, opts);
+        if (again) {
+          // bootstrap 竞态同样不落 pullAll：血缘对齐走合并轮。
+          if (rawBaseline) return await this.syncOnceRound(state, rebaseBootstrapBaseline(rawBaseline, lineageOf(again)), again, report, opts);
+          return await this.syncPullAllRound(again, state, report, opts);
+        }
       }
       if ((await this.remote.list("")).length > 0) throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
       return await this.syncFirstRound(state, report, opts);
@@ -396,7 +410,7 @@ export class S3v3SyncEngine {
     if (!baseline) throw new S3v3SyncError("no-baseline", "四相内核需要设备基线（首拉/换机请走既有路径）");
     // 他端显式恢复让位（事件驱动，极低频）：本地有 purge 墓碑且「远端同 id 条目的 updatedAt 晚于本地 purgedAt」
     // ⇒ 判定为对端恢复，删除意图放弃（否则本端下一轮会把它再删一次）。只有存在墓碑且远端已变化时才多读一次索引。
-    if (state.intents.some((i) => !!i.purgedAt) && (pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+    if (state.intents.some((i) => !!i.purgedAt) && (baseline.bootstrap === true || pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
       try {
         const remoteNow = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
         const byId = new Map(remoteNow.notes.map((n) => [n.id, n] as const));
@@ -469,7 +483,8 @@ export class S3v3SyncEngine {
       const currentPointer = attempt === 0 ? pointer : await this.readPointer();
       if (!currentPointer) break;
       // 零变更快路径（与旧路径同等下行预算）：pointer 与基线完全一致 ⇒ 远端没变，直接用基线世界，**不读索引**。
-      const sameAsBaseline = currentPointer.lake.commit === baseline.lakeCommit && currentPointer.quickNotes.commit === baseline.quickNotesCommit;
+      // bootstrap 底稿例外（261123）：底稿 commit 是对齐来的借用谱系，**不代表内容等于远端**——必须真读索引。
+      const sameAsBaseline = baseline.bootstrap !== true && currentPointer.lake.commit === baseline.lakeCommit && currentPointer.quickNotes.commit === baseline.quickNotesCommit;
       const remoteLake = (sameAsBaseline ? baseline.lake : await this.readIndex("lake", currentPointer.lake.commit)) as LakeIndex;
       const remoteQuick = (sameAsBaseline ? baseline.quickNotes : await this.readIndex("quickNotes", currentPointer.quickNotes.commit)) as QuickNotesIndex;
       // 他端墓碑（不可恢复删除）：本端不留副本（小记不备份语义），只记 purged 墓碑继续传播。
@@ -589,8 +604,10 @@ export class S3v3SyncEngine {
       }
     }
     // 纯拉取轮也要把基线推进到云端 pointer（否则下一轮拿旧基线判三方冲突/重复发布）。
+    // bootstrap 底稿（261123）：无论 pointer 是否动过，本轮结束都必须推进成真基线——否则下一轮仍拿
+    // 「导出时刻快照」当 base，把已应用的远端内容反复判成「两边都改」重复下载/留假历史。
     if (round.commit.status !== "published" && lastRemoteLake && lastRemoteQuick
-      && (round.nextPointer.lake.commit !== baseline.lakeCommit || round.nextPointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+      && (baseline.bootstrap === true || round.nextPointer.lake.commit !== baseline.lakeCommit || round.nextPointer.quickNotes.commit !== baseline.quickNotesCommit)) {
       await this.device.saveBaseline({
         epoch: round.nextPointer.epoch,
         generation: round.nextPointer.generation,

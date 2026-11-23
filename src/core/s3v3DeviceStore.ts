@@ -82,6 +82,12 @@ export interface DeviceBaseline {
   quickNotesCommit: string;
   lake: LakeIndex;
   quickNotes: QuickNotesIndex;
+  /**
+   * 便携包零基线迁移合成的「合并底稿」（261123，docs/PORTABLE-TRANSFER.md §3.1）：
+   * 内容底稿 = 导出时刻快照（三方合并 base），谱系字段（epoch/generation/commit）留空。
+   * 首个同步轮对齐云端谱系并把基线推进为真基线后，本标记消失。**设备本地、绝不上传**。
+   */
+  bootstrap?: boolean;
 }
 
 /** 单条小记推送的轻量状态（261110「保存并同步」提速）：只含这条小记与同步标记，

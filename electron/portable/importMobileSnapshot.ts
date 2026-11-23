@@ -19,6 +19,7 @@ import { quickNoteBodyRelativePath } from "../../src/core/noteBodyPaths.js";
 import { PORTABLE_BODY_DIRS } from "../../src/core/portable/portableRows.js";
 import { extractEntryToFile, readEntryData } from "./zipRead.js";
 import { mapMobileToDesktop, type MappedDesktopFromMobile } from "./mobileToDesktopMapping.js";
+import { buildBootstrapBaselineFromDesktopWorkspace, writeBootstrapBaselineGz } from "./bootstrapFromWorkspace.js";
 import { replaceWorkspaceWith } from "../workspaceBackup.js";
 import type { PortableImportOptions, PortableImportResult, PortablePackageInspection } from "./portableImport.js";
 
@@ -140,6 +141,16 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
       insertDesktopQuickRows(quickDb, mapped, stagingWorkspace);
     } finally {
       quickDb.close();
+    }
+
+    // 5.5) 261123（PORTABLE-TRANSFER §3.1）：零基线快照（无基线条目且 manifest.baseline=null）合成
+    //      「合并底稿」基线（从映射后的桌面两库 + 行内 content_hash）；合成失败按「无基线」明说，不阻断迁移。
+    if (!baselineEntry && inspection.manifest.baseline === null) {
+      try {
+        writeBootstrapBaselineGz(stagingWorkspace, buildBootstrapBaselineFromDesktopWorkspace(stagingWorkspace));
+      } catch (error) {
+        baselineWarning = "（合成合并底稿基线失败，已按无基线导入：" + (error instanceof Error ? error.message : String(error)) + "）";
+      }
     }
 
     // 6) 换位（隔离/回滚统一走 replaceWorkspaceWith；staging 与工作区需同卷）。
