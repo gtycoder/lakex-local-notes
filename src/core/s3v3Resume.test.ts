@@ -87,7 +87,7 @@ describe("首拉中断后续传（261026）", () => {
     const bodies = new Map([["n1", enc("body-n1")], ["n2", enc("body-n2")]]);
     const device = new ResumeDevice(bodies, localState(lake));
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev" });
-    const report = await engine.sync({ onEmptyCloud: "stay" });
+    const report = await engine.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "stay" });
     expect(report.downloadedNotes).toBe(0); // 正文已就绪，不重复下载
     expect(device.archived).toEqual([]);   // 内容一致，不归档
     // 续传快速复用（261026）：状态 hash 与远端一致 + stat 存在 ⇒ 不读正文（比批量读再快一档）。
@@ -105,7 +105,7 @@ describe("首拉中断后续传（261026）", () => {
     state.lake.notes = state.lake.notes.map((n) => (n.id === "n2" ? { ...n, contentHash: H("OLD-local") } : n));
     const device = new ResumeDevice(bodies, state);
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev" });
-    await engine.sync({ onEmptyCloud: "stay" });
+    await engine.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "stay" });
     expect(device.archived).toEqual(["n2"]);
     expect(new TextDecoder().decode(bodies.get("n2")!)).toBe("body-n2"); // 远端覆盖回来
   });

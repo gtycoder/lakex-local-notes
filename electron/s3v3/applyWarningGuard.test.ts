@@ -5,6 +5,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Store } from "../store.js";
 import { syncWithV3 } from "./desktopSync.js";
+import { setPendingFirstEncounterMode } from "../../src/core/firstEncounter.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./ports.js";
 
 /**
@@ -63,6 +64,7 @@ describe("单篇 apply 失败降级（task-66）", () => {
     });
 
     // ① 整轮不抛错（降级，而不是把 syncNow 变成失败）
+    setPendingFirstEncounterMode("smart"); // B 首次相遇：显式选择合并方式
     const round1 = await syncWithV3(b.store, undefined, { remote, deviceId: "B" });
 
     // ② warning truth：kind=apply_skipped（不是 remote_incomplete），且能定位到该篇

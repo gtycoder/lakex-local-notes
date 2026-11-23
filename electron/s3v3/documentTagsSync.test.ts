@@ -52,13 +52,13 @@ describe("桌面文档标签同步（261105 P1）", () => {
     a.store.documentTags.setNoteTags(doc.id, [tag1.id, tag2.id], T1);
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     // 发布侧的 tagIds 必须是排序集合
     const published = (await remoteLakeNotes(remote)).find((n) => n.id === doc.id)!;
     expect(published.tagIds).toEqual([tag1.id, tag2.id].sort());
     expect(published.tagsUpdatedAt).toBe(T1);
 
-    await eb.sync();
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.store.documentTags.getDocumentTagIds(doc.id)).toEqual([tag1.id, tag2.id]);
     expect(b.store.documentTags.tagsUpdatedAt(doc.id)).toBe(T1);
 
@@ -69,8 +69,8 @@ describe("桌面文档标签同步（261105 P1）", () => {
     const TA = "2026-11-03T00:00:00.000Z";
     b.store.documentTags.setNoteTags(doc.id, [tag2.id, tag1.id], TB);
     a.store.documentTags.setNoteTags(doc.id, [tag1.id, tag2.id, tag3.id], TA);
-    await ea.sync();
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     // 远端有 tag3（新增）⇒ 插最前；本机顺序 [tag2, tag1] 保留 ⇒ [tag3, tag2, tag1]
     expect(b.store.documentTags.getDocumentTagIds(doc.id)).toEqual([tag3.id, tag2.id, tag1.id]);
     // 目录也随 quick-notes 索引同步到了 B

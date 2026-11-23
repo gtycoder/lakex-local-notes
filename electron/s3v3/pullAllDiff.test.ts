@@ -40,12 +40,12 @@ describe("P1 崩溃追赶放大：pullAll 复用本地正文/附件（不重下�
     state.quickNotes.items.push({ id: "q1", createdAt: now, updatedAt: now, contentHash: sha256Hex(qbytes) });
     await store.saveState(state);
     const engine = new S3v3SyncEngine({ remote, device: store, deviceId: "A" });
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "upload" });
     expect(remote.objects.size).toBeGreaterThan(0);
 
     await fs.rm(path.join(root, "baseline.json.gz"));
     remote.reset();
-    const r = await engine.sync();
+    const r = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(r.published).toBe(false);
     expect(r.downloadedNotes).toBe(0);
     const bodyOrAssetGets = remote.gets.filter((k) => k.startsWith("objects/") || k.startsWith("assets/") || k.startsWith("quick-notes/objects/") || k.startsWith("quick-notes/assets/"));

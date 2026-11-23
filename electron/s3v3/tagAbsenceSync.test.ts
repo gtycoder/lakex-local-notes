@@ -51,16 +51,16 @@ describe("桌面标签同步：删除 = 缺席（261105）", () => {
     a.quick.setQuickNoteTags(q.id, [tag.id]);
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.tags.list().map((t) => t.id)).toEqual([tag.id]);
     expect(b.quick.links.listFor(q.id)).toEqual([tag.id]);
 
     // B 本地改名（编辑），随后 A 删除标签 ⇒ 删除压编辑：B 的改名不上诉。
     b.quick.tagService.update(tag.id, { name: "项目（B改）" });
     a.quick.tagService.delete(tag.id);
-    await ea.sync();
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
 
     expect(b.quick.tags.list()).toEqual([]); // 目录行物理删除，不是墓碑
     expect(b.quick.links.listFor(q.id)).toEqual([]); // 关联清掉
@@ -68,7 +68,7 @@ describe("桌面标签同步：删除 = 缺席（261105）", () => {
     expect(b.quick.tags.listPendingDeletes()).toEqual([tag.id]); // 本机待删：远端确认缺席前保持抑制
 
     // 再同步一轮：远端已缺席 ⇒ 待删结算清空（否则同名标签以后永远建不回来）。
-    await eb.sync();
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.tags.listPendingDeletes()).toEqual([]);
     // 同名重建成功：派生 ID 与刚删的相同也不会撞主键（旧墓碑会撞）。
     const again = b.quick.tags.create("项目");
@@ -82,29 +82,29 @@ describe("桌面标签同步：删除 = 缺席（261105）", () => {
     const tag = a.quick.tags.create("离线删");
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(await remoteTagIds(remote)).toEqual([tag.id]);
 
     // A 离线删除（远端索引此时还带着它）；B 改名并同步 ⇒ 远端仍是 active（模拟「远端重发」）。
     a.quick.tagService.delete(tag.id);
     expect(a.quick.tags.listPendingDeletes()).toEqual([tag.id]);
     b.quick.tagService.update(tag.id, { name: "离线删（B改）" });
-    await eb.sync();
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(await remoteTagIds(remote)).toEqual([tag.id]);
 
     // A 同步：pending 抑制 + 本轮发布「缺席」⇒ 本地不复活，云端也不得再带着它。
-    await ea.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
     expect(a.quick.tags.list()).toEqual([]);
     expect(a.quick.tags.listPendingDeletes()).toEqual([tag.id]); // 远端还没确认缺席（本轮才刚发布）
     expect(await remoteTagIds(remote)).toEqual([]);
 
     // B 下一轮按「基线有 / 远端缺席」删本地（不是把 A 的删除当新增重发）。
-    await eb.sync();
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.tags.list()).toEqual([]);
 
     // A 再同步：远端已确认缺席 ⇒ 待删结算。
-    await ea.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
     expect(a.quick.tags.listPendingDeletes()).toEqual([]);
   }, 120_000);
 });

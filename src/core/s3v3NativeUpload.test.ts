@@ -75,7 +75,7 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
     const device = new NativeDevice();
     const progress: Array<{ phase: string; done?: number; total?: number; bytesDone?: number; bytesTotal?: number }> = [];
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native", onProgress: (p) => progress.push(p) });
-    const report = await engine.sync({ onEmptyCloud: "upload" });
+    const report = await engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     expect(report.published).toBe(true);
     // 261027：上传也报进度（文件粒度 + 字节累计）。
     const uploads = progress.filter((p) => p.phase === "uploads");
@@ -98,7 +98,7 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
     // 只留小记，避免 lake 侧干扰断言
     device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] } };
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native-q" });
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     expect(device.readAssetCalls).toEqual([]);
     const call = remote.fromFileCalls.find((c) => c.key === "quick-notes/assets/q1/b.png");
     expect(call?.localPath).toBe("quick-notes/assets/q1/b.png");
@@ -108,7 +108,9 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
   it("小记图片下载：原生 getToFile（quick-notes/assets 路径），不产生字节 GET", async () => {
     const remote = new MemRemote();
     const device = new NativeDevice();
-    device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] } };
+    // 空设备加入（对齐原意图：mock 默认自带 1 条小记会把场景染成「本地非空的首次相遇」⇒ 走合并轮；
+    // 本例要验的是空设备全量重拉的原生 getToFile 资产下载，261123 路由门控后需显式清空）。
+    device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] }, quickNotes: { ...(device.state as { quickNotes?: object }).quickNotes, items: [] } } as typeof device.state;
     const quickBody = "quick-body";
     const quickHash = H(quickBody);
     const decl = { filename: "b.png", size: ASSET_BODY.length, hash: ASSET_HASH };
@@ -134,7 +136,7 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
     remote.getToFile = async (key: string, localPath: string) => { downloads.push({ key, localPath }); return "ok"; };
 
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "dev-native-dl" });
-    await engine.sync({ onEmptyCloud: "stay" });
+    await engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "stay" });
     expect(downloads).toEqual([{ key: "quick-notes/assets/q1/b.png", localPath: "quick-notes/assets/q1/b.png" }]);
     expect(remote.objects.get("quick-notes/assets/q1/b.png")).toBeUndefined(); // 没有走字节路径落盘
   });

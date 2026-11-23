@@ -66,7 +66,7 @@ describe("P0：全量重拉不删除本地独有数据（SD-01 回归）", () =>
     const engine = new S3v3SyncEngine({ remote, device: adapter, deviceId: "P0-A" });
     const nb = store.createNotebook("NB");
     store.createNoteInAtTopWithContent(nb.id, "Shared", "<p>shared-body</p>", [], "shared-1");
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "upload" });
 
     // 首轮同步之后才创建的本地文档（尚未上传）+ 一份历史快照
     store.createNoteInAtTopWithContent(nb.id, "LocalOnly", "<p>local-only-body</p>", [], "local-1");
@@ -76,7 +76,7 @@ describe("P0：全量重拉不删除本地独有数据（SD-01 回归）", () =>
     // 触发条件：baseline 丢失（损坏/被清理/换机只拷了工作区）
     await fs.rm(path.join(root, "sync-v3", "baseline.json.gz"), { force: true });
 
-    const r = await engine.sync();
+    const r = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(r.published).toBe(false); // 全量重拉只拉不推
 
     // 1) 进回收站（不再物理删除），正文与历史都在
@@ -94,13 +94,13 @@ describe("P0：全量重拉不删除本地独有数据（SD-01 回归）", () =>
     // 3) 没被上传/复活（远端索引里没有它），下一轮也不会把它当「本地新建」上传
     expect((await remote.lakeIndex()).notes.some((n) => n.id === "local-1")).toBe(false);
     remote.puts = [];
-    const r2 = await engine.sync();
+    const r2 = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(r2.uploadedNotes).toBe(0);
     expect(remote.puts.some((k) => k.includes("local-1"))).toBe(false);
 
     // 4) 显式恢复 = 唯一例外：恢复后下一轮 local-wins 重新上传
     store.restoreTrashItem("local-1");
-    const r3 = await engine.sync();
+    const r3 = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(r3.uploadedNotes).toBe(1);
     expect((await remote.lakeIndex()).notes.some((n) => n.id === "local-1")).toBe(true);
     const st2 = await adapter.loadState();

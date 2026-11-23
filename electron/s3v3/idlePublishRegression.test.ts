@@ -80,9 +80,9 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     a.quick.setQuickNoteTags(q.id, [tag.id]);
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
+    await ea.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "upload" });
     // B 首拉：此时 B 自己的种子（欢迎小记/个人笔记笔记本）时间戳与远端不同，修前从这里开始抖动。
-    const first = await eb.sync();
+    const first = await eb.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(first.published).toBe(false);
     const gen = remote.pointer().generation;
     const commit = remote.pointer().lake.commit;
@@ -93,7 +93,7 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     for (let round = 0; round < 5; round++) {
       for (const [who, engine] of [["A", ea], ["B", eb]] as const) {
         remote.reset();
-        const r = await engine.sync();
+        const r = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
         expect(r.published, who + " round " + round + " 不应发布").toBe(false);
         expect(r.uploadedNotes + r.downloadedNotes, who + " round " + round + " 不应有正文/元数据传输").toBe(0);
         expect(r.generation).toBe(gen);
@@ -117,13 +117,13 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "v1-body", [], "n1");
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "cloud-wins" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "cloud-wins" } });
     // A 改正文并发布 → B 下载（saveNote 会把 updated_at 写成 now，修前下一轮 B 会误判本地更新再发布）
     a.store.saveNote("n1", "Doc", "v2-body");
-    await ea.sync();
+    await ea.sync({ firstEncounter: { mode: "cloud-wins" } });
     const saveBaselineB = vi.spyOn(b.adapter, "saveBaseline");
-    const down = await eb.sync();
+    const down = await eb.sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(down.downloadedNotes).toBe(1);
     // 追平远端（pointer 已前进）必须更新 baseline：否则下一轮会拿旧基线判成三方冲突。
     expect(saveBaselineB).toHaveBeenCalledTimes(1);
@@ -133,7 +133,7 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     for (let round = 0; round < 3; round++) {
       for (const [who, engine] of [["A", ea], ["B", eb]] as const) {
         remote.reset();
-        const r = await engine.sync();
+        const r = await engine.sync({ firstEncounter: { mode: "cloud-wins" } });
         expect(r.published, who + " round " + round + " 增量后回闲不应发布").toBe(false);
         expect(remote.putCount, who + " round " + round + " 不应写对象").toBe(0);
       }

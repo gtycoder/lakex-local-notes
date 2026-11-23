@@ -49,23 +49,23 @@ describe("DesktopStoreDevice（真实 Store）", () => {
 
     const remote = new MemoryRemote();
     const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    const r1 = await engineA.sync({ onEmptyCloud: "upload" });
+    const r1 = await engineA.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     expect(r1.published).toBe(true);
     const b = await fileDevice();
-    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync();
+    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
     expect(new TextDecoder().decode((await b.store.readBody("n1"))!)).toBe("hello");
     expect(new TextDecoder().decode((await b.store.readAsset("n1", "a.png"))!)).toBe("PNG-DATA");
 
     // 本机改正文 → 上传 → 对端拉取
     store.saveNote("n1", "Doc1", "hello-v2");
-    await engineA.sync();
-    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync();
+    await engineA.sync({ firstEncounter: { mode: "smart" } });
+    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
     expect(new TextDecoder().decode((await b.store.readBody("n1"))!)).toBe("hello-v2");
 
     // 远端新文档 → 本机同步后应创建到 Store
     await addB(b.store, "n3", "from-b", nb.id);
-    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync();
-    await engineA.sync();
+    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
+    await engineA.sync({ firstEncounter: { mode: "smart" } });
     expect(store.hasNote("n3")).toBe(true);
     expect(store.readNote("n3").content).toBe("from-b");
   }, 60_000);
@@ -80,18 +80,18 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     const adapter = new DesktopStoreDevice(store, root);
     await adapter.init();
     const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    await engineA.sync({ onEmptyCloud: "upload" });
+    await engineA.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const b = await fileDevice();
     const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
     const st = (await b.store.loadState())!;
     const note = st.lake.notes.find((x) => x.id === "t1")!;
     note.parentId = "trash";
     note.trashedAt = new Date().toISOString();
     note.updatedAt = new Date(Date.now() + 2000).toISOString();
     await b.store.saveState(st);
-    await engineB.sync();
-    await engineA.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
+    await engineA.sync({ firstEncounter: { mode: "smart" } });
     const mapped = store.listNotesForSync().find((x) => x.id === "t1");
     expect(mapped?.trashedAt).toBeTruthy();
   }, 60_000);
@@ -106,22 +106,22 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     const adapter = new DesktopStoreDevice(store, root);
     await adapter.init();
     const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    await engineA.sync({ onEmptyCloud: "upload" });
+    await engineA.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const b = await fileDevice();
     const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
     // B 先删（trash）→ A 收到回收站
     let st = (await b.store.loadState())!;
     let note = st.lake.notes.find((x) => x.id === "r1")!;
     note.parentId = "trash"; note.trashedAt = new Date().toISOString(); note.updatedAt = new Date(Date.now() + 1000).toISOString();
-    await b.store.saveState(st); await engineB.sync(); await engineA.sync();
+    await b.store.saveState(st); await engineB.sync({ firstEncounter: { mode: "smart" } }); await engineA.sync({ firstEncounter: { mode: "smart" } });
     expect(store.listNotesForSync().find((x) => x.id === "r1")?.trashedAt).toBeTruthy();
     // B 恢复 → A 应 restoreTrashItem 并移回原目录
     st = (await b.store.loadState())!;
     note = st.lake.notes.find((x) => x.id === "r1")!;
     note.parentId = nb.id; delete note.trashedAt; note.updatedAt = new Date(Date.now() + 2000).toISOString();
     st.restorePending = ["r1"];
-    await b.store.saveState(st); await engineB.sync(); await engineA.sync();
+    await b.store.saveState(st); await engineB.sync({ firstEncounter: { mode: "smart" } }); await engineA.sync({ firstEncounter: { mode: "smart" } });
     const mapped = store.listNotesForSync().find((x) => x.id === "r1");
     expect(mapped?.trashedAt ?? null).toBeNull();
     expect(mapped?.parentId).toBe(nb.id);
@@ -137,19 +137,19 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     const adapter = new DesktopStoreDevice(store, root);
     await adapter.init();
     const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    await engineA.sync({ onEmptyCloud: "upload" });
+    await engineA.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const b = await fileDevice();
     const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
     const ptr = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { epoch: string; generation: number };
     const st = (await b.store.loadState())!;
     st.lake.notes = st.lake.notes.filter((x) => x.id !== "p1");
     st.intents = [{ noteId: "p1", targetEpoch: ptr.epoch, targetGeneration: ptr.generation, purgedAt: new Date().toISOString() }];
     await b.store.saveState(st);
     await b.store.deleteBody("p1");
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
     expect(await remote.list("objects/p1-")).toHaveLength(0);
-    await engineA.sync();
+    await engineA.sync({ firstEncounter: { mode: "smart" } });
     // 远端 purge → 本机按设计保留回收站副本（remotePurged），不是本地硬删
     const trashed = store.listNotesForSync().find((x) => x.id === "p1");
     expect(trashed?.trashedAt).toBeTruthy();
@@ -176,9 +176,9 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     await b.store.writeBody("n-remote", bytes);
     st.lake.notes.push({ id: "n-remote", title: "远端首拉文档", parentId: "folder-remote", sortOrder: 0, updatedAt: now, contentHash: sha256Hex(bytes), icon: "🎃" } as never);
     await b.store.saveState(st);
-    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ onEmptyCloud: "upload" });
+    await new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
-    await engineA.sync();
+    await engineA.sync({ firstEncounter: { mode: "smart" } });
     const node = store.listTreeNodes().find((n) => n.id === "n-remote");
     expect(node?.parentId).toBe("folder-remote");
     expect(node?.icon).toBe("🎃");
@@ -197,12 +197,12 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     const adapter = new DesktopStoreDevice(store, root);
     await adapter.init();
     const engine = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     expect(await remote.list("objects/p1-")).toHaveLength(1);
 
     store.deleteNote("p1");
     store.purgeTrashItem("p1");
-    await engine.sync();
+    await engine.sync({ firstEncounter: { mode: "smart" } });
     expect(await remote.list("objects/p1-")).toHaveLength(0);
     const idx = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { lake: { commit: string } };
     const lake = JSON.parse(new TextDecoder().decode((await remote.get("meta/index/" + idx.lake.commit + ".json"))!)) as { notes: Array<{ id: string }> };
@@ -223,10 +223,10 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     const adapter = new DesktopStoreDevice(store, root);
     await adapter.init();
     const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
-    await engineA.sync({ onEmptyCloud: "upload" });
+    await engineA.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const b = await fileDevice();
     const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
 
     // 他端改正文并发布
     const st = (await b.store.loadState())!;
@@ -236,10 +236,10 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     entry.contentHash = sha256Hex(bytes);
     entry.updatedAt = new Date(Date.now() + 2000).toISOString();
     await b.store.saveState(st);
-    await engineB.sync();
+    await engineB.sync({ firstEncounter: { mode: "smart" } });
 
     // 本机只同步（不打开文档）：正文、text_cache、FTS 必须一起更新
-    const r = await engineA.sync();
+    const r = await engineA.sync({ firstEncounter: { mode: "smart" } });
     expect(r.downloadedNotes).toBe(1);
     expect(store.readNote("c1").content).toContain("星空大海");
     expect(store.readNoteCaches("c1").plain).toContain("星空大海");

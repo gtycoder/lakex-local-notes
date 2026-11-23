@@ -72,19 +72,19 @@ describe("task-77 F-01b：purge 目录后云端 folders[] 不残留（桌面 A �
     const nb = a.store.createNotebook("NB");
     const g = a.store.createGroup(nb.id, "待彻底删除的组");
     a.store.createNoteInAtTopWithContent(g.id, "组内文档", "<p>x</p>", [], "f01b-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // A 删除目录（进回收站）→ 同步 → B 拿到回收站目录（为「对端重新发布副本」准备现场）
     a.store.deleteTreeNode(g.id);
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // A 彻底删除（task-62 的整棵子树 purge：目录 + 子文档墓碑）→ 首轮同步后云端 folders[] 不含该目录
     a.store.purgeTrashItem(g.id);
-    const first = await a.engine.sync();
+    const first = await a.engine.sync({ firstEncounter: { mode: "smart" } });
     expect(first.published).toBe(true);
     const afterPurge = await cloudLake(remote);
     expect(afterPurge.index.folders.map((f) => f.id)).not.toContain(g.id);
@@ -101,12 +101,12 @@ describe("task-77 F-01b：purge 目录后云端 folders[] 不残留（桌面 A �
     // 不得把回收站副本正文重新 PUT 回云端；A 再同步是零变更轮（pointer 不动）。
     const gen = afterPurge.generation;
     for (let round = 0; round < 3; round += 1) {
-      const rb = await b.engine.sync();
+      const rb = await b.engine.sync({ firstEncounter: { mode: "smart" } });
       expect(rb.published).toBe(false);
       expect(rb.uploadedNotes).toBe(0);
       expect((await cloudLake(remote)).index.folders.map((f) => f.id)).not.toContain(g.id);
       expect(await remote.list("objects/f01b-n1-")).toHaveLength(0);
-      const ra = await a.engine.sync();
+      const ra = await a.engine.sync({ firstEncounter: { mode: "smart" } });
       expect(ra.published).toBe(false);
       expect(ra.uploadedNotes).toBe(0);
       const stable = await cloudLake(remote);

@@ -36,23 +36,23 @@ describe("恢复标记持久化（无发布轮 + 单条推送路径）", () => {
     const a = await dev("a"); const b = await dev("b");
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>hi</p>", [], "n1");
-    await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync({ onEmptyCloud: "upload" });
-    await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+    await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
     // A 彻底删除 n1
     a.store.deleteNote("n1"); a.store.purgeTrashItem("n1");
-    await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
-    await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+    await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync({ firstEncounter: { mode: "smart" } });
+    await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
     expect(idsOf(await readSide(b.sidecar), "cloud-deleted")).toContain("n1");
     // B 显式恢复（v3：替换 restore records）
     const s = await readSide(b.sidecar);
     s.records = [...s.records.filter((r) => r.kind !== "restore"), { kind: "restore", noteId: "n1" }];
     await fs.writeFile(b.sidecar, JSON.stringify(s));
-    const restoreRound = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+    const restoreRound = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
     expect(restoreRound.uploadedNotes).toBeGreaterThanOrEqual(1);
     expect(idsOf(await readSide(b.sidecar), "cloud-deleted")).toEqual([]);
     // 再连续两轮无发布：标记不得回潮
     for (let i = 0; i < 2; i++) {
-      const r = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+      const r = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync({ firstEncounter: { mode: "smart" } });
       expect(r.published).toBe(false);
       const side = await readSide(b.sidecar);
       expect(idsOf(side, "cloud-deleted")).toEqual([]);

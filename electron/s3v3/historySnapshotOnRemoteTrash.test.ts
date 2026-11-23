@@ -49,18 +49,18 @@ describe("task-73：被远端删除时本地编辑留历史快照（S72-F1）", 
     try {
       const nb = a.store.createNotebook("H73");
       a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "h73-n1");
-      await engineFor(a.device, "A", remote).sync({ onEmptyCloud: "upload" });
-      await engineFor(b.device, "B", remote).sync();
-      await engineFor(c.device, "C", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(c.device, "C", remote).sync({ firstEncounter: { mode: "smart" } });
 
       // B 本地编辑（未同步）；C 删除并发布（删除 = 位置变化：索引条目 trashed，仍存在）
       await sleep(10);
       b.store.saveNote("h73-n1", "Doc", "<p>B-edit-v2</p>");
       c.store.deleteNote("h73-n1");
-      await engineFor(c.device, "C", remote).sync();
+      await engineFor(c.device, "C", remote).sync({ firstEncounter: { mode: "smart" } });
 
       // B 同步：内容赢家本地（上传其编辑）、位置赢家远端（trashed）⇒ 必须先留历史快照
-      const rb = await engineFor(b.device, "B", remote).sync();
+      const rb = await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
       expect(rb).toBeTruthy();
       const histB = b.store.listNoteHistory("h73-n1");
       expect(histB.length, "被删侧本地编辑必须留历史快照（S72-F1）").toBeGreaterThanOrEqual(1);
@@ -69,10 +69,10 @@ describe("task-73：被远端删除时本地编辑留历史快照（S72-F1）", 
       expect(b.store.listTrash().some((t) => t.id === "h73-n1")).toBe(true);
 
       // 三端收敛：都在回收站；云端条目 trashed 且正文=B 编辑版本（删除压位置、内容保留）
-      await engineFor(a.device, "A", remote).sync();
-      await engineFor(b.device, "B", remote).sync();
-      await engineFor(c.device, "C", remote).sync();
-      await engineFor(a.device, "A", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(c.device, "C", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });
       for (const d of [a, b, c]) expect(d.store.listTrash().some((t) => t.id === "h73-n1")).toBe(true);
       const entry = (await readCloudIndex(remote)).notes.find((n) => n.id === "h73-n1")!;
       expect(entry.trashedAt ?? null).not.toBe(null);
@@ -87,15 +87,15 @@ describe("task-73：被远端删除时本地编辑留历史快照（S72-F1）", 
     try {
       const nb = a.store.createNotebook("H73b");
       a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "h73b-n1");
-      await engineFor(a.device, "A", remote).sync({ onEmptyCloud: "upload" });
-      await engineFor(b.device, "B", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
       await sleep(10);
       b.store.saveNote("h73b-n1", "Doc", "<p>B-edit</p>");
       a.store.deleteNote("h73b-n1");
       a.store.purgeTrashItem("h73b-n1");
-      await engineFor(a.device, "A", remote).sync();
-      await engineFor(a.device, "A", remote).sync();
-      await engineFor(b.device, "B", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
       const hist = b.store.listNoteHistory("h73b-n1");
       expect(hist.length, "远端缺席 + 本地编辑必须留档（既有路径）").toBeGreaterThanOrEqual(1);
       expect(b.store.previewHistorySnapshot(hist[0].id)?.html ?? "").toContain("B-edit");
@@ -110,14 +110,14 @@ describe("task-73：被远端删除时本地编辑留历史快照（S72-F1）", 
     try {
       const nb = a.store.createNotebook("H73c");
       a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "h73c-n1");
-      await engineFor(a.device, "A", remote).sync({ onEmptyCloud: "upload" });
-      await engineFor(b.device, "B", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
       a.store.deleteNote("h73c-n1");
-      await engineFor(a.device, "A", remote).sync();   // A 发布 trashed（B 尚未拉取，仍是活跃副本）
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });   // A 发布 trashed（B 尚未拉取，仍是活跃副本）
       await sleep(10);
       b.store.saveNote("h73c-n1", "Doc", "<p>B-edit</p>"); // B 编辑（此刻 B 还不知情，未过同步）
-      await engineFor(b.device, "B", remote).sync();
-      await engineFor(a.device, "A", remote).sync();   // A：内容取 B 版、位置保留回收站、无本地独有内容 ⇒ 不留档
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });   // A：内容取 B 版、位置保留回收站、无本地独有内容 ⇒ 不留档
       expect(a.store.listTrash().some((t) => t.id === "h73c-n1")).toBe(true);
       expect(a.store.readNote("h73c-n1").content).toBe("<p>B-edit</p>");
       expect(a.store.listNoteHistory("h73c-n1").length, "本地无独有编辑 ⇒ 不为删除侧另造快照").toBe(0);
@@ -131,14 +131,14 @@ describe("task-73：被远端删除时本地编辑留历史快照（S72-F1）", 
     try {
       const nb = a.store.createNotebook("H73d");
       a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "h73d-n1");
-      await engineFor(a.device, "A", remote).sync({ onEmptyCloud: "upload" });
-      await engineFor(b.device, "B", remote).sync();
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });
       await sleep(10);
       a.store.saveNote("h73d-n1", "Doc", "<p>A-edit</p>");  // A 先改
       a.store.deleteNote("h73d-n1");                        // 再删（位置变化）
-      await engineFor(a.device, "A", remote).sync();        // A 发布：内容 A 版 + trashed
+      await engineFor(a.device, "A", remote).sync({ firstEncounter: { mode: "smart" } });        // A 发布：内容 A 版 + trashed
       b.store.saveNote("h73d-n1", "Doc", "<p>B-edit</p>");  // B（尚未同步，仍活跃）也改
-      await engineFor(b.device, "B", remote).sync();   // B：远端已发布（content+trashed 都变了）⇒ remote-wins-history
+      await engineFor(b.device, "B", remote).sync({ firstEncounter: { mode: "smart" } });   // B：远端已发布（content+trashed 都变了）⇒ remote-wins-history
       const hist = b.store.listNoteHistory("h73d-n1");
       expect(hist.length).toBeGreaterThanOrEqual(1);
       expect(hist.length, "同一内容不重复留档").toBe(1);

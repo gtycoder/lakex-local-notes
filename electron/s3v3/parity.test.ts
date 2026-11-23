@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { Store } from "../store.js";
 import type { SyncProgress } from "../syncTypes.js";
 import { syncWithV3 } from "./desktopSync.js";
+import { setPendingFirstEncounterMode } from "../../src/core/firstEncounter.js";
 import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import type { RemoteObjectInfo, S3v3Remote } from "../../src/core/s3v3Ports.js";
 
@@ -30,6 +31,7 @@ describe("v3 与旧协议对齐（261026 parity：进度/冲突留档/警告/缺
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "Doc1", "v1", [], "n1");
     await syncWithV3(a.store, undefined, { remote, deviceId: "A" });
+    setPendingFirstEncounterMode("smart"); // B 首次相遇：显式选择合并方式（同 firstEncounter.s3 既有用法）
     await syncWithV3(b.store, undefined, { remote, deviceId: "B" });
     a.store.saveNote("n1", "Doc1", "v2-A");
     await syncWithV3(a.store, undefined, { remote, deviceId: "A" });
@@ -59,6 +61,7 @@ describe("v3 与旧协议对齐（261026 parity：进度/冲突留档/警告/缺
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "LockMe", "body-lock", [], "n1");
     await syncWithV3(a.store, undefined, { remote, deviceId: "A" });
+    setPendingFirstEncounterMode("smart");
     await syncWithV3(b.store, undefined, { remote, deviceId: "B" });
     a.store.setNoteEditLocked("n1", true); // 只写 is_locked/locked_at，不 bump updated_at
     await syncWithV3(a.store, undefined, { remote, deviceId: "A" });

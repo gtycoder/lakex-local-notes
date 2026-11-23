@@ -38,25 +38,25 @@ describe("目录恢复传播（D4，桌面双端）", () => {
     const a = await dev("a"); const b = await dev("b");
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>hi</p>", [], "n1");
-    await engine(remote, a.device, "A").sync({ onEmptyCloud: "upload" });
-    await engine(remote, b.device, "B").sync();
+    await engine(remote, a.device, "A").sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await engine(remote, b.device, "B").sync({ firstEncounter: { mode: "smart" } });
     // A 删目录（进回收站）并发布
     a.store.deleteTreeNode(nb.id);
-    await engine(remote, a.device, "A").sync();
-    await engine(remote, b.device, "B").sync();
+    await engine(remote, a.device, "A").sync({ firstEncounter: { mode: "smart" } });
+    await engine(remote, b.device, "B").sync({ firstEncounter: { mode: "smart" } });
     // A 彻底删除目录（墓碑）
     a.store.purgeTrashItem(nb.id);
-    const purge = await engine(remote, a.device, "A").sync();
+    const purge = await engine(remote, a.device, "A").sync({ firstEncounter: { mode: "smart" } });
     expect(purge.published).toBe(true);
     // B 跟随删除：目录进回收站（不再出现在活跃列表）
-    await engine(remote, b.device, "B").sync();
+    await engine(remote, b.device, "B").sync({ firstEncounter: { mode: "smart" } });
     expect(b.store.listFoldersForSync().find((f) => f.id === nb.id)?.trashedAt).toBeTruthy();
     // B 显式恢复目录
     b.store.restoreTrashItem(nb.id);
-    const restore = await engine(remote, b.device, "B").sync();
+    const restore = await engine(remote, b.device, "B").sync({ firstEncounter: { mode: "smart" } });
     expect(restore.published).toBe(true);
     // A 拉回：目录重新活跃
-    await engine(remote, a.device, "A").sync();
+    await engine(remote, a.device, "A").sync({ firstEncounter: { mode: "smart" } });
     const back = a.store.listFoldersForSync().find((f) => f.id === nb.id);
     expect(back).toBeTruthy();
     expect(back?.trashedAt ?? null).toBeNull();
@@ -77,15 +77,18 @@ describe("父目录兜底（C5，桌面）", () => {
     const quick: QuickNotesIndex = { v: 3, space: "quickNotes", items: [] };
     const lakeSerialized = serializeLakeIndex(lake);
     const quickSerialized = serializeQuickNotesIndex(quick);
-    const lakeCommit = indexHashOf(lakeSerialized);
-    const quickCommit = indexHashOf(quickSerialized);
+    // commit 以**解析器规范形**为准（parse∘serialize 不是字节恒等：手搓对象会被规范化重排）——
+    // pointer 与对象键都必须指向解析器口径，readIndex 的完整性守卫才放行（261123 实测漂移）。
+    const { parseLakeIndexBytes, parseQuickNotesIndexBytes } = await import("../../src/core/s3v3/protocol/s3v3Index.js");
+    const lakeCommit = parseLakeIndexBytes(enc(lakeSerialized)).commit;
+    const quickCommit = parseQuickNotesIndexBytes(enc(quickSerialized)).commit;
     await remote.put("meta/index/" + lakeCommit + ".json", enc(lakeSerialized), { gzip: true });
     await remote.put("quick-notes/meta/index/" + quickCommit + ".json", enc(quickSerialized), { gzip: true });
     await remote.put(lakeBodyKey("n1", hash), body);
     await remote.put("meta/pointer.json", enc(JSON.stringify({ v: 3, epoch: "33333333-3333-4333-8333-333333333333", generation: 1, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: ISO })));
 
     const b = await dev("b");
-    await engine(remote, b.device, "B").sync();
+    await engine(remote, b.device, "B").sync({ firstEncounter: { mode: "smart" } });
     const meta = b.store.listNotesSyncMeta().find((n) => n.id === "n1");
     expect(meta).toBeTruthy();
     expect(meta?.parentId).not.toBe("ghost-parent");

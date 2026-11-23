@@ -38,26 +38,26 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const q = a.quick.createQuickNote({ text: "hello-v3", draftId: "d1", stagedImageIds: [] });
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.readQuickNote(q.id).content.text).toBe("hello-v3");
 
     const tag = a.quick.tags.create("项目");
     a.quick.setQuickNoteTags(q.id, [tag.id]);
-    await ea.sync();
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.listQuickNoteTagIds(q.id)).toEqual([tag.id]);
     expect(b.quick.tags.list().map((t) => t.name)).toContain("项目");
 
     b.quick.updateQuickNote(q.id, { text: "edited-on-b", draftId: "d2", stagedImageIds: [] });
-    await eb.sync();
-    await ea.sync();
+    await eb.sync({ firstEncounter: { mode: "smart" } });
+    await ea.sync({ firstEncounter: { mode: "smart" } });
     expect(a.quick.readQuickNote(q.id).content.text).toBe("edited-on-b");
 
     b.quick.deleteQuickNote(q.id);
-    const rb = await eb.sync();
+    const rb = await eb.sync({ firstEncounter: { mode: "smart" } });
     console.log("B sync", JSON.stringify(rb));
-    const ra = await ea.sync();
+    const ra = await ea.sync({ firstEncounter: { mode: "smart" } });
     console.log("A sync", JSON.stringify(ra), a.quick.listQuickNotes().map((n) => n.id));
     expect(a.quick.listQuickNotes().some((n) => n.id === q.id)).toBe(false);
     expect(a.quick.listQuickNoteTrash().some((n) => n.id === q.id)).toBe(true);
@@ -72,8 +72,8 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const q = a.quick.createQuickNote({ text: "with-image", draftId: "d-img", stagedImageIds: [staged.id] });
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     const got = b.quick.readQuickNote(q.id);
     expect(got.content.text).toBe("with-image");
     expect(got.content.images.length).toBe(1);
@@ -88,16 +88,16 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const q = a.quick.createQuickNote({ text: "to-purge", draftId: "d-purge", stagedImageIds: [] });
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.quick.readQuickNote(q.id).content.text).toBe("to-purge");
 
     a.quick.deleteQuickNote(q.id);
     a.quick.purgeQuickNote(q.id);
     console.log("A pre", JSON.stringify({ active: a.quick.listQuickNotes().map((n) => n.id), trash: a.quick.listQuickNoteTrash().map((n) => n.id), tombstones: a.quick.listAllDeleted().map((t) => ({ id: t.id, purgedAt: t.purgedAt })) }));
     console.log("A load", JSON.stringify({ purges: (await a.adapter.loadState())!.quickPurges, items: (await a.adapter.loadState())!.quickNotes.items.length, baseline: (await a.adapter.loadBaseline())?.quickNotes.items.length }));
-    await ea.sync();
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(a.quick.listQuickNotes().some((n) => n.id === q.id)).toBe(false);
     expect(a.quick.listQuickNoteTrash().some((n) => n.id === q.id)).toBe(false);
     expect(b.quick.listQuickNotes().some((n) => n.id === q.id)).toBe(false);
@@ -115,7 +115,7 @@ describe("桌面小记 v3 适配器（文本）", () => {
     const staged = await a.quick.stageImage("d-rec", { bytes: png, filename: "r.png" });
     const q = a.quick.createQuickNote({ text: "recover-me", draftId: "d-rec", stagedImageIds: [staged.id] });
     const engine = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "R" });
-    await engine.sync({ onEmptyCloud: "upload" });
+    await engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const snap = await fetchQuickNoteFromV3(remote, q.id);
     expect(snap).not.toBeNull();
     await fs.rm(a.quick.quickNotePathFor(q.id), { force: true });

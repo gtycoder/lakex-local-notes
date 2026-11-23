@@ -108,7 +108,7 @@ describe("E2-3 全量重拉金标准", () => {
     const dev = new MemDevice(stateOf(localNotes), null);
     dev.bodies.set("a", enc("v1"));
     dev.bodies.set("b", enc("local-only"));
-    const report = await new S3v3SyncEngine({ remote, device: dev, deviceId: "k" }).sync();
+    const report = await new S3v3SyncEngine({ remote, device: dev, deviceId: "k" }).sync({ firstEncounter: { mode: "cloud-wins" } });
     expect(dev.state.lake.notes.map((n) => n.id).sort()).toEqual(["a", "b"]);
     expect(dev.state.remotePurged).toEqual(["b"]);
     expect(dev.baseline?.generation).toBe(2);

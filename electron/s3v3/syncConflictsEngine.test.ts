@@ -42,15 +42,15 @@ describe("同步记录账本：引擎→端口（桌面 A/B）", () => {
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>base</p>", [], "doc-c");
     const ea = new S3v3SyncEngine({ remote, device: a.adapter, deviceId: "A" });
     const eb = new S3v3SyncEngine({ remote, device: b.adapter, deviceId: "B" });
-    await ea.sync({ onEmptyCloud: "upload" });
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.store.readNote("doc-c").content).toBe("<p>base</p>");
 
     // B 本地编辑（被覆盖方）；A 稍后编辑并发布（远端胜）。
     b.store.saveNote("doc-c", "Doc", "<p>B-local</p>");
     a.store.saveNote("doc-c", "Doc", "<p>A-remote</p>");
-    await ea.sync();
-    await eb.sync();
+    await ea.sync({ firstEncounter: { mode: "smart" } });
+    await eb.sync({ firstEncounter: { mode: "smart" } });
     expect(b.store.readNote("doc-c").content).toBe("<p>A-remote</p>");
 
     const conflicts = b.store.listSyncConflicts();

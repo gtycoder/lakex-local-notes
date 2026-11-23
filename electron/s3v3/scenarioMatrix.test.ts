@@ -73,10 +73,10 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     a.store.createNoteInAtTopWithContent(g3.id, "深文档", "<p>deep</p>", [], "s14-n1");
 
     // 同一轮上传（初始上传包含目录 + 文档）
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("S14B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     const state = (await b.device.loadState())!;
     const byId = new Map(state.lake.folders.map((f) => [f.id, f]));
     expect(byId.get(g1.id)?.parentId).toBe(nb.id);
@@ -93,14 +93,14 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const g1 = a.store.createGroup(nb1.id, "搬走的组");
     const g2 = a.store.createGroup(g1.id, "子组");
     a.store.createNoteInAtTopWithContent(g2.id, "子文档", "<p>sub</p>", [], "s15-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("S15B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     a.store.moveTreeNode(g1.id, nb2.id, 0);
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     const state = (await b.device.loadState())!;
     const byId = new Map(state.lake.folders.map((f) => [f.id, f]));
@@ -118,22 +118,22 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const nb = a.store.createNotebook("NB");
     const g = a.store.createGroup(nb.id, "待彻底删除的组");
     a.store.createNoteInAtTopWithContent(g.id, "组内文档", "<p>x</p>", [], "s17-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("S17B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     expect((await b.device.loadState())!.lake.folders.some((f) => f.id === g.id)).toBe(true);
 
     // 用户删除组（进回收站）→ 同步 → 彻底删除 → 同步（删除传播可能跨一轮：给发起端最多 3 轮）
     a.store.deleteTreeNode(g.id);
-    await a.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
     a.store.purgeTrashItem(g.id);
-    for (let i = 0; i < 3; i += 1) await a.engine.sync();
+    for (let i = 0; i < 3; i += 1) await a.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // 对端两轮 + 再各一轮：残留副本只能留在本地回收站，绝不回传索引、也不在本机重建
-    for (let i = 0; i < 2; i += 1) await b.engine.sync();
-    await b.engine.sync();
-    await a.engine.sync();
+    for (let i = 0; i < 2; i += 1) await b.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // 云端 lake 索引：文档与目录都不再出现（pub 出去的只是 folders[] 的回收站副本则另行登记，见 F-01b）
     const cloud = await remoteLakeNotes(remote);
@@ -149,8 +149,8 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     expect(bState.lake.notes.some((n) => n.id === "s17-n1" && !n.trashedAt && (n.parentId ?? "") !== TRASH_NOTEBOOK_ID)).toBe(false);
     expect(bState.lake.folders.some((f) => f.id === g.id && !f.trashedAt && (f.parentId ?? "") !== TRASH_NOTEBOOK_ID)).toBe(false);
     // 再跑一轮仍稳定（不来回抖动）
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     expect((await remoteLakeNotes(remote)).some((n) => n.id === "s17-n1")).toBe(false);
   }, 150_000);
 
@@ -159,10 +159,10 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const a = await desktop("S63A", remote);
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "s63-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("S63B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // 模拟 A 端时钟快（只在本机 DB 里把 updated_at 改成未来；不改系统/生产时钟）
     const future = new Date(Date.now() + 24 * 3600_000).toISOString();
@@ -172,19 +172,19 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
 
     // 两端各改一次再互相同步（B 的 edit 是真实时间，A 的 updatedAt 在未来）
     b.store.saveNote("s63-n1", "Doc", "<p>from-B</p>");
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     a.store.saveNote("s63-n1", "Doc", "<p>from-A</p>");
-    await a.engine.sync();
-    await b.engine.sync();
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     const bodyA = new TextDecoder().decode((await a.device.readBody("s63-n1"))!);
     const bodyB = new TextDecoder().decode((await b.device.readBody("s63-n1"))!);
     expect(bodyA).toBe(bodyB);
     // 再跑两轮不得继续抖动（收敛后稳定）
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     const againA = new TextDecoder().decode((await a.device.readBody("s63-n1"))!);
     expect(againA).toBe(bodyA);
   }, 120_000);
@@ -194,21 +194,21 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const d1 = await desktop("S72-1", remote);
     const nb = d1.store.createNotebook("NB");
     d1.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "s72-n1");
-    await d1.engine.sync({ onEmptyCloud: "upload" });
+    await d1.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const d2 = await desktop("S72-2", remote);
     const d3 = await desktop("S72-3", remote);
-    await d2.engine.sync();
-    await d3.engine.sync();
+    await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d3.engine.sync({ firstEncounter: { mode: "smart" } });
 
     d2.store.saveNote("s72-n1", "Doc", "<p>edited-by-d2</p>");
     d3.store.deleteTreeNode("s72-n1");
-    await d2.engine.sync();
-    await d3.engine.sync();
+    await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d3.engine.sync({ firstEncounter: { mode: "smart" } });
 
     for (let round = 0; round < 2; round += 1) {
-      await d1.engine.sync();
-      await d2.engine.sync();
-      await d3.engine.sync();
+      await d1.engine.sync({ firstEncounter: { mode: "smart" } });
+      await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+      await d3.engine.sync({ firstEncounter: { mode: "smart" } });
     }
 
     const states = await Promise.all([d1, d2, d3].map(async (d) => (await d.device.loadState())!));
@@ -235,19 +235,19 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     a.store.createNoteInAtTopWithContent(nb1.id, "带附件文档", "<p>v1</p>", [], "s46-n1");
     const img = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4, 5, 250]);
     await a.device.writeAsset("s46-n1", "a.png", img);
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
 
     const b = await desktop("S46B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     const beforeB = await b.device.readAsset("s46-n1", "a.png");
     expect(beforeB).not.toBeNull();
     expect(Array.from(beforeB as Uint8Array)).toEqual(Array.from(img));
 
     // 移动文档到另一笔记本（位置字段独立合并；附件按 noteId 前缀走，不应因移动丢失）
     a.store.moveTreeNode("s46-n1", nb2.id, 0);
-    await a.engine.sync();
-    await b.engine.sync();
-    await a.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
 
     const bState = (await b.device.loadState())!;
     expect(bState.lake.notes.find((n) => n.id === "s46-n1")?.parentId).toBe(nb2.id);
@@ -258,8 +258,8 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const declKeys = await remote.list("meta/assets/s46-n1/");
     expect(declKeys.length).toBeGreaterThan(0);
     // 再跑一轮仍稳定（不出现「移动后附件被当孤儿删」）
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     const stable = await b.device.readAsset("s46-n1", "a.png");
     expect(Array.from(stable as Uint8Array)).toEqual(Array.from(img));
   }, 150_000);
@@ -269,25 +269,25 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const d1 = await desktop("S74-1", remote);
     const nb = d1.store.createNotebook("NB");
     d1.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>base</p>", [], "s74-n1");
-    await d1.engine.sync({ onEmptyCloud: "upload" });
+    await d1.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const d2 = await desktop("S74-2", remote);
     const d3 = await desktop("S74-3", remote);
-    await d2.engine.sync();
-    await d3.engine.sync();
+    await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d3.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // 标签：d1 先加 t1（版本 t1）；d2 后加 t1+t2（版本更晚）⇒ 集合 LWW 后写胜
     d1.store.documentTags.setNoteTags("s74-n1", ["t_0123456789abcdef"]);
-    await d1.engine.sync();
+    await d1.engine.sync({ firstEncounter: { mode: "smart" } });
     d2.store.documentTags.setNoteTags("s74-n1", ["t_0123456789abcdef", "t_fedcba9876543210"]);
     // 锁：d3 加锁（lockedAt 更晚）
     d3.store.setNoteEditLocked("s74-n1", true);
-    await d2.engine.sync();
-    await d3.engine.sync();
+    await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d3.engine.sync({ firstEncounter: { mode: "smart" } });
 
     for (let round = 0; round < 2; round += 1) {
-      await d1.engine.sync();
-      await d2.engine.sync();
-      await d3.engine.sync();
+      await d1.engine.sync({ firstEncounter: { mode: "smart" } });
+      await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+      await d3.engine.sync({ firstEncounter: { mode: "smart" } });
     }
 
     const states = await Promise.all([d1, d2, d3].map(async (d) => (await d.device.loadState())!));
@@ -304,9 +304,9 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     expect(new Set(bodies).size).toBe(1);
     expect(bodies[0]).toContain("base");
     // 再跑一轮稳定（不来回抖动）
-    await d1.engine.sync();
-    await d2.engine.sync();
-    await d3.engine.sync();
+    await d1.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d2.engine.sync({ firstEncounter: { mode: "smart" } });
+    await d3.engine.sync({ firstEncounter: { mode: "smart" } });
     const again = (await d1.device.loadState())!;
     expect([...((again.lake.notes.find((n) => n.id === "s74-n1")?.tagIds) ?? [])].sort().join(",")).toBe(tagSets[0]);
   }, 180_000);
@@ -324,10 +324,10 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const nb = a.store.createNotebook("NB");
     const g = a.store.createGroup(nb.id, "组");
     a.store.createNoteInAtTopWithContent(g.id, "组内文档", "<p>x</p>", [], "s17b-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     a.store.deleteTreeNode(g.id);
-    await a.engine.sync();
-    await a.engine.sync(); // 让 applyRemoteNoteMeta 把 trashed 行 parent 归一成回收站容器
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } }); // 让 applyRemoteNoteMeta 把 trashed 行 parent 归一成回收站容器
 
     const db = rawDbOf(a.store);
     const trashRoots = db.prepare("SELECT id FROM tree_nodes WHERE parent_id=? AND trashed_at IS NOT NULL AND deleted_at IS NULL").all(TRASH_NOTEBOOK_ID).length;
@@ -339,7 +339,7 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const tombs = db.prepare("SELECT id, node_type FROM deleted_notes WHERE purged_at IS NOT NULL AND id IN (?,?)").all(g.id, "s17b-n1") as Array<{ id: string; node_type: string }>;
     expect(tombs.map((t) => t.id).sort()).toEqual([g.id, "s17b-n1"].sort());
     expect(tombs.find((t) => t.id === g.id)?.node_type).toBe("folder");
-    await a.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
     expect((await remoteLakeNotes(remote)).some((n) => n.id === "s17b-n1")).toBe(false);
   }, 150_000);
 
@@ -349,10 +349,10 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const nb = a.store.createNotebook("NB");
     const g = a.store.createGroup(nb.id, "组");
     a.store.createNoteInAtTopWithContent(g.id, "组内文档", "<p>y</p>", [], "s17c-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     a.store.deleteTreeNode(g.id);
-    await a.engine.sync();
-    await a.engine.sync(); // 扁平化
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } }); // 扁平化
 
     a.store.restoreTrashItem(g.id);
     const db = rawDbOf(a.store);
@@ -362,9 +362,9 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     expect(byId.get(g.id)!.parent_id).toBe(nb.id);
     expect(byId.get("s17c-n1")!.trashed_at).toBe(null);   // 子文档随根恢复
     expect(byId.get("s17c-n1")!.parent_id).toBe(g.id);    // 且回原父（不是 notebook-trash）
-    await a.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
     const b = await desktop("S17cB", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     const bs = (await b.device.loadState())!;
     expect(bs.lake.notes.find((n) => n.id === "s17c-n1")?.parentId).toBe(g.id);
     expect(bs.lake.folders.find((f) => f.id === g.id)?.parentId).toBe(nb.id);
@@ -376,10 +376,10 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const nb = a.store.createNotebook("NB");
     const g = a.store.createGroup(nb.id, "组");
     a.store.createNoteInAtTopWithContent(g.id, "组内文档", "<p>z</p>", [], "s17d-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     a.store.deleteTreeNode(g.id);
-    await a.engine.sync();
-    await a.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
     const db = rawDbOf(a.store);
     // 把删除时刻改成 2 天前，触发 days=1 的自动过期路径
     const past = new Date(Date.now() - 2 * 24 * 3600_000).toISOString();
@@ -396,21 +396,21 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     const a = await desktop("S08A", remote);
     const nb = a.store.createNotebook("NB");
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "s08-n1");
-    await a.engine.sync({ onEmptyCloud: "upload" });
+    await a.engine.sync({ firstEncounter: { mode: "smart" }, onEmptyCloud: "upload" });
     const b = await desktop("S08B", remote);
-    await b.engine.sync();
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // A 本地编辑（尚未同步）⇒ 这份编辑是稍后必须留档的内容
     a.store.saveNote("s08-n1", "Doc", "<p>A-edit</p>");
 
     // B 删除（进回收站）→ 同步 → purge → 同步：把「云端缺席」发布出去
     b.store.deleteTreeNode("s08-n1");
-    for (let i = 0; i < 2; i += 1) await b.engine.sync();
+    for (let i = 0; i < 2; i += 1) await b.engine.sync({ firstEncounter: { mode: "smart" } });
     b.store.purgeTrashItem("s08-n1");
-    for (let i = 0; i < 2; i += 1) await b.engine.sync();
+    for (let i = 0; i < 2; i += 1) await b.engine.sync({ firstEncounter: { mode: "smart" } });
 
     // A 同步：整轮不得失败；删除压编辑 ⇒ 本地编辑进历史快照
-    const ra = await a.engine.sync();
+    const ra = await a.engine.sync({ firstEncounter: { mode: "smart" } });
     expect(ra).toBeTruthy();
     const hist = a.store.listNoteHistory("s08-n1");
     expect(hist.length, "被删侧本地编辑必须留历史快照").toBeGreaterThanOrEqual(1);
@@ -424,8 +424,8 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     expect(b.store.listTrash().some((t) => t.id === "s08-n1")).toBe(false);
 
     // 再各跑一轮仍稳定：不复活、不来回抖动
-    await a.engine.sync();
-    await b.engine.sync();
+    await a.engine.sync({ firstEncounter: { mode: "smart" } });
+    await b.engine.sync({ firstEncounter: { mode: "smart" } });
     expect((await remoteLakeNotes(remote)).some((n) => n.id === "s08-n1")).toBe(false);
     expect(a.store.listTrash().some((t) => t.id === "s08-n1")).toBe(true);
   }, 150_000);
