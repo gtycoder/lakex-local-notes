@@ -48,7 +48,7 @@ const TOUCHPOINTS: Record<string, number> = {
   "src/components/app/syncConflicts.ts": 1,
   "src/components/app/treeIcons.tsx": 4,
   "src/components/ui/ExportSubmenuItem.tsx": 4,
-  "src/core/docBaseline.ts": 3,
+  "src/core/docBaseline.ts": 4, // 261123 usheet 行高持久化批：docBaselineSettled 新增 usheet 分支（ah-only 不算内容改动）
   "src/core/docBodySafety.ts": 6,
   "src/core/historyPreview.ts": 4,
   "src/core/lakeBodyRewrite.ts": 1,
