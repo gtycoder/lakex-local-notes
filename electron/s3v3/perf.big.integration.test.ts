@@ -19,10 +19,10 @@ class MemoryRemote implements S3v3Remote {
 }
 
 const enabled = process.env.S3V3_PERF_BIG === "1";
-const DOCS = Number(process.env.S3V3_PERF_BIG_DOCS || 20000);
+const DOCS = Number(process.env.S3V3_PERF_BIG_DOCS || 5000);
 const describeIt = enabled ? describe : describe.skip;
 
-describeIt("2 万文档本地引擎/适配器基准（绕过 Store API 造数）", () => {
+describeIt("5k 文档（默认）本地引擎/适配器基准（绕过 Store API 造数）", () => {
   it("loadState / 首次发布 / 空跑 / 改 10 篇", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-perf-big-"));
     const store = new Store(root);

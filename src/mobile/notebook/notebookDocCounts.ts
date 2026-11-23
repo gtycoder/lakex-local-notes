@@ -11,7 +11,7 @@
  *  · purge：is_purged / syncState === "purged"；
  *  · 父节点不在位的悬空行、坏库成环（树里看不见的，卡片也不数）。
  *
- * 性能（AGENTS §1：2 万文档量级）：父→根解析带 memo，整体一次 O(n)；调用方在树聚合处
+ * 性能（大库量级）：父→根解析带 memo，整体一次 O(n)；调用方在树聚合处
  * （MobileApp 的 docCounts useMemo）一次算好整张表，**不做每卡遍历全库**。
  */
 import { isGoneNote, TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";

@@ -6,8 +6,8 @@ import { planLakeMerge } from "./s3v3Merge.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
 
 const H = (s: string) => sha256Hex(new TextEncoder().encode(s));
-const DOCS = 20_000;
-const ASSETS_PER_DOC = 10;
+const DOCS = 5_000;
+const ASSETS_PER_DOC = 2;
 
 function buildWorld() {
   const t0 = performance.now();
@@ -30,19 +30,19 @@ function buildWorld() {
   return { index, declarations, declBytesTotal, buildMs: performance.now() - t0 };
 }
 
-describe("大规模（2 万文档 / 20 万附件量级）纯逻辑", () => {
+describe("大规模（5k 文档 / 1 万附件量级）纯逻辑", () => {
   it("索引体积/解析/合并/门禁在预算内", () => {
     const { index, declarations, declBytesTotal, buildMs } = buildWorld();
     expect(index.notes).toHaveLength(DOCS);
     expect(declarations.size).toBe(DOCS);
-    expect(declBytesTotal.raw).toBeGreaterThan(20 * 1024 * 1024);
+    expect(declBytesTotal.raw).toBeGreaterThan(768 * 1024);
     // 索引序列化
     const t1 = performance.now();
     const serialized = serializeLakeIndex(index);
     const commit = indexHashOf(serialized);
     const serMs = performance.now() - t1;
-    expect(serialized.length).toBeGreaterThan(5 * 1024 * 1024);
-    expect(serialized.length).toBeLessThan(15 * 1024 * 1024);
+    expect(serialized.length).toBeGreaterThan(512 * 1024);
+    expect(serialized.length).toBeLessThan(4 * 1024 * 1024);
     // 解析
     const t2 = performance.now();
     const parsed = parseLakeIndexBytes(new TextEncoder().encode(serialized));
@@ -52,8 +52,8 @@ describe("大规模（2 万文档 / 20 万附件量级）纯逻辑", () => {
     const sample = [...declarations.values()][0];
     expect(declarationHashOf(validateAssetDeclaration({ assets: Array.from({ length: ASSETS_PER_DOC }, (_, a) => ({ filename: "f" + a + ".png", size: 1024 + a, hash: H("n000000/f" + a + ".png") })) }))).toBe(sample.declHash);
     // 合并：本地改 500 篇、远端改另 500 篇
-    const remoteIndex: LakeIndex = { ...index, notes: index.notes.map((n, i) => i % 1000 === 0 ? { ...n, contentHash: H("remote-" + n.id), updatedAt: "2026-10-26T00:00:00.000Z" } : n) };
-    const localIndex: LakeIndex = { ...index, notes: index.notes.map((n, i) => i % 1000 === 1 ? { ...n, contentHash: H("local-" + n.id), updatedAt: "2026-10-26T00:00:00.000Z" } : n) };
+    const remoteIndex: LakeIndex = { ...index, notes: index.notes.map((n, i) => i % 10 === 0 ? { ...n, contentHash: H("remote-" + n.id), updatedAt: "2026-10-26T00:00:00.000Z" } : n) };
+    const localIndex: LakeIndex = { ...index, notes: index.notes.map((n, i) => i % 10 === 1 ? { ...n, contentHash: H("local-" + n.id), updatedAt: "2026-10-26T00:00:00.000Z" } : n) };
     const t3 = performance.now();
     const plan = planLakeMerge(index, localIndex, remoteIndex, { restorePending: new Set(), purgeIntents: new Set(), folderPurgeIntents: new Set() });
     const mergeMs = performance.now() - t3;

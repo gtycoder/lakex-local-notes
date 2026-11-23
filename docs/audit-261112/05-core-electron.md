@@ -359,7 +359,7 @@ src/core/s3v3/engine/deepCleanup.ts  深清（keep 集/保留窗口/dryRun）
 2. `electron/update/updateService.ts`(506) 的下载/校验流程只核了入口安全性（`registerUpdate.ts`）。
 3. 便携包 `electron/portable/zipStore.ts`+`portableExport.ts` 的 **zip 条目名校验**（是否防 `../` 逃逸）未逐行读；建议下轮单独看（属「路径穿越」剩余面）。
 4. `webApiServer.ts` 988 行的 SSE/静态服务细节（只核了安全判定与通道映射）。
-5. 真实 S3 往返、设备端、2 万文档压测：未跑（按铁律不进设备/不跑全量）。
+5. 真实 S3 往返、设备端、大库压测：未跑（按铁律不进设备/不跑全量）。
 6. better-sqlite3 主进程阻塞（E-1）无实测采样。
 7. `electron/s3Maintenance.ts`/`s3Store.ts` 的老路径（v3 转正后是否仍被引用）未逐一核对 —— 只确认了「legacy 回滚入口已移除」（`syncEngineController.ts:77`）。
 

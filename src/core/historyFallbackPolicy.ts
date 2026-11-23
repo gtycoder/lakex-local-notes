@@ -17,7 +17,7 @@
 /** 兜底间隔默认值（分钟）：低频兜底，设置页可改，0 = 关闭。 */
 export const HISTORY_FALLBACK_DEFAULT_MINUTES = 10;
 
-/** 单轮最多处理的文档数（2 万文档量级下把一轮 stat+快照压在有界范围；其余下一轮）。 */
+/** 单轮最多处理的文档数（大库量级下把一轮 stat+快照压在有界范围；其余下一轮）。 */
 export const HISTORY_FALLBACK_MAX_NOTES = 200;
 
 /** P2-A 分片：每处理多少篇让出一次事件循环（避免 200 篇同步 IO 一次性阻塞主进程）。 */

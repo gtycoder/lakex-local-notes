@@ -91,7 +91,7 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 
 - 文档资产附件统一复用既有 IPC `list_note_image_assets(noteId)`（通道 **189** 时已存在）：只回
   `{filename, size, mimeType}`，不算 sha。
-- **不新增「全库附件枚举/分页搜索」IPC**：对话写作先浏览文档（寻址层级）再取该文档附件即可；2 万文档 / 20 万附件
+- **不新增「全库附件枚举/分页搜索」IPC**：对话写作先浏览文档（寻址层级）再取该文档附件即可；大库量级
   量级下全库扫描没有收益，且会把「选附件」变成搜索基础设施。若未来真要做全库搜索，先重新过需求三问，不要顺手扩。
 - 附件仍只收录「文档引用的资产」，不列资源页孤儿/缺失。
 - 通道数最终 = **191**（189 `list_note_image_assets` + 190 `pick_ai_local_files` + 191 `ai_save_pasted_image`）；四面 = registrar / preload / native 封装 / WEB_METHODS。

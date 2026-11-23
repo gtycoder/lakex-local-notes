@@ -137,7 +137,7 @@ export interface MobileDeepCleanupResult extends S3v3DeepCleanupResult {
 /**
  * 包一层 remote，把 deepCleanup 内部 list 回包里的对象体积留下来。
  * 为什么不在 bridge 再 list 一遍：deepCleanup 本身已按 7 个前缀全量 list，重复列一遍等于把
- * 大库（2 万文档/20 万附件）的请求数翻倍；这里只是转发 + 记 Map，零额外网络。
+ * 大库的请求数翻倍；这里只是转发 + 记 Map，零额外网络。
  * deepCleanup 只用 get/list/deleteMany（readPointer/getDeclaration 走 get），可选流式方法无需转发。
  */
 function withObjectSizes(remote: S3v3Remote): {

@@ -47,7 +47,7 @@ class PortablePackagePlugin : Plugin() {
         private const val PORTABLE_EXTENSION = ".zip.lln"
         private const val PORTABLE_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
         /**
-         * 条目上限：10k 文档 + 100k 附件实测 = 110,005 条；261122 按目标量级 2 万文档/20 万附件
+         * 条目上限：10k 文档 + 100k 附件实测 = 110,005 条；261122 按大库量级
          * 放宽到 500k（防炸弹闸，与 core portableFormat 的口径同拍）。zip bomb 仍由
          * 4GiB 包体上限、逐条路径/越界校验、解压总量与落盘空间共同兜底。
          */

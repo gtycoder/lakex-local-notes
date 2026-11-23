@@ -20,7 +20,7 @@ import { QuickNotesStore } from "../quickNotes.js";
  * 「保存并同步」快路径（261110）：
  *  · 最短链：1 pointer 读（+锁内 CAS/写后校验，共 3 次与整轮同协议）+ 1 quick 索引读 +
  *    1 quick 索引写 + 1 pointer 写 + 1 正文 PUT；**不读 lake 索引、不 GET 别的小记正文**；
- *  · 轻量状态：不跑 `loadState`（桌面 2 万文档时那是全库 stat/hash）；
+ *  · 轻量状态：不跑 `loadState`（桌面大库时那是全库 stat/hash）；
  *  · 基线只更新本条（lake 部分原样）；重复点「保存并同步」零上传（内容寻址对象已存在）；
  *  · 高优先域由 wiring 测试锁（不等整轮 / 不进维护队列）。
  */

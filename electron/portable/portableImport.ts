@@ -27,7 +27,7 @@ import {
 
 const MANIFEST_NAME = "portable.json";
 const DESKTOP_PREFIX = "desktop/";
-/** 条目上限（导入端防炸弹闸）：261122 按目标量级 2 万文档/20 万附件放宽到 50 万。 */
+/** 条目上限（导入端防炸弹闸）：261122 放宽到 50 万。 */
 export const PORTABLE_MAX_ENTRIES = 500_000;
 
 export interface PortablePackageInspection {

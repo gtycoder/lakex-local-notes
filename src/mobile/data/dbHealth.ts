@@ -2,7 +2,7 @@
  * 移动端本地库健康判定（261105）：坏库不能再只表现为「启动失败，重试」。
  *
  * 判据来源与桌面同口径（electron/store.ts:733 的 `PRAGMA integrity_check`），移动端用更轻的
- * `PRAGMA quick_check`（只找结构性损坏，不做全页校验；2 万文档量级也在毫秒级）+ 外键检查。
+ * `PRAGMA quick_check`（只找结构性损坏，不做全页校验；大库量级也在毫秒级）+ 外键检查。
  *
  * 两条路径都会产生「坏库」：
  *  - DB 打开就抛（文件损坏/不是数据库/IO 错误）⇒ classifyDbOpenError 归类；

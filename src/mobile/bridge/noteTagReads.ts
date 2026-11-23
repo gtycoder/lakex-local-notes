@@ -17,7 +17,7 @@ import { listNoteTagIdsForNotes } from "../data/noteTagLinksRepository";
 
 /** 单次读批大小：限制单条 SQL 的变量数与桥报文体积（repo 内部还会再按 400 批）。 */
 export const NOTE_TAG_READ_BATCH = 2000;
-/** 单次读取的硬上限（全库量级）：超过才截断并提示（2 万文档 = 目标量级）。 */
+/** 单次读取的硬上限（全库量级）：超过才截断并提示（全库量级）。 */
 export const NOTE_TAG_READ_MAX = 20_000;
 
 export interface NoteTagReadResult {

@@ -42,7 +42,7 @@ import type { MobileDb } from "./sqliteDb.js";
 
 /**
  * 每次批量 stat 的条数。原生 BodyStore.statMany 一次桥往返可带很多路径，但：
- * 2 万文档全量拼一个数组 ⇒ 两端各自 stringify 一份大 JSON；分批同时让「部分失败」可局部重试，
+ * 大库全量拼一个数组 ⇒ 两端各自 stringify 一份大 JSON；分批同时让「部分失败」可局部重试，
  * 且与搜索索引 RECONCILE_BATCH_SIZE 的 20/200 口径一致（本文只 stat，200 已远小于正文批）。
  */
 export const MISSING_SCAN_BATCH = 200;

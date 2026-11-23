@@ -5,7 +5,7 @@ import { ASSET_CACHE_MAX_BYTES, BoundedAssetCache, assets } from "./assetCache";
 const bytes = (size: number, fill = 1): Uint8Array => new Uint8Array(size).fill(fill);
 
 describe("BoundedAssetCache（P8 资产 LRU）", () => {
-  it("默认上界 = 32MiB（目标量级 20 万附件 / 单张上限 25MiB）", () => {
+  it("默认上界 = 32MiB（大库量级 / 单张上限 25MiB）", () => {
     expect(ASSET_CACHE_MAX_BYTES).toBe(32 * 1024 * 1024);
     expect(assets.totalCachedBytes).toBe(0);
   });

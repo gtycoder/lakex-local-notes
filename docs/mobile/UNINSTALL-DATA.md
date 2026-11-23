@@ -89,7 +89,7 @@ Android 官方给「保留数据」只有一个开关（`hasFragileUserData`）�
 保持 `android:allowBackup="false"`，因此也不配置 `android:fullBackupContent` / `android:dataExtractionRules`
 （没有备份就不需要规则；若将来启用，必须在此补规则与隐私说明）。理由三条：
 
-1. **限额不匹配**：Auto Backup 每应用配额约 **25MB**；本仓目标量级是 2 万文档 / 20 万附件，正文与附件常在
+1. **限额不匹配**：Auto Backup 每应用配额约 **25MB**；本仓大库场景，正文与附件常在
    百 MB～GB 级 ⇒ 备份必然被截断或整体失败，表现为「看起来备份了、恢复时缺文件」。
 2. **隐私与语义**：Auto Backup 会把 App 私有数据传到用户的 Google Drive；我们的正文**不做云端加密**
    （与 S3 同一口径），用户对「系统自动备份」没有知情同意，且这条链路完全绕过应用的网络开关
@@ -256,7 +256,7 @@ E: application (line=35)
 
 ## 7. 调研结论对齐（task-34 已填）
 
-1. **不启用 Auto Backup 的结论：确认。** §3 三条理由（25MB 限额、隐私/网络开关语义、恢复不可控）都有官方机制证据支撑；Auto Backup 对 2 万文档/20 万附件的库必然超限，且正文未加密却会被传到用户 Google Drive。
+1. **不启用 Auto Backup 的结论：确认。** §3 三条理由（25MB 限额、隐私/网络开关语义、恢复不可控）都有官方机制证据支撑；Auto Backup 对 大库必然超限，且正文未加密却会被传到用户 Google Drive。
 2. **需要修正/补充的措辞**（不影响已实现结论，但影响准确性）：
    - ①（重要）「从桌面图标直接卸载不会弹」**未证实**。启动器卸载通常也走 `ACTION_DELETE`/`ACTION_UNINSTALL_PACKAGE` 进入系统 PackageInstaller 卸载确认框，理论上有勾选框；目前**只有「设置→应用信息→卸载」有确凿证据**。建议把 `BasicSettingsSections.tsx:72` 与 `docs/HANDOFF.md` §0 的同句改为「走系统卸载确认框（应用信息 / 启动器卸载菜单）一般会出现；静默卸载（adb/pm/商店）不会」，并以真机实测为准。
    - ② 缺「**重装需同一签名/来源**」（semi-uninstall + 签名约束；本仓 CI release keystore 与本地 debug 不同，见 §6.1）——建议设置页补一句。

@@ -192,7 +192,7 @@ export class HistoryLifecycle {
       retryAtMs.set(row.note_id, Number.isFinite(parsed) ? parsed : 0);
     }
 
-    // 3) 首轮游标页 vs 全量（首轮只 stat 一页，避免 2 万文档每 tick 全量 stat）。
+    // 3) 首轮游标页 vs 全量（首轮只 stat 一页，避免大库每 tick 全量 stat）。
     result.bootstrap = this.readFallbackDeviceState(FALLBACK_BOOTSTRAP_DONE_KEY) !== "1";
     const cursorBefore = result.bootstrap ? this.readFallbackDeviceState(FALLBACK_CURSOR_KEY) : null;
     let ids: string[];

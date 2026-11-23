@@ -30,7 +30,7 @@ export interface PublishWorld {
 export function buildPublishIndex(plan: SyncPlan, remote: PublishWorld, over: PublishOverrides): PublishWorld | null {
   if (!plan.publish) return null;
   // 快路径（正常轮）：没有上传失败、没有资产 hash 覆盖 ⇒ 计划索引就是最终索引，
-  // 不做任何逐条遍历/查表（2 万文档时省一次全量扫描）。
+  // 不做任何逐条遍历/查表（大库时省一次全量扫描）。
   if (over.failedUploads.length === 0 && over.assetsHashes.length === 0) {
     // 浅拷贝顶层（不返回调用方对象引用），条目数组直接复用：O(1)，不做逐条处理。
     return { lake: plan.publish.lake, quickNotes: plan.publish.quickNotes };

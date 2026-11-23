@@ -80,7 +80,7 @@
 ### 2.2 覆盖与未覆盖
 
 - **覆盖**：`src/**` 全部目录（含 mobile）、`electron/**`、`android/**/*.kt`、`docs/**`、`guide/**`、`scripts/**`、`public/vendor` 与 `vendor/lakex-doc-react` 的**仓库侧**（不审内核内部）、CI/发布配置。
-- **未覆盖**：真实 S3 往返与 2 万文档压测、设备级实机观感/内存（未启动 App/模拟器）、平板预览几何、`InkPad/BitableEditor/lakeRuntime` 内部逐行正确性、`electron/ai/**` 与 `updateService` 行为细节、便携包 zip 条目级路径校验（列为下轮单看）。
+- **未覆盖**：真实 S3 往返与 大库压测、设备级实机观感/内存（未启动 App/模拟器）、平板预览几何、`InkPad/BitableEditor/lakeRuntime` 内部逐行正确性、`electron/ai/**` 与 `updateService` 行为细节、便携包 zip 条目级路径校验（列为下轮单看）。
 
 ### 2.3 已核实「不是问题」的项（防止重复立项）
 
@@ -592,7 +592,7 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 
 ## 附录 B · 未覆盖清单（下一轮接手）
 
-真实 S3 往返 / 2 万文档压测、设备实机观感与内存（含平板预览几何）、`InkPad/BitableEditor/lakeRuntime` 内部逐行正确性、`electron/ai/**` 与 `updateService.ts` 行为细节、便携包 zip 条目级路径校验、`webApiServer` SSE/静态服务逐段、移动端 302 个测试的有效性抽查、`docs/audit-261027` 各篇内容复核。
+真实 S3 往返 / 大库压测、设备实机观感与内存（含平板预览几何）、`InkPad/BitableEditor/lakeRuntime` 内部逐行正确性、`electron/ai/**` 与 `updateService.ts` 行为细节、便携包 zip 条目级路径校验、`webApiServer` SSE/静态服务逐段、移动端 302 个测试的有效性抽查、`docs/audit-261027` 各篇内容复核。
 
 ## 附录 C · 术语与口径
 

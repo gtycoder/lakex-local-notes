@@ -11,7 +11,7 @@
 - 目录：仓库根（各 clone 位置不同；命令里用 `$(git rev-parse --show-toplevel)` 定位）；两端 = 桌面（macOS 优先）+ Android（Capacitor 8）；共享 `src/core`，UI 层独立（桌面 `ln-*` / 移动 `mb-*`）。
 - 身份：productName `LakexLocalNotes`；npm `lakex-local-notes`；包名 `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`（iOS 预留 `...ios`）；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；移动端另需 JDK 21 + Android SDK。
-- 目标量级 **2 万文档 / 20 万附件**（性能与同步决策按此验证，别用「小库正常」下结论）；索引硬上限 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档的下一步是按篇增量索引，**不分片**。
+- 性能/规模验证按 **5k 文档 / 1 万附件** 测试规模（261123 用户裁决；别用「小库正常」下结论）；索引硬上限 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记。
 - 一级空间（两端同名）：**知识库 · 小记 · 标签 · AI 写作 · 日记**（桌面 ⌘1–5；可关闭的 AI/日记排最后，关掉后 1–3 连续）。
 
 ## 2. 长期方向与文档分工
