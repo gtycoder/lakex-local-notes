@@ -76,6 +76,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     form: s3Form,
     updateForm: updateS3Form,
     testText: s3Test,
+    s3ProbeHint,
     exportState: s3Export,
     transferRef,
     save: saveS3,
@@ -489,6 +490,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       <button className="mb-btn mb-btn--outlined" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
+                    {s3ProbeHint && <div className="mb-set-item__desc" data-testid="s3-probe-hint">{s3ProbeHint}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
                     {/* 「云端首次相遇」（SYNC-PROTOCOL §21）：手动同步命中询问 ⇒ 亮事实 + 五选项 + 取消。 */}
                     {encounterFacts && (

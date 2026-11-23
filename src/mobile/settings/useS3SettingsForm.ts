@@ -6,6 +6,8 @@ import { getNativeErrorMessage, reportNativeActionError } from "../../lib/native
 import { bridge } from "../bridge";
 import { pickLocalFile } from "../ui/pickFile";
 import { showToast } from "../ui/toastBus";
+import { createMobileS3v3Remote } from "../v3/s3v3Remote";
+import { probeCloudTarget, s3SettingsChanged } from "../../core/firstEncounter.js";
 
 /** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
 export const S3_SECRET_MASK = "********";
@@ -110,6 +112,7 @@ export function useS3SettingsForm(open: boolean) {
         setForm((current) => ({ ...current, endpoint: saved.endpoint, region: saved.region }));
       }
       setTestText("已保存");
+      void probeAfterSave(settings, cfg);
       return true;
     } catch (error) {
       setTestText("保存失败：" + (error as Error).message);
@@ -173,12 +176,24 @@ export function useS3SettingsForm(open: boolean) {
     }
   }, [exportState]);
 
+  /** 功能一（SYNC-PROTOCOL §21）：保存/迁移码导入且 endpoint/region/bucket/prefix 变更 ⇒ 限前缀重探三态，只提示不提问。 */
+  const [s3ProbeHint, setS3ProbeHint] = useState<string | null>(null);
+  const probeAfterSave = useCallback(async (prev: { endpoint: string; region: string; bucket: string; prefix: string } | null, next: S3Settings) => {
+    try {
+      const toTarget = (s: { endpoint: string; region: string; bucket: string; prefix: string } | null) => (s ? { endpoint: s.endpoint, region: s.region, bucket: s.bucket, prefix: s.prefix } : null);
+      if (!s3SettingsChanged(toTarget(prev), toTarget(next)!)) return;
+      const probe = await probeCloudTarget(createMobileS3v3Remote(next as Parameters<typeof createMobileS3v3Remote>[0]));
+      setS3ProbeHint(probe.hint?.text ?? "");
+    } catch { setS3ProbeHint(""); }
+  }, []);
+
   /** 导入落地（两份入口共用）：强制虚拟托管（D2），成功后回填表单；返回 Path-style 提示后缀。 */
   const applyImported = useCallback(async (imported: S3Settings): Promise<string> => {
     const pathStyleNote = imported.forcePathStyle
       ? "（该配置使用 Path-style 访问，移动端只支持虚拟主机方式，已按虚拟主机方式保存）"
       : "";
     await bridge.saveS3Settings({ ...imported, forcePathStyle: false });
+    void probeAfterSave(settings, { ...imported, forcePathStyle: false }); // 迁移码导入视同保存变更（SYNC-PROTOCOL §21）
     const saved = await bridge.getS3Settings();
     if (saved) {
       setSettings(saved);
@@ -225,6 +240,7 @@ export function useS3SettingsForm(open: boolean) {
     form,
     updateForm,
     testText,
+    s3ProbeHint,
     exportState,
     transferRef,
     save,
