@@ -53,10 +53,17 @@ export function exportWorkspaceBackup(workspaceRoot: string, targetDir: string, 
   return { backupPath: targetDir, copiedDirs };
 }
 
-/** A2：改名校验后的隔离备份名（时间戳）。 */
+let quarantineSeq = 0;
+
+/**
+ * A2：改名校验后的隔离备份名。261201（P0-2）：同秒二次导入/恢复（双击导入按钮）不得撞名——
+ * 秒级时间戳 + 进程内单调序号 + 随机尾（防多进程同秒）；撞名会让第二次 rename 失败，
+ * 叠加旧回滚缺陷会毁掉工作区。前缀 `workspace-pre-restore-` 保持不变（UI/测试按前缀识别）。
+ */
 export function quarantineDirName(): string {
   const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-  return `workspace-pre-restore-${ts}`;
+  quarantineSeq = (quarantineSeq + 1) % 1_000_000;
+  return `workspace-pre-restore-${ts}-${String(quarantineSeq).padStart(3, "0")}${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /** A2：把当前 workspace 改名隔离 → 建空 workspace → 触发重启。restore 后空库首同步全量拉取。
@@ -201,7 +208,12 @@ export function replaceWorkspaceWith(options: WorkspaceReplaceOptions): MirrorRe
     options.materialize(workspaceRoot);
     markPhase("done");
   } catch (error) {
-    try { fs.rmSync(workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
+    // 261201（P0-1）：只清理「materialize 半成品」。quarantined===false 且原有工作区 ⇒ 换位根本没开始、
+    // workspaceRoot **仍是用户原数据** ⇒ 绝不 rm（旧实现递归清空原工作区 = 数据破坏）；
+    // 无原工作区（全新机器）时 workspaceRoot 全是半成品 ⇒ 清掉回到「无工作区」。
+    if (quarantined || !hadWorkspace) {
+      try { fs.rmSync(workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
+    }
     let rolledBack = true;
     if (quarantined) {
       try { fs.renameSync(quarantinePath, workspaceRoot); } catch { rolledBack = false; }

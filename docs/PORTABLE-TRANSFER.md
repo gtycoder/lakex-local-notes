@@ -100,6 +100,14 @@ mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-j
 
 1. **覆盖式导入**（不合并）：先把当前数据隔离为回滚点（不删除），提交后清理；失败自动回滚。
 2. **事务式**：导入前写 `pending`；中断/崩溃下次启动自动回滚到导入前（移动 = 原生 pending；桌面 = `replaceWorkspaceWith` 换位恢复标记 + 启动侧 `recoverInterruptedWorkspaceSwap`，261201 P2-A 补齐——两侧行为一致）。
+   **换位回滚语义（261201 逐失败点定稿，纸面与实现一致；此前「异常回滚完整」的判定漏了 quarantined=false 失败面）**：
+   - **校验/解包/建 staging 失败**（换位前）：本机数据一动不动，staging 清空，无隔离目录残留；
+   - **换位开始前失败**（隔离 rename 失败，如父目录只读）：`workspaceRoot` **仍是用户原数据 ⇒ 绝不 rm**（P0-1 修复点：旧实现会把原工作区递归清空）；返回 `ok:false` + 可读原因；
+   - **materialize 中途失败**（已隔离）：只清「materialize 半成品」（此时的 workspaceRoot）→ 隔离目录移回；当场回滚成功 ⇒ 清恢复标记，失败 ⇒ **留标记**下次启动再试；
+   - **进程崩溃于 materialize 中途**（标记 phase=begin）：下次启动回滚到换位前（有隔离目录 ⇒ 删半成品移回；无原工作区 ⇒ 删半成品即回到「无工作区」；`hadWorkspace` 但隔离目录不在 = rename 未发生 ⇒ **保持现状**，绝不删原工作区）；
+   - **进程崩溃于 materialize 完成后**（标记 phase=done）：视为换位已完成，保留新工作区、只清标记；
+   - **成功**：隔离目录保留为回滚副本（不删）+ 恢复标记清除。
+   **隔离目录名唯一（P0-2 修复点）**：`workspace-pre-restore-<ISO 秒>-<单调序号><随机尾>`——同秒二次导入/恢复（双击导入按钮）不再撞名，两次都成功、各自隔离、旧隔离不丢；旧实现撞名会让第二次 rename 失败并叠加 P0-1 毁工作区。
 3. 交叉布局导入做**行映射**：全部导入行 `is_dirty=0`；`content_hash` 取包内基线索引（避免首轮全量重传）；
    回收站/日记（`space` 标记）/标签/小记语义两端对齐（判据见 AGENTS §3/§4、`docs/DIARY.md`）。
 4. **同步基线**：包内有云端 baseline ⇒ 转成本端形状写入（桌面 `sync-v3/baseline.json.gz` / 手机 `baseline.json.gz.b64`），

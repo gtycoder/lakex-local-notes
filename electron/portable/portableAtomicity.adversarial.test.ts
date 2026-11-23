@@ -183,11 +183,13 @@ describe("导入原子性：中途失败必须完整回滚", () => {
   // 不变量「换位失败 ⇒ 原工作区完好」当前**不成立** ⇒ 用 it.fails 钉住：缺陷在 = 绿；
   // 修复后本用例翻红 ⇒ 把 it.fails 改回 it 即完成闭环。回滚语义应只清理「materialize 半成品」
   // （quarantined === true 时的 workspaceRoot），quarantined === false 时绝不能碰 workspaceRoot。
-  it.fails("【P0 缺陷复现】换位失败不得毁掉原工作区（修复后翻红 ⇒ 改回普通 it）", () => {
+  it("【P0 缺陷复现】换位失败不得毁掉原工作区（261201 已修：catch 只清 materialize 半成品）", () => {
     const guard = tempDir("lakex-atom-ro-");
     const wsRoot = path.join(guard, "workspace");
     fs.mkdirSync(path.join(wsRoot, "notes"), { recursive: true });
     fs.writeFileSync(path.join(wsRoot, "MARKER.txt"), "original");
+    // 261201 闭环补夹具：断言引用了 notes/old.lake（原夹具漏建 ⇒ 修复后仍红）。
+    fs.writeFileSync(path.join(wsRoot, "notes", "old.lake"), "old-body");
     fs.chmodSync(guard, 0o555);
     try {
       const result = importTo(makePackage("swap-fail-ro"), wsRoot, tempDir("lakex-atom-staging-"));
@@ -231,29 +233,41 @@ describe("导入原子性：成功换位与二次导入", () => {
     expect(all).toContain("notes");
   });
 
-  it("同秒两次导入（隔离名碰撞）：第二次返回可读失败原因（characterization）", () => {
+  it("同秒两次导入：隔离名唯一化后不再撞名，两次都成功、各自隔离（261201 P0-2 修复前=第二次可读失败）", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-23T02:00:00Z"));
     const ws = makeTargetWorkspace();
     const first = importTo(makePackage("same-a"), ws.root, tempDir("lakex-atom-staging-"));
     expect(first.ok).toBe(true);
-    // 同一秒再导一次：隔离目录名 workspace-pre-restore-<ISO 秒> 相同 ⇒ rename ENOTEMPTY
+    // 修复前：隔离目录名 workspace-pre-restore-<ISO 秒> 相同 ⇒ rename ENOTEMPTY、第二次可读失败；
+    // 261201 P0-2 修复后：时间戳 + 单调序号 + 随机尾 ⇒ 同秒两次各自拿到隔离名，都成功。
     const second = importTo(makePackage("same-b"), ws.root, tempDir("lakex-atom-staging-"));
-    expect(second.ok).toBe(false);
-    expect(second.reason).toMatch(/换位失败/);
+    expect(second.ok).toBe(true);
+    const quarantines = fs.readdirSync(path.dirname(ws.root)).filter((n) => n.startsWith("workspace-pre-restore-"));
+    expect(quarantines.length).toBe(2);
   });
 
   // 【P0 缺陷复现 electron/workspaceBackup.ts:135，同上根因】同秒二次导入撞隔离名后，
   // catch 的 recursive rmSync 把「第一次导入刚换进来的工作区」整个删掉（实测目录直接消失）。
-  // 叠加缺陷：隔离目录名是秒级时间戳（quarantineDirName）⇒ 双击导入/恢复必撞名；
-  // 修复建议 = ① catch 只在 quarantined===true 时清 materialize 半成品；② 隔离名加防碰撞后缀。
-  it.fails("【P0 缺陷复现】同秒二次导入不得毁掉工作区（修复后翻红 ⇒ 改回普通 it）", () => {
+  // 261201 修复 = ① catch 只清 materialize 半成品（quarantined 才 rm）；② 隔离名加防碰撞后缀。
+  // ⚠️ 断言随修法语义校准（原断言「same-a2 留在 ws.root」只兼容“撞名失败”语义）：
+  // 修②后同秒二次导入**成功**（覆盖导入）——不变量不变 = 「第一次导入的内容不丢」，
+  // 修后它完整保留在自己的隔离目录（回滚副本），而不是被 rmSync 销毁。
+  it("【P0 缺陷复现】同秒二次导入不得毁掉工作区（261201 已修：二次成功、第一次内容保留于隔离目录）", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-23T02:00:00Z"));
     const ws = makeTargetWorkspace();
     expect(importTo(makePackage("same-a2"), ws.root, tempDir("lakex-atom-staging-")).ok).toBe(true);
-    importTo(makePackage("same-b2"), ws.root, tempDir("lakex-atom-staging-"));
+    const second = importTo(makePackage("same-b2"), ws.root, tempDir("lakex-atom-staging-"));
+    expect(second.ok, "唯一化隔离名后同秒二次导入应成功").toBe(true);
     expect(fs.existsSync(ws.root), "同秒二次导入后工作区目录消失 = 丢数据").toBe(true);
-    expect(fs.readFileSync(path.join(ws.root, "notes", "same-a2.lake"), "utf8"), "第一次导入的内容被误删").toBe("body-of-same-a2");
+    expect(fs.readFileSync(path.join(ws.root, "notes", "same-b2.lake"), "utf8"), "第二次导入内容未生效").toBe("body-of-same-b2");
+    // 第一次导入的内容不丢：完整保留在它自己的隔离目录（覆盖导入 = 移入隔离，不是销毁）。
+    const quarantines = fs.readdirSync(path.dirname(ws.root)).filter((n) => n.startsWith("workspace-pre-restore-"));
+    expect(quarantines.length).toBe(2);
+    const preserved = quarantines
+      .map((n) => { try { return fs.readFileSync(path.join(path.dirname(ws.root), n, "notes", "same-a2.lake"), "utf8"); } catch { return ""; } })
+      .join("|");
+    expect(preserved, "第一次导入的内容被误删").toContain("body-of-same-a2");
   });
 });
