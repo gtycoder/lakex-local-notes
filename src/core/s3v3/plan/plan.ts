@@ -59,6 +59,10 @@ export interface PlanInput {
   state: PlanState;
   /** false = 首拉只搬正文/声明（资产按需），与引擎 deferAssets 同义。 */
   deferAssets?: boolean;
+  /** 首次相遇四选项（SYNC-PROTOCOL §16）：undefined = 既有语义。 */
+  encounter?: import("../../firstEncounter.js").FirstEncounterMode;
+  /** 首次相遇落回收站用时间戳（trashedAt）。 */
+  now?: string;
 }
 
 export interface PlanResult extends SyncPlan {}
@@ -101,6 +105,8 @@ export function planSync(input: PlanInput): SyncPlan {
     restorePending: restore,
     purgeIntents,
     folderPurgeIntents,
+    encounter: input.encounter,
+    trashNow: input.now,
   });
   // P1-6：父环防护产出的结构化告警必须透出（否则只剩静默改写父关系）。
   warnings.push(...(lakePlan.warnings ?? []));
@@ -112,6 +118,8 @@ export function planSync(input: PlanInput): SyncPlan {
     purgeIntents,
     new Set(input.state.quickDeletes ?? []),
     new Set(input.state.purgedQuickIds ?? []),
+    input.encounter,
+    input.now,
   );
 
   // 远端索引变化标记（用于 publish=null 零变更短路）。
@@ -226,10 +234,13 @@ export function planSync(input: PlanInput): SyncPlan {
       // 于是「B 编辑正文」不会回滚「A 的移动/移入回收站」）。
       const baseMeta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
       // task-47：内容应用时**锁取锁合并赢家**——本地锁变化（他端正文更新）时不得用远端旧锁覆盖本地新锁。
-      const meta = lockLocalWins && lockMerge.state
+      let meta = lockLocalWins && lockMerge.state
         ? { ...baseMeta, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt }
         : baseMeta;
+      // 首次相遇「以本地为准」：远端独有 → 本地回收站（在位置/锁合成之后改写，回收站语义最终生效）。
+      if (p.trashOverride) meta = { ...meta, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: meta.parentId ?? null };
       writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta, bodyHash: r.contentHash });
+      if (p.trashOverride) indexChanged = true;
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "lake", id: p.id, title: r.title });
     }
     // 位置远端赢（且本轮没有 apply-remote 覆盖元数据）：把远端位置写回本地（纯位置变化，不动正文）。
@@ -331,6 +342,11 @@ export function planSync(input: PlanInput): SyncPlan {
     if (p.applyRemote && r) {
       writes.push({ kind: "apply-remote", space: "quickNotes", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "quickNotes", id: p.id });
+    }
+    if (p.trashOverride && r) {
+      // 首次相遇「以本地为准」：远端独有小记 → 下载内容 + 落小记回收站 + 发布缺席（绝不物删）。
+      writes.push({ kind: "quick-soft-delete", space: "quickNotes", id: p.id });
+      indexChanged = true;
     }
     if (p.kind === "local-delete" && r && !l) {
       // 本地软删（缺席 = 删除语义）：发布不含该条目的新索引，对端跟随进回收站。
@@ -457,6 +473,7 @@ export function planSync(input: PlanInput): SyncPlan {
         }
         // task-61：**wire 不携带本地回收站容器 id**（`notebook-trash` 不在云端 folders[]，带出去就是悬空父）。
         // trashed 条目的位置只由 trashedAt 表达，原始父在 deletedFromParentId；收件端按 trashedAt 落本地回收站容器。
+        if (p.trashOverride) picked = { ...picked, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: picked.parentId ?? null } as typeof picked;
         if (picked.trashedAt) picked = { ...picked, parentId: null } as typeof picked;
         return {
           ...picked,
@@ -467,7 +484,7 @@ export function planSync(input: PlanInput): SyncPlan {
       })
       .filter((n): n is NonNullable<typeof n> => !!n);
     const quickItems = quickPlan.items
-      .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete")
+      .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete" && !p.trashOverride)
       .map((p) => {
         const baseItem = p.applyRemote && p.remote ? p.remote : p.local ?? p.remote;
         if (!baseItem) return null;

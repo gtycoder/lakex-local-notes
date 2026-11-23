@@ -1,5 +1,6 @@
 import { isDiaryNotebookNode } from "./diary.js";
-import { decideItem } from "./s3v3Decision.js";
+import { decideItem, type ItemAction } from "./s3v3Decision.js";
+import { applyEncounterAction, applyQuickEncounterAction, type EncounterQuickAction, type FirstEncounterMode } from "./firstEncounter.js";
 import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { PlanWarning } from "./s3v3/plan/types.js";
 
@@ -9,6 +10,10 @@ export interface LakeMergeContext {
   restorePending: ReadonlySet<string>;
   purgeIntents: ReadonlySet<string>;
   folderPurgeIntents: ReadonlySet<string>;
+  /** 首次相遇（docs/SYNC-PROTOCOL.md §16）：四选项对缺席/冲突判定的改写层（undefined = 既有语义）。 */
+  encounter?: FirstEncounterMode;
+  /** download-to-trash 落回收站用的时间戳（trashedAt）。 */
+  trashNow?: string;
 }
 
 /** 环检测（对齐旧协议 syncPerf.isRemoteDescendant）：nodeId 在远端树中是否为 ancestorId 的子孙。
@@ -47,6 +52,8 @@ export interface LakeNotePlan {
   uploadLocal: boolean;
   /** 远端胜出时把本地版本写历史快照。 */
   archiveLocal: boolean;
+  /** 首次相遇「以本地为准」：远端独有条目落本地回收站（发布为 trashed、不从本地丢内容）。 */
+  trashOverride?: { trashedAt: string };
   local?: LakeNoteEntry;
   remote?: LakeNoteEntry;
 }
@@ -152,7 +159,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     const b = baseNotes.get(id) ?? null;
     const l = localNotes.get(id) ?? null;
     const r = safeRemote(remoteNotes.get(id) ?? null);
-    const action = decideItem({
+    const rawAction = decideItem({
       basePresent: !!b,
       baseHash: b?.contentHash ?? null,
       localPresent: !!l,
@@ -162,6 +169,10 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       restorePending: ctx.restorePending.has(id),
       localPurgeIntent: ctx.purgeIntents.has(id),
     });
+    // 首次相遇改写层（SYNC-PROTOCOL §16）：undefined = 既有语义；四选项对缺席/冲突判定的映射见 firstEncounter.ts。
+    const action: ItemAction | "download-to-trash" = ctx.encounter
+      ? applyEncounterAction(ctx.encounter, rawAction, { localPresent: !!l, remotePresent: !!r })
+      : rawAction;
     switch (action) {
       case "upload":
         notes.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
@@ -171,6 +182,10 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
         break;
       case "download":
         notes.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
+        break;
+      case "download-to-trash":
+        // 首次相遇「以本地为准」：远端独有 → 本地回收站（内容保留；发布为 trashed 条目）。
+        notes.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, trashOverride: { trashedAt: ctx.trashNow ?? r?.updatedAt ?? "" }, local: l ?? undefined, remote: r ?? undefined });
         break;
       case "local-purge-wins":
         notes.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, archiveLocal: false, local: l ?? undefined, remote: r ?? undefined });
@@ -290,12 +305,14 @@ export interface QuickNotePlan {
   applyRemote: boolean;
   uploadLocal: boolean;
   archiveLocal: boolean;
+  /** 首次相遇「以本地为准」：远端独有小记落小记回收站（下载内容 + 发布缺席，不物删）。 */
+  trashOverride?: { trashedAt: string };
   local?: QuickNoteEntry;
   remote?: QuickNoteEntry;
 }
 export interface QuickNotesMergePlan { items: QuickNotePlan[] }
 
-export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNotesIndex, remote: QuickNotesIndex, restorePending: ReadonlySet<string>, purgeIntents: ReadonlySet<string> = new Set(), localDeletes: ReadonlySet<string> = new Set(), purgedIds: ReadonlySet<string> = new Set()): QuickNotesMergePlan {
+export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNotesIndex, remote: QuickNotesIndex, restorePending: ReadonlySet<string>, purgeIntents: ReadonlySet<string> = new Set(), localDeletes: ReadonlySet<string> = new Set(), purgedIds: ReadonlySet<string> = new Set(), encounter?: FirstEncounterMode, trashNow?: string): QuickNotesMergePlan {
 
   const b = byId(base?.items);
   const l = byId(local.items);
@@ -360,6 +377,25 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
       continue;
     }
     items.push({ id, kind: "remote-wins-history", applyRemote: true, uploadLocal: false, archiveLocal: true, local: ll, remote: rr });
+  }
+  // 首次相遇改写层（SYNC-PROTOCOL §16）：小记版映射（download-to-trash = 下载内容 + 落小记回收站 + 发布缺席）。
+  if (encounter) {
+    for (const it of items) {
+      const mapped = applyQuickEncounterAction(encounter, it.kind as EncounterQuickAction, { localPresent: !!it.local, remotePresent: !!it.remote });
+      if (mapped === it.kind) continue;
+      if (mapped === "download-to-trash") {
+        it.kind = "download";
+        it.applyRemote = true;
+        it.uploadLocal = false;
+        it.archiveLocal = false;
+        it.trashOverride = { trashedAt: trashNow ?? it.remote?.updatedAt ?? "" };
+        continue;
+      }
+      it.kind = mapped as QuickNoteActionKind;
+      it.applyRemote = mapped === "download" || mapped === "remote-wins-history";
+      it.uploadLocal = mapped === "upload";
+      it.archiveLocal = mapped === "remote-wins-history";
+    }
   }
   return { items };
 }
