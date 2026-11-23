@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { USHEET_CANONICAL_FONT_FAMILY, emptyUsheetBody, emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, usheetToSearchText } from "./usheetDoc.js";
+import { USHEET_CANONICAL_FONT_FAMILY, emptyUsheetBody, emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetAutoHeightOnlyDiff, usheetToBody, usheetToSearchText } from "./usheetDoc.js";
 
 /** 单元格图：cellData[r][c].p.drawings[d] 带 source。 */
 function cellImageWorkbook() {
@@ -169,5 +169,31 @@ describe("正文规范化（打开表格不再误标脏 / 触发同步；CORE-04
     normalizeUsheetWorkbook(a);
     normalizeUsheetWorkbook(b);
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+});
+
+describe("usheetAutoHeightOnlyDiff（ah 缓存差异不算内容改动，261123）", () => {
+  const body = (rows: Record<string, unknown>, cells: Record<string, unknown> = {}) =>
+    usheetToBody({ id: "wb", sheets: { s1: { id: "s1", rowCount: 3, cellData: cells as never, rowData: rows } } });
+
+  it("只差 ah（新增 / 改值 / 删除）= 只差派生缓存 ⇒ true", () => {
+    expect(usheetAutoHeightOnlyDiff(body({ "0": { ia: 1 } }), body({ "0": { ia: 1, ah: 48 } }))).toBe(true);
+    expect(usheetAutoHeightOnlyDiff(body({ "0": { ia: 1, ah: 48 } }), body({ "0": { ia: 1, ah: 66 } }))).toBe(true);
+    expect(usheetAutoHeightOnlyDiff(body({ "0": { ia: 1, ah: 48 } }), body({ "0": { ia: 1 } }))).toBe(true);
+  });
+
+  it("内核重算新建的行条目 {ah} 与缺省等价（剥空条目）⇒ true", () => {
+    expect(usheetAutoHeightOnlyDiff(body({}), body({ "2": { ah: 40 } }))).toBe(true);
+  });
+
+  it("内容 / 手动高度的差异是真实差异 ⇒ false", () => {
+    expect(usheetAutoHeightOnlyDiff(body({ "0": { ia: 1 } }), body({ "0": { ia: 1 } }, { "0": { "0": { v: "x" } } }))).toBe(false);
+    expect(usheetAutoHeightOnlyDiff(body({ "0": { ia: 1, ah: 48 } }), body({ "0": { h: 24, ah: 48 } }))).toBe(false);
+  });
+
+  it("解析失败保守 false；空正文 = 空表对空表 true", () => {
+    expect(usheetAutoHeightOnlyDiff("{bad", body({}))).toBe(false);
+    expect(usheetAutoHeightOnlyDiff("", "")).toBe(true);
+    expect(usheetAutoHeightOnlyDiff("", emptyUsheetBody())).toBe(true);
   });
 });

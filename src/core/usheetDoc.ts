@@ -101,6 +101,8 @@ export const USHEET_CANONICAL_FONT_FAMILY = '"MiSans", -apple-system, BlinkMacSy
  * 5) 默认自动行高（用户 261121）：每张工作表的 `rowData[*].ia = 1`（未设显式 `h` 的行），
  *    上限 USHEET_AUTO_ROW_HEIGHT_MAX_ROWS ⇒ 换行内容把行高顶起来。与 defaultStyle 同路径，
  *    **不额外发命令、不标脏**（否则「打开 = 只读」会被打破）。
+ *    `rowData[*].ah`（自动行高缓存）**随正文持久化、不清除**（261123）：它是 ia 行的渲染高度，
+ *    过期缓存由宿主打开局的行高自愈修正（见 UniverSheetEditor 打开期自愈）。
  * 幂等；就地修改传入 workbook（编辑器在序列化前调用）。
  */
 export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
@@ -149,13 +151,50 @@ function applyAutoRowHeight(sheet: Record<string, unknown>): void {
     // 用户手动设过高度的行保持手动（Excel 同款：手动高度压过自动），只给没有 h 的行打自动标记。
     if (entry.h === undefined) {
       entry.ia = USHEET_ROW_IS_AUTO_HEIGHT;
-      // 261122 真机现场：旧版本/桌面视口算出的**自动高度缓存 ah** 会压过自动行高 ——
-      // 只打 ia 不清 ah，内核直接用缓存值渲染，换行文字仍被挤在一行的高度里。
-      // ah 是派生值，删掉让内核按当前列宽/字号重算（显式 h 的行不动）。
-      if (entry.ah !== undefined) delete entry.ah;
+      // `ah` = 自动行高的**渲染缓存**（内核 getRowHeight：ia 行的渲染高度就是 `ah`，缺 `ah` 掉回
+      // `h`/默认 24）。261122 曾在这里删 `ah`「让内核重算」——实测内核只在编辑/样式/列宽等命令里
+      // 重算、**打开时从不重算** ⇒ 重开即掉回 24px（261123 用户复现「关标签重开行高乱」）。
+      // 现在 **保留并持久化 `ah`**；过期缓存（旧版本/别的视口算的）由宿主打开期行高自愈修正
+      //（MarkDirtyRowAutoHeightOperation 重算 + doFlush 无声收编，见 UniverSheetEditor），
+      // 显式 `h` 的行不动（手动高度压过自动的语义不变）。
     }
   }
   if (total > 0) sheet.rowData = rowData;
+}
+
+/** 剥掉自动行高缓存（`ah`）的 workbook（比较专用；剥空的行条目与缺省等价，一并删）。 */
+function stripAutoHeightCache(workbook: UsheetWorkbook): void {
+  const sheets = workbook.sheets;
+  if (!isRecord(sheets)) return;
+  for (const sheet of Object.values(sheets)) {
+    if (!isRecord(sheet) || !isRecord(sheet.rowData)) continue;
+    for (const [key, entry] of Object.entries(sheet.rowData)) {
+      if (!isRecord(entry)) continue;
+      if (entry.ah !== undefined) delete entry.ah;
+      if (Object.keys(entry).length === 0) delete sheet.rowData[key];
+    }
+  }
+}
+
+/**
+ * 两份正文是否**只差自动行高缓存（`ah`）**（261123）。
+ * `ah` 是派生值（内容 / 列宽 / 字号的函数，内核只在编辑等命令里重算）：打开期行高自愈与
+ * 内核重算都会写回它，它自身的变化**不是内容编辑** ⇒ 「无声收编」（不标脏/不写盘）与
+ * capture 的「改回原样」判据共用本口径（CORE-03 在 usheet 上的放宽分支）。
+ * 两侧先过 normalizeUsheetWorkbook（与写盘/比较同一规范形式）再剥 `ah` 比较；
+ * 解析失败一律 false（保守：当作真实差异，绝不借此写回坏正文）。空正文 = 空表。
+ */
+export function usheetAutoHeightOnlyDiff(prevBody: string, nextBody: string): boolean {
+  const prev = canonicalBodyStripped(prevBody);
+  return prev !== null && prev === canonicalBodyStripped(nextBody);
+}
+
+function canonicalBodyStripped(raw: string): string | null {
+  const workbook = raw.trim().length === 0 ? emptyUsheetWorkbook() : parseUsheetBody(raw)?.workbook;
+  if (!workbook) return null;
+  normalizeUsheetWorkbook(workbook);
+  stripAutoHeightCache(workbook);
+  return usheetToBody(workbook);
 }
 
 /** 新建空表的 rowData：每行都标自动行高（与 normalize 输出同形：`row -> { ia }`，键序一致）。 */

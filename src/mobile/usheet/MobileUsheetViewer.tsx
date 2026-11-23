@@ -54,6 +54,7 @@ import { SHEET_PANEL_MIN_HEIGHT, SHEET_ZOOM_LEVELS, sheetPanelNeedsFade, sheetSe
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
 import { setUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
+import { scheduleUsheetAutoHeightHeal } from "../../features/usheet/usheetAutoHeightHeal";
 import { UniverSheetsNotePlugin } from "@univerjs/sheets-note";
 import { createMobileSortFilterPlugins } from "./mobileSortFilter";
 import "./usheet-chrome.css";
@@ -658,6 +659,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       const last = usheetToBody(baseline);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
+      // 261123 打开期行高自愈（与桌面同款，共用 helper）：缺 ah / 缓存过期的行重开会掉回 24px；
+      // 重算结果是派生缓存，capture 的 docBaselineSettled 放宽分支吸收 ⇒ 不标脏/不写盘。
+      disposables.push({ dispose: scheduleUsheetAutoHeightHeal((id, params, options) => univerAPI.executeCommand(id, params as never, options as never), workbook) });
       // CORE-03 输入判据（与桌面同款）：网格内单击只是选格，不算「可能改内容」；
       // 键盘 / 粘贴 / 剪切 / 拖放 / 工具栏·公式栏·dock 点击才算。
       const markContentInput = () => { contentInputRef.current = true; };

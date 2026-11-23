@@ -50,4 +50,21 @@ describe("usheet 打开只读（结构护栏）", () => {
     expect(SOURCE).not.toContain("lakeFontFamily");
     expect(SOURCE).not.toContain("applyFontPolicy");
   });
+
+  it("自动行高缓存（ah）差异走「无声收编」，不得当编辑（261123）", () => {
+    // doFlush：只差 ah 缓存 ⇒ 只收进基线（state.last / lastBodyRef），随后 return，不标脏。
+    expect(SOURCE).toMatch(/usheetAutoHeightOnlyDiff\(state\.last, body\)[\s\S]{0,240}return;/);
+    const fold = SOURCE.indexOf("usheetAutoHeightOnlyDiff(state.last, body)");
+    const dirty = SOURCE.indexOf("changedSinceOpenRef.current = true");
+    expect(fold).toBeGreaterThan(-1);
+    expect(dirty).toBeGreaterThan(fold); // 收编分支必须挡在标脏之前
+  });
+
+  it("打开期行高自愈接线（261123）：共用 helper + 与 normalize 同限的行数 + onlyLocal", () => {
+    expect(SOURCE).toContain("scheduleUsheetAutoHeightHeal");
+    const heal = readFileSync(new URL("./usheetAutoHeightHeal.ts", import.meta.url), "utf8");
+    expect(heal).toContain("sheet.operation.mark-dirty-row-auto-height");
+    expect(heal).toContain("USHEET_AUTO_ROW_HEIGHT_MAX_ROWS");
+    expect(heal).toContain("onlyLocal");
+  });
 });

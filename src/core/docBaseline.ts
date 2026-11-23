@@ -22,6 +22,7 @@ import {
   emptyUsheetWorkbook,
   normalizeUsheetWorkbook,
   parseUsheetBody,
+  usheetAutoHeightOnlyDiff,
   usheetToBody,
   type UsheetWorkbook,
 } from "./usheetDoc.js";
@@ -85,5 +86,11 @@ export function docBaselineSettled(
   diskRaw: string | null | undefined,
   currentRaw: string | null | undefined,
 ): boolean {
+  // 261123：usheet 的 `ah`（自动行高缓存）是派生值（内容 / 列宽 / 字号的函数），打开期行高自愈
+  // 与内核重算都会写回它 ⇒ 本判据在 usheet 上放宽为「忽略 ah 缓存后同内容」（仍先过 normalize
+  // 同一规范形式；解析失败照旧视为不等价）。其余 kind 不变。
+  if (kind === "usheet") {
+    return usheetAutoHeightOnlyDiff(diskRaw ?? "", currentRaw ?? "");
+  }
   return sameDocAsDisk(kind, diskRaw, currentRaw);
 }

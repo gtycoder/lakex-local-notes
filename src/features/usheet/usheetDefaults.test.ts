@@ -126,7 +126,7 @@ describe("表格默认居中 / 自动换行 / 自动行高（用户 261121）", 
   });
 
 
-  it("261122 真机：旧版遗留的自动高度缓存 ah 必须清掉（只打 ia 不清 ah ⇒ 换行文字仍被压扁）", async () => {
+  it("261123：自动高度缓存 ah 必须保留并随正文持久化（261122 曾删 ah——内核打开时不重算 ⇒ 重开行高乱）", async () => {
     const core = await import("../../core/usheetDoc");
     const wb = {
       sheets: {
@@ -140,9 +140,9 @@ describe("表格默认居中 / 自动换行 / 自动行高（用户 261121）", 
     } as never;
     core.normalizeUsheetWorkbook(wb);
     const sheet = (wb as { sheets: Record<string, { rowData: Record<string, Record<string, unknown>> }> }).sheets.s1;
-    // 无显式 h：打 ia、删陈旧 ah（让内核按当前列宽重算）
-    expect(sheet.rowData["0"]).toEqual({ ia: 1 });
-    expect(sheet.rowData["1"]).toEqual({ ia: 1 });
+    // 无显式 h：打 ia、**保留 ah**（ia 行的渲染高度就是 ah；过期缓存由打开期行高自愈修正）
+    expect(sheet.rowData["0"]).toEqual({ ah: 34, ia: 1 });
+    expect(sheet.rowData["1"]).toEqual({ ah: 50, ia: 1 });
     // 手动高度：原样保留（h + ah 都不动，也不打 ia）
     expect(sheet.rowData["2"]).toEqual({ h: 40, ah: 40 });
   });

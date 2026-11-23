@@ -22,7 +22,8 @@ import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
 import { createUsheetUniver, type UsheetUniverCore } from "./usheetUniverFactory";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
-import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetAutoHeightOnlyDiff, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { scheduleUsheetAutoHeightHeal } from "./usheetAutoHeightHeal.js";
 import { checkDocBody } from "../../core/docBodySafety.js";
 import { docBaselineSettled } from "../../core/docBaseline.js";
 import { rlog } from "../../lib/log";
@@ -273,6 +274,14 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
         }
       }
       if (body !== state.last) {
+        // 261123「无声收编」：自动行高缓存（`ah`）的差异不是内容编辑 —— 打开期行高自愈 / 内核重算
+        // 都会把算出的高度写回 rowData.ah（派生值，CORE-03 同一口径）⇒ 只收进基线，**不标脏、
+        // 不触发保存与同步**（「打开 = 只读」红线）。真实内容变更时，最新 `ah` 随 capture 一起持久化。
+        if (usheetAutoHeightOnlyDiff(state.last, body)) {
+          state.last = body;
+          lastBodyRef.current = body;
+          return;
+        }
         changedSinceOpenRef.current = true;
         state.last = body;
         lastBodyRef.current = body;
@@ -351,6 +360,11 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
           hostRef.current?.removeEventListener("pointerdown", onHostPointerDown, true);
         },
       });
+
+      // 261123 打开期行高自愈（视图层；「打开 = 只读」不受影响）：正文里缺 `ah` / 缓存过期的行，
+      // 重开渲染会掉回默认 24px（内核打开时从不重算）。机制、幂等与无声收编口径见
+      // features/usheet/usheetAutoHeightHeal.ts（桌面/移动共用）。
+      disposables.push({ dispose: scheduleUsheetAutoHeightHeal((id, params, options) => univerAPI.executeCommand(id, params as never, options as never), canonical) });
 
       // 双击单元格只打开编辑器时，Univer 1.0.3 默认会全选单元格内容；Excel 语义是光标落在
       // 双击位置。宿主只负责把原始点击点记下来，等编辑器和文档渲染单元就绪后调用
@@ -651,7 +665,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
         if (!state) return null;
         if (!changedSinceOpenRef.current) return persistedBodyRef.current;
         // 改过又改回原样（撤销 / 改回原值）：core 单一判据（CORE-03）规范化后与磁盘原文等价
-        // ⇒ 返回磁盘原文，避免为规范化差异写盘。
+        // ⇒ 返回磁盘原文，避免为规范化差异写盘（261123：`ah` 缓存差异已在该判据内放宽）。
         if (docBaselineSettled("usheet", persistedBodyRef.current, state.last)) {
           return persistedBodyRef.current;
         }

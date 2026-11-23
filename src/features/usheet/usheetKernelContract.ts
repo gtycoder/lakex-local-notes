@@ -126,6 +126,14 @@ export const UNIVER_FEATURE_NAMES = [
    *  行高随后按换行内容自动撑开；`rowData[row].h` 是手动高度（我们不改已有 h 的行）。
    *  失效表现 = 长文本只换行、行高不变（或被裁掉）。 */
   "SetWorksheetRowIsAutoHeightMutation",
+  /** 自动行高**渲染缓存**（261123）：内核 getRowHeight 对 ia 行取 `rowData[row].ah`（缺 ah 掉回 h/默认 24）；
+   *  `ah` 由 SetWorksheetRowAutoHeightMutation 写回（AutoHeightService 重算结果），随正文持久化。
+   *  失效表现 = 重开表格换行文字的行掉回 24px（行高乱）。 */
+  "SetWorksheetRowAutoHeightMutation",
+  /** 打开期行高自愈的触发点（261123，`sheet.operation.mark-dirty-row-auto-height`）：内核**打开时不重算**，
+   *  打开后发该 Operation 让 AutoHeightService 按当前列宽/字号重算（不推 undo 栈）。
+   *  失效表现 = 旧正文（缺 ah / 缓存过期）重开行高仍乱。 */
+  "MarkDirtyRowAutoHeightOperation",
 ] as const;
 
 /** 「开始」页签里我们**不用**的内核工具项（走公开 MenuManager 的 updateMenuConfig({hidden:true}) 隐藏）。
