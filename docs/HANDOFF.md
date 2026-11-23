@@ -7,6 +7,11 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261123 · 二次批：「云端首次相遇」特性 + 第三方粘贴专案（未发版）**：
+  - **首次相遇（9 提交 2bde53e3…2da748ac）**：配置探测三态（保存且 endpoint/region/bucket/prefix 变更即重探；迁移码导入视同变更）+ 首次同步询问（事实行 N/M/K + 五选项：智能合并/只增不删（仅一次）/以本地为准/以云端为准/取消；被覆盖方一律进回收站**可恢复**）；ask-once 与换目标重问 = targetKey 盖章派生态（零持久化）；「手动弹、后台挂」由结构保证（firstEncounterAsk 只被手动路径写入）；契约 `SYNC-PROTOCOL` §21/§21.4 + `PORTABLE-TRANSFER` §3.2；真桶 E2E **7/7**（四选项/ask-once/换目标/探测三态）；通道 `s3_probe_target` 三方登记（195→196）。**途中抓修 P1**：`saveQuickNotes` 清扫把 quick-soft-delete 执行成**物理删**（踩「绝不物删」红线）⇒ quickDeletes 软删分支封死物删路径（`45ddf98b`，真桶实证小记进回收站可恢复；`45ddf98b` 同时混入了粘贴专案的 chrome.css 修复——收口时 `git add -u` 纪律失误，内容无损，登记备查）。
+  - **粘贴专案（2947dd4b）**：第三方 21K 粘贴「打崩」经五项独立实证**不成立**（无 render-process-gone/unresponsive/未捕获异常日志、Crashpad 空、事故正文结构完整收尾；21K→6.4K 为转换压缩比，「只落局部」是虚拟渲染误读；16:26:56 的 boot 重放 = 用户关窗后 Dock 重开，非崩溃恢复）。四种粘贴形状（内核/Word mso/转义卡片/ne-clipboard）61–75ms 安全落盘；护栏 5 例 + 脱敏 fixture。**布局塌陷 = 类名撞车**：chrome.css「已收起」分区规则 `.sidebar-collapsed` 与壳层收起态类同名 ⇒ 整个 app-shell 被 `max-height:33.333%` 压成 1/3 高（用户「收起悬浮触发/固定正常」精确对应）——选择器收窄修复 + 防回退护栏，三态几何复原（collapsed 273→820）。
+  - 门禁（17:30 收口）：全量 vitest **0 failed**；tsc 双 0；ui-metrics 0；check:bundle+arch PASS（desktop 581,218/592,000 余 10.8KB）；git diff --check 0。
+
 - **261123 · 六线并发批（Windows 顶栏 / usheet 行高 / 移动 dock 三修 / 迁移矩阵+bootstrap 基线 / 规模口径 / 设置文案；未发版，v1.5.6 之后）**：
   - **Windows 融合标题栏**（`ae0c0399`）：win32 去掉系统标题栏+默认菜单栏两层（顶栏即标题栏：原生窗口按钮 overlay、拖拽/双击最大化、菜单只藏视觉保快捷键）；窗口选项抽 `electron/mainWindowOptions.ts` 纯函数（themes glue 测试钉配色）；附件预览右侧让位连带修。**真机 Windows 待验收**（本机出的是 win-arm64 包；用户机器 arch 待确认）。
   - **usheet 自动行高持久化**（`6d43c71b`）：根因 = 内核 RowManager 对 ia=1 行渲染高度取 `rowData.ah` 缓存、打开从不重算（ba9c2434「删 ah」删掉了渲染高度载体）⇒ 修 = ah 随正文持久化 + 打开期视图层自愈（`usheetAutoHeightHeal`，不标脏）+ `usheetAutoHeightOnlyDiff`（ah-only 不算内容改动，「打开=只读」保持）；移动同款接线。
@@ -676,6 +681,12 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261123 · 二次批基线（云端首次相遇 + 粘贴专案；未发版）**
+
+- 本批 9 提交（2bde53e3/46293426/e8a403e2/3ae4b2f1/4ed6fa21/d66e7289/45ddf98b/2da748ac/2947dd4b）；含六线批累计 24 提交（61967f18..HEAD）。
+- 门禁：全量 vitest 0 failed；tsc 双 0；ui-metrics 0；check:bundle+arch PASS（desktop 581,218/592,000、mobile 首屏过、entry 44,104/46,000）；git diff --check 0。真桶首次相遇 E2E 7/7（S3V3_IT 门控文件 firstEncounter.s3.integration）。
+- 移动端 UI 改了 SettingsDrawer/useS3SettingsForm（首次相遇弹窗+探测）⇒ 待装包；设备弹窗截图留验收。
+
 **261123 · 六线并发批基线（未发版；v1.5.6 之后）**
 
 - 14 提交（61967f18..HEAD）：ae0c0399 Windows 顶栏 / 6d43c71b usheet 行高 / bec9bd47 bootstrap 核心 / b1d0e30d 触点登记 / f9011fcd dock 两 bug / 906119f7 整库目录+真桶集成 / 22863157 stageFromPath / 9525272b 规模口径 / dd0c7847 P1-B / 600350cb 审计修复批 / 0b35dfc1 规模对抗测试 / 0e192161 两 P0 闭环 / c62e11b5 设置文案 / 40dc636a S3 表单水合。
@@ -863,6 +874,13 @@
 ## 3. 待办（唯一待办清单）
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+
+**261123 二次批待办**
+
+- **设备弹窗截图**（lake_sync）：手动同步弹「首次相遇」询问（data-testid=first-encounter-ask，事实行+五选项）+ 后台自动同步不弹只挂状态；随装包窗口一起做（移动端 UI 已改未装包）。
+- **「远端独有小记落小记回收站」物化变体**：state 世界物化下载条目后恢复原定语义（SYNC-PROTOCOL §21.4 已记）。
+- paste 遥测小缺口：oversizeTableShape 耗时并入 paste.html 打点；原始剪贴板输入若再现（pbpaste 快照留证）可 100% 定罪粘贴事故输入。
+- **45ddf98b 提交内容混装登记**：quick-soft-delete 修复与粘贴专案 chrome.css 选择器修复同提交（lead 收口 `git add -u` 纪律失误；内容无损、语义均已验证，仅记录）。
 
 **261123 六线并发批待办**
 
