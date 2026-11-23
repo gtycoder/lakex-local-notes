@@ -31,7 +31,7 @@ import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readSyncErrorInfo } from "./s3v3/syncErrorInfo.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { installNativeSha256 } from "./sha256Native.js";
-import { prepareCloudRestore, readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
+import { prepareCloudRestore, readAndRemoveS3RestoreSeed, recoverInterruptedWorkspaceSwap } from "./workspaceBackup.js";
 import {
   backupDatabaseForRecovery,
   decideStartupCheckDepth,
@@ -642,6 +642,12 @@ if (!app.requestSingleInstanceLock()) {
       writeSafeModeState(userDataDir, safeModeDecision.state);
       log.app.warn("[safe-mode] 本次启动进入安全模式（不自动同步/不恢复标签页/不预热内核）"
         + formatLogFields({ reason: safeModeDecision.reason, occurrences: crashMarker?.occurrences ?? 0 }));
+    }
+    // 261201（P2-A）：中断的工作区换位（便携包导入/整库恢复在 materialize 中途崩溃）先回滚到换位前，
+    // 再做启动预检（对齐移动侧「中断自动回滚」契约 §3 第 2 条；幂等，无标记零开销）。
+    const swapRecovery = recoverInterruptedWorkspaceSwap(workspaceRoot());
+    if (swapRecovery.recovered) {
+      log.app.warn("[workspace] 检测到中断的工作区换位，已恢复" + formatLogFields({ restored: swapRecovery.restored }));
     }
     // 261105 P2-B：条件深检（只读打开）。上次正常退出且无 crash-marker ⇒ 轻量检查（只读打开 + 关键表）；
     // 上次脏退出/有崩溃标记 ⇒ 才跑全库 quick_check + foreign_key_check。

@@ -196,10 +196,23 @@ describe("便携包导入编排", () => {
     expect(state.calls).toContain("ensure-db");
   });
 
-  it("基线不合法：在动数据前失败（不 begin、不回滚）", async () => {
-    state.baselineJson = "{}";
-    await expect(runPortableImport(staged())).rejects.toThrow(/基线/);
-    expect(state.calls).not.toContain("begin");
+  it("261201 P1-A：坏云端基线不阻断迁移——降级合成合并底稿 + 明示警告（不走拉全轮）", async () => {
+    state.baselineJson = "{}"; // manifest 带 baseline 但内容不可解析
+    const result = await runPortableImport(staged());
+    expect(result.baselineSource).toBe("bootstrap"); // P2-C：按实际写入上报，不再报 true
+    expect(result.hasCloudBaseline).toBe(false);
+    expect(result.warnings.join()).toContain("合成合并底稿");
+    expect(state.savedBaseline).toMatchObject({ bootstrap: true, epoch: "" });
+    expect(state.calls).toContain("commit");
+  });
+
+  it("261201 P1-A：baseline.json 缺失/不可读同样降级合成（不抛错、不落『有信封无基线』）", async () => {
+    state.baselineJson = "";
+    const result = await runPortableImport(staged());
+    expect(result.baselineSource).toBe("bootstrap");
+    expect(result.warnings.join()).toContain("基线缺失");
+    expect(state.savedBaseline).toMatchObject({ bootstrap: true });
+    expect(state.calls).toContain("commit");
   });
 });
 
@@ -233,6 +246,20 @@ describe("手机整机快照恢复（261117 D 项）", () => {
     const saved = state.savedBaseline as { lake: { notes: Array<{ id: string; contentHash: string }> } };
     expect(saved.lake.notes).toMatchObject([{ id: "n1", contentHash: "a".repeat(64) }]);
     expect(state.calls).toContain("restore");
+  });
+
+  it("261201 P1-A：快照声称云端基线但实际缺失/损坏 ⇒ 同样合成合并底稿 + 警告", async () => {
+    state.calls = [];
+    state.restoreOk = true;
+    state.restoreHasBaseline = false; // 包内没有可用基线文件
+    state.savedBaseline = null;
+    const claimed = snapshotStaged();
+    (claimed.manifest as unknown as { baseline: unknown }).baseline = { epoch: "e", generation: 1, lakeCommit: "l", quickNotesCommit: "q" };
+    const result = await runPortableImport(claimed as never);
+    expect(result.baselineSource).toBe("bootstrap");
+    expect(result.hasCloudBaseline).toBe(false);
+    expect(result.warnings.join()).toContain("合成合并底稿");
+    expect(state.savedBaseline).toMatchObject({ bootstrap: true });
   });
 
   it("原生恢复失败：报错并尽量回滚/重开数据库", async () => {

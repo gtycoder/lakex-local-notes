@@ -154,14 +154,20 @@ describe("portableImport（桌面导入大统一迁移包 v2）", () => {
     expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json"))).toBe(false);
   });
 
-  it("坏基线不阻断迁移：按无基线导入并在消息里明说", async () => {
+  it("261201 P1-A：坏基线不阻断迁移——降级合成合并底稿 + 明示警告（不落拉全轮）", async () => {
     const tmp = tempDir("lakex-pkg-ws-");
     const zipPath = await makeDesktopPackage(path.join(tmp, "out"), { corruptBaseline: true });
     const ws = makeWorkspace(tmp);
     const result = importPortablePackageOnDesktop({ zipPath, workspaceRoot: ws, stagingParent: path.join(tmp, "portable-import") });
     expect(result.ok, "导入失败原因：" + result.reason).toBe(true);
-    expect(fs.existsSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toBe(false);
-    expect(result.message).toContain("无基线");
+    // 坏基线不再「按无基线导入」（那会让首同步落拉全轮误删）：合成合并底稿写进工作区。
+    const gz = path.join(ws, "sync-v3", "baseline.json.gz");
+    expect(fs.existsSync(gz)).toBe(true);
+    const parsed = JSON.parse(gunzipSync(fs.readFileSync(gz)).toString("utf8")) as { bootstrap?: boolean; epoch: string };
+    expect(parsed.bootstrap).toBe(true);
+    expect(parsed.epoch).toBe("");
+    expect(result.message).toContain("合成合并底稿");
+    expect(result.message).not.toContain("先拉取云端再增量");
   });
 
   it("包损坏（CRC 不符）⇒ 失败且本机数据未动；staging 清理", async () => {

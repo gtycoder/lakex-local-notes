@@ -186,10 +186,13 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
                 {result.warnings.length > 0 && (
                   <div className="mb-set-item__desc" role="alert">{result.warnings.join("；")}</div>
                 )}
+                {/* 261201（P2-C）：按**实际生效的基线来源**给文案（坏基线回退合成后不再误报「纯离线包/云端为准拉取」）。 */}
                 <div className="mb-set-item__desc">
-                  {result.hasCloudBaseline
-                    ? "本机已标记为「与云端一致」。如需增量同步，请到「云端与同步」配置 S3（只需拉取后续变更）。"
-                    : "这是纯离线包：本机未写入云端基线。之后配置 S3 时，空桶会按首次上传同步；若桶里已有数据则会先以云端为准拉取。"}
+                  {result.baselineSource === "cloud"
+                    ? "本机已接管云端同步身份（包内云端基线）。如需增量同步，请到「云端与同步」配置 S3（只需拉取后续变更）。"
+                    : result.baselineSource === "bootstrap"
+                      ? "本机已按本地内容合成「合并底稿」：配好 S3 后按三方合并增量同步——云端改动下载、本机新增上传、删除按墓碑语义传播；不做云端优先收敛。"
+                      : "未写入同步基线：首同步将以云端为准收敛（本机新增小记存在被丢弃风险），建议配好 S3 后先「从云端恢复」或重新导入。"}
                 </div>
               </>
             )}

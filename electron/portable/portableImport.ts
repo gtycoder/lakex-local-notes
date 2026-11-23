@@ -108,32 +108,35 @@ export function importDesktopWorkspacePackage(options: PortableImportOptions, in
     const stagingMainDb = path.join(stagingDesktop, "metadata.sqlite3");
     if (!fs.existsSync(stagingMainDb)) throw new Error("包内缺少 desktop/metadata.sqlite3");
 
-    // 2) baseline 转换：有云端基线 ⇒ JSON 解开后重新 gz 为 baseline.json.gz；
-    //    纯离线包（manifest.baseline=null）的 baseline.json 只是内容哈希清单 ⇒ 不写桌面基线。
+    // 2) baseline 转换（261201 P1-A 统一口径，PORTABLE-TRANSFER §3.1）：有云端基线 ⇒ JSON 解开后
+    //    重新 gz 为 baseline.json.gz；纯离线包 = 内容哈希清单 ⇒ 合成合并底稿；**坏/缺基线不再
+    //    「按无基线导入」**（首同步会落拉全轮：小记物删/文档假删除）⇒ 同样合成合并底稿 + 明示警告。
     const baselineJson = path.join(stagingDesktop, "sync-v3", "baseline.json");
     let baselineWarning = "";
+    let baselineWritten = false;
     if (checked.manifest.baseline) {
       try {
         const raw = fs.readFileSync(baselineJson);
-        JSON.parse(raw.toString("utf8")); // 自证可解析：坏基线按「无基线」处理，不把坏字节写进工作区
+        JSON.parse(raw.toString("utf8")); // 自证可解析：坏基线不把坏字节写进工作区
         fs.mkdirSync(path.dirname(baselineJson), { recursive: true });
         fs.writeFileSync(baselineJson.replace(/\.json$/, ".json.gz"), gzipSync(raw));
-        fs.rmSync(baselineJson, { force: true });
+        baselineWritten = true;
       } catch {
-        fs.rmSync(baselineJson, { force: true });
-        baselineWarning = "（包内同步基线损坏，已按无基线导入：配好 S3 后会先拉取云端再增量）";
+        baselineWarning = "（包内同步基线损坏，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）";
       }
-    } else {
-      // 261123（PORTABLE-TRANSFER §3.1）：纯离线包合成「合并底稿」基线（导出时刻快照当三方合并 base），
-      // 不再「不写桌面基线」——那会让首同步走拉全轮，把迁移数据当「云端已删」收敛（小记物删/文档假删除）。
+    }
+    if (!baselineWritten) {
+      // 261123（§3.1）：合成「合并底稿」基线（导出时刻快照当三方合并 base），首同步走三方合并不走拉全轮。
       try {
-        const hashMaps = fs.existsSync(baselineJson) ? parseOfflineHashMaps(fs.readFileSync(baselineJson, "utf8")) : undefined;
+        const hashMaps = !checked.manifest.baseline && fs.existsSync(baselineJson)
+          ? parseOfflineHashMaps(fs.readFileSync(baselineJson, "utf8"))
+          : undefined;
         writeBootstrapBaselineGz(stagingDesktop, buildBootstrapBaselineFromDesktopWorkspace(stagingDesktop, hashMaps));
       } catch (error) {
         baselineWarning = "（合成合并底稿基线失败，已按无基线导入：" + (error instanceof Error ? error.message : String(error)) + "）";
       }
-      fs.rmSync(baselineJson, { force: true });
     }
+    fs.rmSync(baselineJson, { force: true });
 
     // 3) 校验两库（与整库导入同口径）。
     const mainInspection = inspectBackupDatabase(stagingMainDb);

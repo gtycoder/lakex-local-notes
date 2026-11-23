@@ -9,6 +9,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import { app } from "electron";
 import { inspectBackupDatabase, inspectQuickNotesDatabase } from "./workspaceRestoreFromBackup.js";
 import { buildBootstrapBaselineFromDesktopWorkspace, writeBootstrapBaselineGz } from "./portable/bootstrapFromWorkspace.js";
@@ -115,15 +116,82 @@ export interface WorkspaceReplaceOptions {
   describe: string;
 }
 
+/** 261201（P2-A）：换位崩溃恢复标记。放 workspaceRoot **同级**（换位不吞它）；phase=done 表示新工作区已落成。 */
+export function swapPendingMarkerPath(workspaceRoot: string): string {
+  return path.join(path.dirname(path.resolve(workspaceRoot)), ".workspace-swap-pending.json");
+}
+
+interface SwapPendingMarker {
+  workspaceRoot: string;
+  quarantinePath: string;
+  hadWorkspace: boolean;
+  phase: "begin" | "done";
+}
+
+/**
+ * 崩溃/断电中断的工作区换位 → 启动侧恢复（261201 P2-A，对齐移动 nativeBeginPortableImport「中断自动回滚」口径）：
+ * - phase=begin（materialize 中途死）⇒ 回滚到换位前：有隔离目录 ⇒ 删半成品并移回；无旧工作区 ⇒ 删半成品即回到「无工作区」；
+ *   有旧工作区但隔离目录不在 = rename 未发生 ⇒ 保持现状（**绝不删旧工作区**）；
+ * - phase=done（新工作区已落成、只差清标记）⇒ 提交：保留新工作区，只清标记。
+ * 幂等：无标记直接返回。启动侧在 store 初始化前调用。
+ */
+export function recoverInterruptedWorkspaceSwap(workspaceRoot: string): { recovered: boolean; restored: boolean } {
+  const markerPath = swapPendingMarkerPath(workspaceRoot);
+  let marker: SwapPendingMarker;
+  try {
+    if (!fs.existsSync(markerPath)) return { recovered: false, restored: false };
+    marker = JSON.parse(fs.readFileSync(markerPath, "utf8")) as SwapPendingMarker;
+    if (!marker || typeof marker.workspaceRoot !== "string" || typeof marker.quarantinePath !== "string") {
+      fs.rmSync(markerPath, { force: true });
+      return { recovered: false, restored: false };
+    }
+  } catch {
+    try { fs.rmSync(markerPath, { force: true }); } catch { /* 尽力 */ }
+    return { recovered: false, restored: false };
+  }
+  try {
+    if (marker.phase === "done") {
+      fs.rmSync(markerPath, { force: true });
+      return { recovered: true, restored: false };
+    }
+    if (marker.hadWorkspace && fs.existsSync(marker.quarantinePath)) {
+      try { fs.rmSync(marker.workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
+      fs.renameSync(marker.quarantinePath, marker.workspaceRoot);
+      fs.rmSync(markerPath, { force: true });
+      return { recovered: true, restored: true };
+    }
+    if (!marker.hadWorkspace) {
+      try { fs.rmSync(marker.workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
+    }
+    fs.rmSync(markerPath, { force: true });
+    return { recovered: true, restored: false };
+  } catch (error) {
+    console.warn("[workspace-backup] 中断换位恢复失败（保留标记下次再试）", error);
+    return { recovered: true, restored: false };
+  }
+}
+
 /**
  * 唯一的「换位 + 回滚」实现：当前工作区改名隔离（不删除）→ materialize 落新工作区；
  * 任何失败都把旧工作区移回（回滚失败如实报告 rolledBack=false）。
+ * 261201（P2-A）：全程持崩溃恢复标记——进程在 materialize 中途死掉时，下次启动由
+ * `recoverInterruptedWorkspaceSwap` 回滚到换位前（契约 §3 第 2 条桌面侧成立）。
  */
 export function replaceWorkspaceWith(options: WorkspaceReplaceOptions): MirrorRestoreResult {
   const workspaceRoot = path.resolve(options.workspaceRoot);
   const quarantinePath = path.join(path.dirname(workspaceRoot), quarantineDirName());
   const hadWorkspace = fs.existsSync(workspaceRoot);
+  const markerPath = swapPendingMarkerPath(workspaceRoot);
+  const markPhase = (phase: SwapPendingMarker["phase"]): void => {
+    try {
+      fs.writeFileSync(markerPath, JSON.stringify({ workspaceRoot, quarantinePath, hadWorkspace, phase } satisfies SwapPendingMarker));
+    } catch (error) {
+      console.warn("[workspace-backup] 写换位恢复标记失败", error);
+    }
+  };
+  const clearMarker = (): void => { try { fs.rmSync(markerPath, { force: true }); } catch { /* 尽力 */ } };
   let quarantined = false;
+  markPhase("begin");
   try {
     if (hadWorkspace) {
       fs.mkdirSync(path.dirname(workspaceRoot), { recursive: true });
@@ -131,15 +199,19 @@ export function replaceWorkspaceWith(options: WorkspaceReplaceOptions): MirrorRe
       quarantined = true;
     }
     options.materialize(workspaceRoot);
+    markPhase("done");
   } catch (error) {
     try { fs.rmSync(workspaceRoot, { recursive: true, force: true }); } catch { /* 尽力 */ }
     let rolledBack = true;
     if (quarantined) {
       try { fs.renameSync(quarantinePath, workspaceRoot); } catch { rolledBack = false; }
     }
+    // 回滚成功才清标记；回滚失败留标记 ⇒ 下次启动 recoverInterruptedWorkspaceSwap 再试。
+    if (rolledBack) clearMarker();
     const detail = error instanceof Error ? error.message : String(error);
     return { ok: false, reason: detail, rolledBack };
   }
+  clearMarker();
   return {
     ok: true,
     quarantinePath: quarantined ? quarantinePath : undefined,
@@ -181,7 +253,8 @@ export function restoreWorkspaceMirror(options: MirrorRestoreOptions): MirrorRes
   }
 
   // 隔离 → 拷回 → 回滚统一走 replaceWorkspaceWith（materialize = 目录拷贝）。
-  return replaceWorkspaceWith({
+  let baselineWarning = "";
+  const swapped = replaceWorkspaceWith({
     workspaceRoot,
     quickNotesRestored: hasQuick,
     describe: hasQuick
@@ -192,17 +265,35 @@ export function restoreWorkspaceMirror(options: MirrorRestoreOptions): MirrorRes
       for (const entry of ops.readdirSync(backupDir)) {
         ops.cpSync(path.join(backupDir, entry.name), path.join(freshRoot, entry.name));
       }
-      // 261123（docs/PORTABLE-TRANSFER.md §3.1）：备份里没有云端基线（源端从未配过 S3）⇒ 合成「合并底稿」基线，
-      // 与便携包两条导入路线完全同口径（配好 S3 后首同步走三方合并，不走拉全轮）。合成失败不阻断恢复。
+      // 261123（PORTABLE-TRANSFER §3.1）：备份里没有**可用**云端基线（源端从未配过 S3）⇒ 合成「合并底稿」基线，
+      // 与便携包两条导入路线完全同口径（配好 S3 后首同步走三方合并，不走拉全轮）。
+      // 261201（P1-A）：判据是**内容可用**而不只是文件存在——文件在但内容坏 ⇒ 同样合成 + 明示警告
+      //（坏基线若原样生效，首同步会被「基线丢失」安全中止或落拉全轮误删）。
       try {
-        if (!fs.existsSync(path.join(freshRoot, "sync-v3", "baseline.json.gz"))) {
+        const baselinePath = path.join(freshRoot, "sync-v3", "baseline.json.gz");
+        let usable = false;
+        if (fs.existsSync(baselinePath)) {
+          try {
+            const parsed = JSON.parse(gunzipSync(fs.readFileSync(baselinePath)).toString("utf8")) as { epoch?: unknown; lake?: unknown; quickNotes?: unknown };
+            usable = typeof parsed.epoch === "string" && !!parsed.lake && !!parsed.quickNotes;
+          } catch {
+            usable = false;
+          }
+        }
+        if (!usable) {
           writeBootstrapBaselineGz(freshRoot, buildBootstrapBaselineFromDesktopWorkspace(freshRoot));
+          if (fs.existsSync(baselinePath)) {
+            baselineWarning = "（备份内同步基线损坏，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）";
+          }
         }
       } catch (error) {
         console.warn("[workspace-backup] 合成合并底稿基线失败（按无基线恢复）", error);
+        baselineWarning = "（合成合并底稿基线失败，按无基线恢复：首同步将以云端为准收敛，本机新增小记存在被丢弃风险）";
       }
     },
   });
+  if (swapped.ok && baselineWarning) swapped.message = (swapped.message ?? "") + baselineWarning;
+  return swapped;
 }
 
 /** A2：S3 凭据跨恢复保留 seed（重启后 main 读入新库再删除）。固定名放新 workspace 根。 */

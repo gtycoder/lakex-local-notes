@@ -72,18 +72,19 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
     }
 
     // 3) baseline 反转：b64(gz(json)) → desktop sync-v3/baseline.json.gz（同一份 gz 字节）；
-    //    解开自证可解析，坏基线直接失败（不能把坏字节当基线写进工作区）。
+    //    解开自证可解析，坏字节绝不当基线写进工作区（261201 P1-A：坏/缺基线降级合成合并底稿 + 明示警告）。
     const baselineEntry = entries.find((entry) => entry.name === BASELINE_B64_REL);
     let baselineWarning = "";
+    let baselineWritten = false;
     if (baselineEntry) {
       try {
         const gz = Buffer.from(readEntryData(options.zipPath, baselineEntry).toString("utf8").trim(), "base64");
         JSON.parse(gunzipSync(gz).toString("utf8"));
         fs.mkdirSync(path.join(stagingWorkspace, "sync-v3"), { recursive: true });
         fs.writeFileSync(path.join(stagingWorkspace, "sync-v3", "baseline.json.gz"), gz);
+        baselineWritten = true;
       } catch {
-        // 坏基线不阻断迁移：按「无基线」处理（与纯离线包同语义），在结果里明说。
-        baselineWarning = "（包内同步基线损坏，已按无基线导入：配好 S3 后会先拉取云端再增量）";
+        baselineWarning = "（包内同步基线损坏，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）";
       }
     }
 
@@ -143,9 +144,10 @@ export function importMobileSnapshotPackageOnDesktop(options: PortableImportOpti
       quickDb.close();
     }
 
-    // 5.5) 261123（PORTABLE-TRANSFER §3.1）：零基线快照（无基线条目且 manifest.baseline=null）合成
-    //      「合并底稿」基线（从映射后的桌面两库 + 行内 content_hash）；合成失败按「无基线」明说，不阻断迁移。
-    if (!baselineEntry && inspection.manifest.baseline === null) {
+    // 5.5) 261123（PORTABLE-TRANSFER §3.1）：未写成可用基线（零基线条目 / 坏基线 / 缺基线，261201 P1-A
+    //      统一按**实际写入结果**判）⇒ 合成「合并底稿」基线（映射后桌面两库 + 行内 content_hash）；
+    //      合成失败按「无基线」明说，不阻断迁移。
+    if (!baselineWritten) {
       try {
         writeBootstrapBaselineGz(stagingWorkspace, buildBootstrapBaselineFromDesktopWorkspace(stagingWorkspace));
       } catch (error) {

@@ -85,8 +85,10 @@ export interface PortableImportResult {
   /** 与清单 counts 不一致时给出提示（不阻断：桌面导出时可能刚好有变动）。 */
   warnings: string[];
   skippedRows: number;
-  /** true = 包内带云端基线；false = 纯离线包（之后配置 S3 按无基线处理）。 */
+  /** true = 写入了**云端基线**（接管同步身份）；false = 合成合并底稿或无基线。 */
   hasCloudBaseline: boolean;
+  /** 261201（P2-C）：实际生效的基线来源（以写入结果为准，不按 manifest 声明上报）。 */
+  baselineSource: "cloud" | "bootstrap" | "none";
 }
 
 const PAGE_SIZE = 500;
@@ -403,12 +405,19 @@ async function restoreMobileSnapshot(
     dbClosed = false;
     // 261123（PORTABLE-TRANSFER §3.1）：零基线手机快照合成「合并底稿」基线（与桌面布局包同口径）；
     // 快照自带基线（hasBaseline）则原样沿用。合成失败按「无基线」处理，不阻断恢复。
-    if (staged.manifest.baseline === null && restored.hasBaseline !== true) {
+    // 261201（P1-A）：判据 = **实际有没有可用基线**（缺失/损坏都算），与 manifest 声明无关——
+    // 只要没写成可用基线却留了信封，首同步会被「基线丢失」安全中止或落拉全轮误删。
+    let baselineSource: "cloud" | "bootstrap" | "none" = restored.hasBaseline === true ? "cloud" : "none";
+    const warnings = ["已从手机整机快照恢复（含历史快照、草稿与同步基线）。如需云端增量同步，请到「云端与同步」配置 S3。"];
+    if (restored.hasBaseline !== true) {
       try {
         await ensureV3StateTable(db);
         await saveV3State(db, { ...EMPTY_MOBILE_V3_STATE, baseline: buildBootstrapBaseline(await readBootstrapRowsFromDb(db)) });
+        baselineSource = "bootstrap";
+        warnings.push("（包内同步基线" + (staged.manifest.baseline ? "损坏或缺失" : "缺失") + "，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）");
       } catch (error) {
         console.warn("[portable] 合成合并底稿基线失败（按无基线处理）", error);
+        warnings.push("（合成合并底稿基线失败，按无基线处理：首同步将以云端为准收敛，本机新增小记存在被丢弃风险——建议先「从云端恢复」或重新导入）");
       }
     }
     onProgress?.({ phase: "done", detail: "恢复完成" });
@@ -422,9 +431,10 @@ async function restoreMobileSnapshot(
         assets: restored.files ?? 0,
         bytes: restored.bytes ?? 0,
       },
-      warnings: ["已从手机整机快照恢复（含历史快照、草稿与同步基线）。如需云端增量同步，请到「云端与同步」配置 S3。"],
+      warnings,
       skippedRows: 0,
-      hasCloudBaseline: restored.hasBaseline === true,
+      hasCloudBaseline: baselineSource === "cloud",
+      baselineSource,
     };
   } catch (error) {
     if (dbClosed) {
@@ -445,18 +455,23 @@ async function runPortableImportInner(
   if (isMobileSnapshotManifest(staged.manifest)) {
     return restoreMobileSnapshot(staged, onProgress);
   }
-  // 先读基线（只读 staging）：基线不合法就在动数据之前失败。
+  // 先读基线（只读 staging）。261201（P1-A，与桌面三路同口径）：坏/缺基线**不再阻断迁移**——
+  // 行数据仍完整，降级为空哈希表（行内 content_hash 兜底）+ 后续合成「合并底稿」（§3.1：首同步三方合并，不走拉全轮）。
   const baselineFile = await nativeReadPortableBaseline(staged.stagingPath);
-  if (!baselineFile.ok || !baselineFile.json) {
-    throw new Error("便携包缺少可用的同步基线：" + (baselineFile.error || "未知原因"));
-  }
   let parsedBaseline: ReturnType<typeof parsePortableBaseline>;
-  try {
-    const raw = JSON.parse(baselineFile.json);
-    // manifest.baseline=null = 纯离线导出：baseline.json 只是内容哈希清单，不写同步账本。
-    parsedBaseline = staged.manifest.baseline ? parsePortableBaseline(raw) : parsePortableContentHashes(raw);
-  } catch (error) {
-    throw new Error("便携包基线不合法：" + (error instanceof Error ? error.message : String(error)));
+  let baselineWarning = "";
+  if (baselineFile.ok && baselineFile.json) {
+    try {
+      const raw = JSON.parse(baselineFile.json);
+      // manifest.baseline=null = 纯离线导出：baseline.json 只是内容哈希清单，不写同步账本。
+      parsedBaseline = staged.manifest.baseline ? parsePortableBaseline(raw) : parsePortableContentHashes(raw);
+    } catch {
+      parsedBaseline = parsePortableContentHashes({ localOnly: true, notes: {}, quickNotes: {} });
+      baselineWarning = "（包内同步基线损坏，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）";
+    }
+  } else {
+    parsedBaseline = parsePortableContentHashes({ localOnly: true, notes: {}, quickNotes: {} });
+    baselineWarning = "（包内同步基线缺失，已按本地内容合成合并底稿：配好 S3 后按三方合并增量同步，不做云端优先收敛）";
   }
 
   let dbOpened = false;
@@ -528,9 +543,11 @@ async function runPortableImportInner(
       },
       warnings: [],
       skippedRows: treeData.skipped + quickData.skipped,
-      hasCloudBaseline: staged.manifest.baseline !== null,
+      // 261201（P2-C）：按**实际写入的基线**上报，不看 manifest 声明（坏基线回退合成后不应再报 true）。
+      hasCloudBaseline: parsedBaseline.baseline !== null,
+      baselineSource: parsedBaseline.baseline !== null ? "cloud" : "bootstrap",
     };
-    result.warnings = compareCounts(staged.manifest.counts, result);
+    result.warnings = [...(baselineWarning ? [baselineWarning] : []), ...compareCounts(staged.manifest.counts, result)];
 
     onProgress?.({ phase: "commit", detail: "提交并清理临时文件…" });
     const committed = await nativeCommitPortableImport();
