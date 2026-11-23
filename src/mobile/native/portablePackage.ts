@@ -113,6 +113,8 @@ export type PortableTable =
 
 interface PortableImportPluginApi {
   pickAndStage(): Promise<StagedPortablePackage>;
+  /** 261123 设备级自动化：按文件路径直接 staging（绕过选择器；链路与 pickAndStage 完全同源）。 */
+  stageFromPath(options: { path: string }): Promise<StagedPortablePackage>;
   discardStaging(options: { stagingPath: string }): Promise<{ ok: boolean }>;
   readRows(options: {
     stagingPath: string;
@@ -160,6 +162,16 @@ export async function nativePickPortablePackage(): Promise<StagedPortablePackage
   if (!isPortableImportNativeAvailable()) return { ok: false, error: unavailable() };
   try {
     return (await PortableImport.pickAndStage()) ?? { ok: false, error: "没有返回结果" };
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
+}
+
+/** 设备级自动化专用（261123）：按文件路径 staging 便携包，绕过系统文件选择器；失败返回 { ok:false }。 */
+export async function nativeStagePortablePackageFromPath(path: string): Promise<StagedPortablePackage> {
+  if (!isPortableImportNativeAvailable()) return { ok: false, error: unavailable() };
+  try {
+    return (await PortableImport.stageFromPath({ path })) ?? { ok: false, error: "没有返回结果" };
   } catch (error) {
     return { ok: false, error: errorText(error) };
   }

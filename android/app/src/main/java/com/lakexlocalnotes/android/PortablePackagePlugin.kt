@@ -154,6 +154,41 @@ class PortablePackagePlugin : Plugin() {
         }.start()
     }
 
+    /**
+     * 261123（设备级自动化解锁，对齐 inspectSnapshot({path}) 先例）：按**文件路径**直接 staging，
+     * 绕过系统文件选择器。生产 UI 仍走 pickAndStage（选包路径不可由页面伪造）；本入口仅供设备级
+     * 自动化/脚本把已就位的 .zip.lln 送进与 UI 完全相同的 extractArchive → validateStagedPackage 链路。
+     */
+    @PluginMethod
+    fun stageFromPath(call: PluginCall) {
+        if (!pickInFlight.compareAndSet(false, true)) {
+            call.reject("已有便携包解析在进行，请稍后")
+            return
+        }
+        try {
+            val rawPath = call.getString("path") ?: throw IOException("缺少 path 参数")
+            val file = File(rawPath)
+            if (!file.isFile) throw IOException("便携包文件不存在: " + rawPath)
+            if (!file.name.endsWith(PORTABLE_EXTENSION, ignoreCase = true)) {
+                throw IOException("只支持最新的 .zip.lln 便携包（不再兼容旧 .zip）")
+            }
+            val uri = Uri.fromFile(file)
+            call.setKeepAlive(true)
+            Thread {
+                try {
+                    call.resolve(extractArchive(uri))
+                } catch (e: Exception) {
+                    call.reject("便携包无效: " + (e.message ?: e.javaClass.simpleName))
+                } finally {
+                    pickInFlight.set(false)
+                }
+            }.start()
+        } catch (e: Exception) {
+            pickInFlight.set(false)
+            call.reject(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
     private fun extractArchive(uri: Uri): JSObject {
         val stage = File(importRoot(), "stage-" + System.currentTimeMillis()).apply { mkdirs() }
         val stageRoot = stage.canonicalPath
