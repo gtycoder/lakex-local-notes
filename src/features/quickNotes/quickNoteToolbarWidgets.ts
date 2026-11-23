@@ -24,6 +24,10 @@
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
 import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
+// 261123（与文档 dock 同一判据，AGENTS §3#14）：卡内 textarea 等输入面优先插入 + 插入命令的卡片保护区
+//（内核 insertAtSelection「非折叠选区被替换」会把「加密文本」整卡顶掉，LAKEX-CONTRACT §5.63）。
+import { activeTextEntryField, insertTextIntoField } from "../editor/fieldInsert";
+import { notifyInsertBlocked, selectionTouchesCard } from "../editor/insertGuard";
 
 /** 工具条描述符用到的编辑器能力（只声明我们用到的，避免依赖内核类型）。 */
 export interface QuickNoteToolbarEditor {
@@ -305,6 +309,8 @@ export class QuickNoteDateToolbarItem extends QuickNoteToolbarButton {
 
   onEvent(eventName: string): void {
     if (eventName !== "click") return;
+    // 卡片保护区（261123）：选区触卡时 insertCard 会整卡替换/静默丢失（LAKEX-CONTRACT §5.63）⇒ 拦下并提示。
+    if (selectionTouchesCard()) { notifyInsertBlocked(); return; }
     this.editor.execCommand("insertCard", "dateCard", { date: Date.now() }, false);
   }
 }
@@ -334,6 +340,16 @@ export class QuickNoteEmojiToolbarItem extends QuickNoteToolbarButton {
    * （bundle 200615-200625 的 render 里写死 `type: 'card-emoji-insert'`，从不渲染 value）⇒ 插了就是死框。
    */
   protected insertEmoji(emoji: string): void {
+    // 261123（同文档 dock 口径，判据共享）：① 焦点在卡内 textarea / 输入框等非正文输入面 ⇒ 直接插进
+    // 输入面光标处（setRangeText + input 事件），一个内核命令都不发——绝不让「替换选区」语义碰到卡片；
+    // ② 选区触卡 ⇒ 拦下并提示（内核 insertAtSelection 会整卡替换/静默丢失，LAKEX-CONTRACT §5.63）。
+    const field = activeTextEntryField();
+    if (field) {
+      insertTextIntoField(field, emoji);
+      try { field.focus(); } catch { /* 输入面已卸载：插入已完成，不阻断 */ }
+      return;
+    }
+    if (selectionTouchesCard()) { notifyInsertBlocked(); return; }
     // 走**内核通用插入通道**（与块菜单同一个口：`insertAtSelection('text/lake', frag)`，见
     // vendor LOCAL-CHANGES #11 与 features/editor/blockMenuHelpers）。
     // ⚠️ 原生 `document.execCommand('insertText')` 在本内核模型下**不生效**（设备实测：选完表情正文无变化）。

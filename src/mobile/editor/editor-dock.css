@@ -50,11 +50,15 @@
   touch-action: pan-x;
 }
 .med-toolbar-scroll::-webkit-scrollbar { display: none; }
-/* 固定尾键：不参与横滑、宽度与其它工具按钮一致 */
-.med-btn--kb { flex: 0 0 49px; }
+/* 261123：49px 是**上限**不是定宽（flex 0 1 + min-width 36）——窄屏把 8 枚按钮（含「更多」后的撤销/重做）
+   整体收进首屏。此前「定宽 49 + 横滑」（261017）叠上玻璃条内缩（261107，−28px 可用宽）后，撤销/重做
+   在 393~412dp 手机上被挤出可视区（滚动可达但无发现性，用户 261123 报「没有了」）。
+   宽屏仍 49 不变；极端窄屏/大字体回落横滑（.med-toolbar-scroll 的 overflow-x: auto 保持）。 */
 .med-btn {
-  flex: 0 0 49px;
-  width: 49px;
+  position: relative;
+  /* 宽度只由 flex-basis（49 上限）+ min-width（36 地板）决定；flex 行里 width 对主轴尺寸无效，不写死声明。 */
+  flex: 0 1 49px;
+  min-width: 36px;
   height: var(--mb-ctl-h);
   border: none;
   background: transparent;
@@ -67,6 +71,11 @@
   font-size: var(--lake-font-size-body);
   -webkit-tap-highlight-color: transparent;
 }
+/* 261123 触控档：窄屏收缩后视觉可到 36 宽（<44）⇒ 命中区纵向补足（横向不动、防相邻按钮互叠；同 .med-f-btn 口径）。 */
+.med-btn::after { content: ""; position: absolute; inset: -2px 0; }
+/* 固定尾键：不参与横滑、不参与收缩，宽度与其它工具按钮一致。
+   ⚠️ 必须排在 .med-btn 之后（同特异性后者胜，否则被 .med-btn 的 flex 覆盖跟着收缩）。 */
+.med-btn--kb { flex: 0 0 49px; }
 .med-btn > svg { width: 20px; height: 20px; }
 .med-btn:active, .med-btn:focus-visible { background: var(--lake-bg-hover); }
 /* 不可用态（撤销/重做无历史）：与面板置灰同一口径，点了也不静默执行 */

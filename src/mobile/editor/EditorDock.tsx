@@ -34,6 +34,9 @@ import { LinkEditorSheet } from "./LinkEditorSheet";
 // 「编辑面」的口径：算术在 editSurfaceModel.ts（纯函数 + CI 单测），owner（外壳高 / 面板状态机 / 输入法 / 焦点守卫）在 useEditSurface.ts
 import { useEditSurface } from "./useEditSurface";
 import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
+// 卡内 textarea 等非正文输入面的「光标处插入」与插入命令的「卡片保护区」（261123：插表情把整卡顶掉）。
+import { activeTextEntryField, insertTextIntoField, isTextEntryField } from "../../features/editor/fieldInsert";
+import { INSERT_BLOCKED_HINT, selectionTouchesCard } from "../../features/editor/insertGuard";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
 // 字号步进器（261104）：移动端共用控件，几何/交互与表格 T 面板同款；档位算术在它自己的纯函数里（有单测）。
@@ -249,6 +252,12 @@ export interface EditorDockProps {
  *  吞掉返回值会退化成"两条都算成功" = 静默 no-op。 */
 function useEditorExec(editor: LakeEditorInstance | null) {
   return (cmd: string, ...args: unknown[]) => {
+    // 卡片保护区（261123）：插入类命令在「选区触卡」时一律不执行——内核语义是「非折叠选区被替换」，
+    // 整卡选中/卡聚焦态下执行 = 整卡被顶掉或插入静默丢失（insertGuard 头注释）。表情/「＋」面板全部插入项共用这条。
+    if ((cmd === "insertAtSelection" || cmd === "insertCard") && selectionTouchesCard()) {
+      showToast(INSERT_BLOCKED_HINT, { type: "error" });
+      return undefined;
+    }
     const result = execEditorCommandResult(editor, cmd, ...args);
     if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(cmd, result), { type: "error" });
     return result.ok ? result.value : undefined;
@@ -328,6 +337,9 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   if (!editing) return null;
 
   const focusEditor = () => {
+    // 卡内 textarea / 输入框仍聚焦时，焦点与光标留在输入面（261123：插完表情要能就地继续输入），
+    // 不交给内核宿主——那正是「插表情后光标/输入面被抢走」的来源。
+    if (isTextEntryField(document.activeElement)) return;
     // 输入法由 useEditSurface 的 restoreIme() 放回（它就在 closePanel 里）；这里只把**焦点**交还正文。
     try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch (error) { reportMobileActionError("聚焦正文", error); }
     try { execRef.current("focus"); } catch (error) { reportMobileActionError("聚焦正文（内核命令）", error); }
@@ -369,8 +381,20 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
   const dateStamp = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
   /** 表情：选中后按内核原意插**文本**（`unicodeEmoji` 卡是死占位，见 LAKEX-CONTRACT §5.29）。
-   *  面板本身在 `.med-panel` 里就地渲染（EmojiPanel fill），所以这里只负责插。 */
-  const insertEmoji = (emoji: string) => runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`);
+   *  面板本身在 `.med-panel` 里就地渲染（EmojiPanel fill），所以这里只负责插。
+   *  261123（用户现场「插表情把加密文本整卡顶掉」）：
+   *  ① 焦点在卡内 textarea / 输入框等**非正文输入面** ⇒ 插进该输入面的光标处（setRangeText + input 事件），
+   *     一个内核命令都不发——绝不让「替换选区」语义碰到卡片；
+   *  ② 其余情况交给 exec 层的卡片保护区（选区触卡 ⇒ 明确不动作 + 提示，不静默吞卡）。 */
+  const insertEmoji = (emoji: string) => {
+    const field = activeTextEntryField();
+    if (field) {
+      insertTextIntoField(field, emoji);
+      try { field.focus(); } catch { /* 输入面已卸载：插入已完成，不阻断 */ }
+      return;
+    }
+    runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`);
+  };
 
   /**
    * 应用颜色：语义**完全复用桌面那一套**（colorApplyCommand = 内核 descriptor 的 onEvent('select')：

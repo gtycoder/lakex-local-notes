@@ -2289,3 +2289,17 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **根因（两层）**：① `useEditSurface.ts` 的「target ≈ innerHeight ⇒ 清除 --mb-app-h（100% 等价）」短路分支 + effect 依赖数组缺 [innerHeight, 面板态]——键盘在面板**背后**收起（innerHeight 530→842）时 effect 不重跑，变量停在键盘态「已清除」⇒ 外壳回退 100% ⇒ 滚动口 +面板高；② 即便 effect 会重跑，resize→layout effect 之间仍有 **≥1 帧「变量缺席」窗口**，浏览器在该帧钳 scrollTop（钳位瞬时不可逆）⇒ 只修依赖不够。
 - **口径**：**面板态（panelMode||closing）必须在点「＋」当帧（键盘未收）显式把 --mb-app-h 钉成字面量**；「100% 等价」短路只许用于**无面板的纯键盘态**；effect 依赖含 innerHeight 与面板态。261111 的「键盘动画期间同值跳过/零写」收益保留（ref 守卫同值跳过）。
 - **护栏**：`useEditSurface.test` 回归用例（键盘态点＋ ⇒ 面板开当帧显式写、收起后回 100% 等价；去掉依赖即红）+ 复现装置 `scripts/mobile-audit/dock-panel-stability.mjs`（CDP：scrollTop 位移≤2px / 滚动口恒定 / `.ne-engine` 同实例不重挂 / 面板态变量显式在位；同机同文档修前 FAIL×4、修后 ALL PASS，冷启动复跑稳）。
+
+## 5.63 `insertAtSelection` / `insertCard` 在「选区触卡」时 = 整卡替换或静默丢失（261123 用户现场 + 模拟器实测 + 官方语义）
+
+> 用户报（真机小米）：「正在加密文本卡里打字 → 点 dock ＋ → 表情 → 选一个表情 ⇒ 表情把整个加密块替代了，加密块消失」（数据破坏级）。复现装置：模拟器 `lake_mobile`，文档内「加密文本」自研卡（`lake-locked-text`，卡内正文是 React `<textarea>`）。
+
+- **官方语义（`docs/lakexEditor-developer-docs/08 命令列表`，insertAtSelection 条）**：「**如果选区非折叠，被选中的内容将会被替换为插入内容**」。整卡选中在内核模型里就是一段**非折叠选区包住卡片节点** ⇒ 插入 = 替换整卡。`insertCard` 同走选区插入/替换，同病。
+- **三种实测结果（同一入口，按内核选区形态分叉）**：
+  1. **内核选区 = 整卡选中（非折叠包卡）** ⇒ **整卡被插入物替换**（用户现场：加密文本卡被 `<span>😀</span>` 顶掉；卡内明文/密文一并消失）。
+  2. **卡片聚焦态**（点卡头后 DOM 选区折叠在 `NE-CARD.ne-focused`）⇒ **插入静默丢失**（模拟器实测：表情 🍇、日期卡都没落进正文任何位置，`execCommand` 疑似返回 null；卡片仍在）。
+  3. 正文普通光标/文本选区 ⇒ 正常插入（含「折叠光标在卡旁段落」也正常落在段落里）。
+- **触发面的焦点细节（修复依据）**：在卡内 textarea 打字时，DOM 选区锚点仍在**卡片 DIV**（textarea 不产生文档选区）；点 dock「＋」后 `useEditSurface.applyImeSuppression` 旧路径把 textarea 的 `closest([contenteditable])` 当宿主回焦 ⇒ **焦点被内核宿主抢走**，后续插入物一律按「内核选区」落位（= 上面 1/2 的坏分支）。
+- **应用层口径（261123 修复，不动内核）**：① 表情等小文本落点 = **输入面优先**——焦点在 textarea/input 时走 `setRangeText` + 冒泡 `input` 事件插进输入面光标处（`src/features/editor/fieldInsert.ts`），一个内核命令都不发；② **卡片保护区**——`insertAtSelection`/`insertCard` 在「选区触卡」（折叠光标在卡内 / 非折叠选区与卡相交）时**一律不执行**，明确提示不静默（`src/features/editor/insertGuard.ts`，桌面/移动/小记共用判据；挂在文档 dock 的 exec 层 + 小记写作卡工具项，插入项共用）；③ IME 抑制「谁聚焦就抑制谁」（`useEditSurface` 字段分支，焦点/光标留在卡内输入面）。
+- **同类入口排查结论**：「＋」面板的 状态/日期/代码块/日历/文本绘图/高亮块/分栏 等 `runPanel("insertCard" | …)` 与表情同一条内核选区语义 ⇒ 已由 exec 层保护区统一拦下（日期卡实测同病：卡聚焦态下静默丢失）。**小记写作卡的 表情/日期 入口（`src/features/quickNotes/quickNoteToolbarWidgets.ts`）已同接共享判据**（261123 lead 点单扩展）：表情走输入面优先 + 保护区、日期 `insertCard` 过保护区；被拦提示走**可注入通道**（移动端 `src/mobile/main.tsx` 装 showToast；桌面宿主未装 = 静默拦下，卡片安全优先，桌面接线待补）。
+- **护栏**：`src/features/editor/insertGuard.test.ts`（7 例：卡内折叠/卡包装折叠/普通光标/跨卡选区/纯文本多段选区不误伤/无选区/提示通道注入）、`src/features/editor/fieldInsert.test.ts`（5 例）、`src/mobile/editor/dockInsertGuard.test.ts`（文档 dock 与小记工具项的接线静态契约 + 移动端提示通道）。

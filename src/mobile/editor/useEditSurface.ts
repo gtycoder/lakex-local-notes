@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useKeyboard } from "../hooks/useKeyboard";
+import { isTextEntryField } from "../../features/editor/fieldInsert";
 import { bottomOccupation, capturePanelHeight, dockKbOffset, shellSurfaceHeight } from "./editSurfaceModel";
 
 export type PanelMode = "insert" | "font" | "more" | "emoji" | null;
@@ -80,6 +81,20 @@ function applyImeSuppression(on: boolean, scope: HTMLElement | null, refocus: bo
       return;
     }
     scope.querySelectorAll<HTMLElement>('[inputmode="none"]').forEach((el) => el.removeAttribute("inputmode"));
+    return;
+  }
+  // 261123：当前聚焦的是**非正文文本输入面**（自研卡内 textarea / input，如「加密文本」卡正文）时，
+  //  抑制/放回都作用在**它自己**身上（inputmode + blur/focus + 选区还原）——焦点与光标留在输入面，
+  //  不交给内核宿主。旧路径把 textarea 的 closest(contenteditable) 当宿主回焦 ⇒ 面板一开、焦点就被内核抢走，
+  //  表情等插入物全部落进正文选区（261123 用户现场「插表情把整卡顶掉」的前置焦点漂移就在这里）。
+  const focusedField = isTextEntryField(document.activeElement) ? document.activeElement : null;
+  if (focusedField) {
+    const start = focusedField.selectionStart;
+    const end = focusedField.selectionEnd;
+    if (on) focusedField.setAttribute("inputmode", "none");
+    else focusedField.removeAttribute("inputmode");
+    try { focusedField.blur(); if (refocus) focusedField.focus(); } catch { /* 元素已卸载/不可聚焦：无副作用 */ }
+    try { if (start !== null && end !== null) focusedField.setSelectionRange(start, end); } catch { /* 不支持选区的输入类型：已排除在 isTextEntryField 外 */ }
     return;
   }
   // ⚠️ 261104：只对**当前聚焦的编辑宿主** blur/focus。正文里可能有嵌套 contenteditable（分栏卡 NE-COLUMNS-CONTENT、

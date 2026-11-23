@@ -10,12 +10,16 @@ import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, quickNoteShortcutMode, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
 import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
+import { showToast } from "./ui/toastBus";
+// 261123：插入命令「卡片保护区」被拦下时的提示通道（判据共享 features/editor/insertGuard；桌面宿主另行接线）。
+import { setInsertBlockedNotifier } from "../features/editor/insertGuard";
 // 261115 A21：老 Android WebView 没有 toSorted/toReversed/Promise.withResolvers —— 第一行先补，再跑业务。
 import { installEs2024Fallbacks } from "../lib/es2024Fallback";
 // 261120 首屏瘦身：崩溃记录/原生崩溃诊断只在「出错时」和 dev 调试里用 ⇒ 改成用时动态 import
 // （两个模块 ≈3KB gz，以前静态在入口 chunk 里）。
 
 installEs2024Fallbacks();
+setInsertBlockedNotifier((hint) => showToast(hint, { type: "error" }));
 import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；移动端自 P5 起连 compat.css 也不再引（P0–P7 独立性批次）——
