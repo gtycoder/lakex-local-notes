@@ -7,7 +7,7 @@ import { FILE_RECONCILE_DEFAULTS, FileMetadataReconciler } from "./fileMetadataR
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
 import { historyFallbackMinutes, shouldRunHistoryFallback } from "../src/core/historyFallbackPolicy.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { createUnavailableQuickNotesStore, QuickNotesStore } from "./quickNotes.js";
 import { migrateNoteTagLinksToQuickNotes } from "./tagStorage.js";
 import {
@@ -661,7 +661,7 @@ if (!app.requestSingleInstanceLock()) {
     let openedStore: Store | null = null;
     if (startupIntegrity.ok) {
       try {
-        openedStore = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
+        openedStore = new Store(workspaceRoot(), createLocalSecretCipher(userDataDir), log);
       } catch (error) {
         startupOpenError = error;
         log.app.error("[store] 打开本地数据库失败" + formatLogFields(errorFields(error)));
@@ -690,7 +690,7 @@ if (!app.requestSingleInstanceLock()) {
           if (!backup.ok) return { ok: false, message: backup.message };
           // 备份成功后**重试打开**（完整走一次 Store 构造/迁移）；成功后重启走正常启动路径。
           try {
-            const probe = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
+            const probe = new Store(workspaceRoot(), createLocalSecretCipher(userDataDir), log);
             probe.close();
           } catch (error) {
             log.app.error("[recovery] 备份后重试打开仍失败" + formatLogFields(errorFields(error)));

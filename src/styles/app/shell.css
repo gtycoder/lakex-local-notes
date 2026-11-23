@@ -68,8 +68,16 @@
 
 /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron.open { transform: rotate(90deg); }
+/* 展开箭头随开合旋转（transform 位移类，261123 随高度动画顺手接入；reduced-motion 由 a11y 剥掉）。
+   过渡只在**开合窗口**内生效（随 .tree-children.is-animating 出现/消失）：稳态计算样式不变 ⇒
+   stylesnap 指纹不受扰（A/B 实测：常驻 transition 会让 90 个 chevron 指纹全变、共享基线被打扰）。 */
+.tree-item:has(.tree-children.is-animating) .tree-chevron { transition: transform var(--lake-motion-fast) var(--lake-ease-standard); }
 
 .tree-children { margin-left: 16px; border-left: 0.5px solid var(--lake-hairline-soft); }
+/* Finder 式展开/收起高度动画（261123 用户点单 = DESIGN Motion「不动布局属性」的登记例外，
+   只在目录展开/收起这一个语义上动 height）。动画期间裁剪内容；reduced-motion 下 a11y 层的
+   transition-property 白名单剥掉 height ⇒ 自动瞬时（组件不写 reduce 分支，收尾靠 JS 定时器）。 */
+.tree-children.is-animating { overflow: hidden; transition: height var(--lake-motion-fast) var(--lake-ease-standard); }
 
 .workspace { display: grid; min-width: 0; min-height: 0; }
 

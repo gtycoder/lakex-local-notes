@@ -199,9 +199,11 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     expect(host.querySelectorAll('.node-icon-cell[aria-pressed="true"]')).toHaveLength(0);
     expect(icon("部门")).not.toBeNull();
   });
-  it("折叠祖先后切到另一文档会重新展开并定位", () => {
+  it("折叠祖先后切到另一文档会重新展开并定位", async () => {
     render();
     click(row("group").querySelector<HTMLButtonElement>(".tree-chevron")!);
+    // 收起动画收尾后子树才卸载（261123 Finder 式高度动画）
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 380)); });
     expect(row("n1")).toBeNull();
     render({ activeId: "n1" });
     expect(row("n1")).not.toBeNull();

@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { SAVE_CONFLICT_CODE, isSaveConflict } from "../src/lib/types.js";
@@ -33,7 +33,7 @@ let store: Store;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-save-guard-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 function bodyPath(id: string): string {

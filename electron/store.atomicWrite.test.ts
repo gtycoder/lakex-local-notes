@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 
 // ===== electron mock（Store 模块加载即需要）=====
 const electronMock = vi.hoisted(() => {
@@ -32,7 +32,7 @@ let store: Store;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-store-atomic-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 afterEach(() => {

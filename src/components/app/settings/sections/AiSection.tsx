@@ -27,7 +27,7 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                     <Field
                       itemId="ai-api-key"
                       name={<>API Key <span className={"badge " + (activeAi?.hasApiKey ? "badge--accent" : "badge--muted")}>{activeAi?.hasApiKey ? "已保存" : "未配置"}</span></>}
-                      desc="加密保存在本机（Keychain），不同步不上传；留空沿用已存，输入即替换。"
+                      desc="本机加密保存（防误读，非安全边界），不同步不上传；留空沿用已存，输入即替换。"
                       error={aiErr.apiKey}
                     >
                       <span className="ln-input settings-input">

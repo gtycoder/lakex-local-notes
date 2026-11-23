@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import sharp from "sharp";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { usheetToBody, type UsheetWorkbook } from "../src/core/usheetDoc.js";
 
 const electronMock = vi.hoisted(() => {
@@ -80,7 +80,7 @@ let outDir: string;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-export-xlsx-test-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
   outDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-export-xlsx-out-"));
 });
 

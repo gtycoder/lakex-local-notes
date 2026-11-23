@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { HISTORY_FALLBACK_BACKOFF_BASE_MS, HISTORY_FALLBACK_BACKOFF_MAX_MS } from "../src/core/historyFallbackPolicy.js";
 
@@ -35,7 +35,7 @@ let store: Store;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-history-fallback-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 function bodyPath(id: string): string {
@@ -91,7 +91,7 @@ describe("定时兜底历史快照（Batch4-C + P2-A）", () => {
 
     // 模拟重启：账本在 DB 里（不是内存 set），新一轮不会重复快照
     store.close();
-    store = new Store(dir, createSafeStorageSecretCipher());
+    store = new Store(dir, createLocalSecretCipher(dir));
     const fourth = await store.runHistoryFallback();
     expect(fourth.changed).toBe(0);
     expect(fourth.created).toBe(0);

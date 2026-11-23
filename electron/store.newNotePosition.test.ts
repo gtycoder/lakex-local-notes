@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 
 /**
  * 261117 用户点单「新建文档位置」的行为护栏：
@@ -31,7 +31,7 @@ let notebookId: string;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-position-test-"));
   secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
   store.bootstrap();
   notebookId = store.createNotebook("测试本").id;
 });

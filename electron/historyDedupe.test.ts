@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { pickCurrentHistorySnapshotId } from "../src/core/historyCurrent.js";
 
 // ===== electron mock（Store 模块加载即需要） =====
@@ -33,7 +33,7 @@ let store: Store;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-history-dedupe-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 function db(): { prepare: (sql: string) => { run: (...args: unknown[]) => { lastInsertRowid?: number | bigint; changes?: number }; get: (...args: unknown[]) => unknown; all: (...args: unknown[]) => unknown[] } } {

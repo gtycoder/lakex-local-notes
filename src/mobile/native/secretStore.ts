@@ -20,7 +20,7 @@ import { keystoreAvailable, keystoreSecretStore } from "./keystoreSecretStore";
 
 /** localStorage 键前缀（密文；格式 ivB64:dataB64）。 */
 const LS_PREFIX = "lakex-local-notes-mobile.secret.";
-/** 密钥固定派生：同一安装内稳定（换机/重装后无法解密旧值，提示重新填写——对齐桌面 safeStorage 密钥丢失语义）。 */
+/** 密钥固定派生：同一安装内稳定（换机/重装后无法解密旧值，提示重新填写——对齐桌面本机加密钥匙丢失语义（261201））。 */
 const KEY_MATERIAL = "lakex-local-notes-mobile.secret-key.v1";
 
 let keyPromise: Promise<CryptoKey> | null = null;

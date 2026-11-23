@@ -116,7 +116,7 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     expect(localStorage.getItem("lakex-local-notes-v3.sidebar-collapsed-notebooks")).toBe("[]");
   });
 
-  it("已收起里的子级默认收起：分区内可手动逐级展开，且不回写主列表展开态", () => {
+  it("已收起里的子级默认收起：分区内可手动逐级展开，且不回写主列表展开态", async () => {
     render();
     // 主列表默认展开笔记本（treeExpandState：启动默认展开笔记本/分组）⇒ 子文档可见
     expect(navRow("n1")).not.toBeNull();
@@ -130,8 +130,9 @@ describe("目录「已收起」笔记本（261120 用户点单）", () => {
     // 分区内**点行**就要展开（与主列表一致；261120 报障：此前只有三角生效）
     act(() => { collapsedBodyRow("nb")?.click(); });
     expect(collapsedBodyRow("n1")).not.toBeNull();
-    // 再点一次收起（三角同理仍可用）
+    // 再点一次收起（三角同理仍可用）；收起动画收尾后子树才卸载（261123 Finder 式高度动画）
     act(() => { collapsedBodyRow("nb")?.click(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 380)); });
     expect(collapsedBodyRow("n1")).toBeNull();
     const zoneChevron = collapsedBodyRow("nb")?.querySelector<HTMLButtonElement>(".tree-chevron");
     act(() => { zoneChevron?.click(); });

@@ -213,6 +213,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }, [expanded]);
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // 真拖拽已开始（越过 5px 阈值）：拖拽视觉（源行变灰 .38）只在真拖时出现 ——
+  // 旧实现按下即 setDraggingId ⇒ 每次点击/展开都「闪一下灰」（261123 用户报「打开都会闪烁一下」的根因）。
+  const [dragMoved, setDragMoved] = useState(false);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const [releaseState, setReleaseState] = useState<{
     id: string;
@@ -497,6 +500,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       if (!drag.moved) {
         if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= 5) return;
         drag.moved = true;
+        setDragMoved(true);
         const sourceEl = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${escapeId(drag.id)}"]`);
         ghostRef.current = sourceEl ? createDragGhost(sourceEl, event.clientX, event.clientY) : null;
       }
@@ -573,6 +577,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       }
       if (!drag?.moved || !finalDropTarget) {
         setDraggingId(null);
+        setDragMoved(false);
       }
       dragRef.current = null;
       dropTargetRef.current = null;
@@ -931,6 +936,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const beginTreeDrag = useCallback((event: React.PointerEvent, id: string) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return;
     dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false };
+    setDragMoved(false);
     setReleaseState(null);
     dropTargetRef.current = null;
     setDropTarget(null);
@@ -981,6 +987,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       rows.forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
       setReleaseState(null);
       setDraggingId(null);
+      setDragMoved(false);
       setDropTarget(null);
     };
     const timer = window.setTimeout(clear, 280);
@@ -993,6 +1000,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
       setReleaseState(null);
       setDraggingId(null);
+      setDragMoved(false);
       setDropTarget(null);
     }, 900);
     return () => window.clearTimeout(timer);
@@ -1358,6 +1366,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     contextId: context?.id ?? null,
     expanded,
     draggingId,
+    dragMoved,
     dropTarget,
     dropParentId,
     draggedParentId,
@@ -1376,7 +1385,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     lockedNoteIds: props.lockedNoteIds,
     selectedIds: selectedIdSet,
     onRowClick: handleRowClick,
-  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
+  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragMoved, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
   /**
    * 「已收起」分区的行 props：把展开态/切换换成**分区自己那份**（默认空 = 子级默认收起）。
    * ⚠️ 三角（onToggle）和**行点击**（onRowClick）都要换 —— 目录里点笔记本行本身就是展开/收起，

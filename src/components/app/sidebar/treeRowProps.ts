@@ -18,6 +18,8 @@ export interface TreeRowProps {
   contextId: string | null;
   expanded: Set<string>;
   draggingId: string | null;
+  /** 真拖拽已开始（越过 5px 阈值）——拖拽视觉（源行变灰）只在真拖时出现，按下不闪（261123）。 */
+  dragMoved?: boolean;
   dropParentId: string | null;
   draggedParentId: string | null;
   releasingId: string | null;

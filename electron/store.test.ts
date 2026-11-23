@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
 import { buildS3v3DiagnosticReport } from "../src/core/s3v3Report.js";
@@ -45,7 +45,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-store-test-"));
   electronMock.secrets.clear();
   electronMock.setEncryptionAvailable(true);
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 /** 另开连接直读 Store 的 SQLite（验证落盘内容，如 S3 密钥是否加密） */
@@ -1462,7 +1462,7 @@ describe("孤儿资源", () => {
   });
 });
 
-describe("S3 配置（safeStorage 加密落盘）", () => {
+describe("S3 配置（本机加密落盘 enc:v2，261201 裁决）", () => {
   const settings = {
     endpoint: "https://s3.cn-north-1.qiniucs.com",
     region: "cn-north-1",
@@ -1473,23 +1473,40 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     forcePathStyle: true,
   };
 
-  it("save/get 往返：密钥加密存储、解密还原", () => {
+  it("save/get 往返：密钥加密存储、解密还原；落盘 enc:v2: 且绝无明文", () => {
     store.saveS3Settings(settings);
     const got = store.getS3Settings();
     expect(got).not.toBeNull();
     expect(got!.secretAccessKey).toBe("sk-secret");
     expect(got!.forcePathStyle).toBe(true);
-    // 落盘值必须是 enc:v1: 前缀（已加密）
     const raw = rawDbValue("SELECT value FROM settings WHERE key='s3_settings'");
-    expect(raw ?? "").toContain("enc:v1:");
+    expect(raw ?? "").toContain("enc:v2:");
+    expect(raw ?? "").not.toContain("sk-secret"); // 绝不明文落盘（红线不变）
   });
 
-  it("safeStorage 不可用时 fail-closed：拒绝保存，绝不落明文", () => {
+  it("本地加密恒可保存（fail-closed 口径换轨）：safeStorage 不可用不影响 v2 保存/解密", () => {
     electronMock.setEncryptionAvailable(false);
-    expect(() => store.saveS3Settings(settings)).toThrow(/安全存储/);
+    store.saveS3Settings(settings);
+    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
     const raw = rawDbValue("SELECT value FROM settings WHERE key='s3_settings'");
-    expect(raw ?? "").not.toContain("sk-secret"); // 绝不落明文
-    expect(store.getS3Settings()).toBeNull();     // 未写入任何配置行
+    expect(raw ?? "").not.toContain("sk-secret"); // 依然绝不落明文
+  });
+
+  it("钥匙丢失/换机（不同 machine.key）⇒ 解不开按未配置返回空串，绝不回显密文", () => {
+    store.saveS3Settings(settings);
+    const row = store.exportS3SettingsRow();
+    const userDirB = fs.mkdtempSync(path.join(os.tmpdir(), "lake-store-userb-"));
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), "lake-store-b-"));
+    try {
+      const storeB = new Store(dirB, createLocalSecretCipher(userDirB));
+      storeB.bootstrap();
+      storeB.importS3SettingsRow(row!);
+      expect(storeB.getS3Settings()?.secretAccessKey).toBe(""); // 未配置口径（换机重填）
+      storeB.close();
+    } finally {
+      fs.rmSync(userDirB, { recursive: true, force: true });
+      fs.rmSync(dirB, { recursive: true, force: true });
+    }
   });
 
   it("未配置时返回 null，损坏数据返回 null", () => {
@@ -1498,17 +1515,29 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     expect(store.getS3Settings()).toBeNull();
   });
 
-  it("A2 seed：exportS3SettingsRow 返回密文行（含 enc:v1:、绝无明文 secret）；importS3SettingsRow 原样写回可解密", () => {
+  it("A2 seed：exportS3SettingsRow 返回密文行（含 enc:v2:、绝无明文 secret）；importS3SettingsRow 原样写回可解密", () => {
     store.saveS3Settings(settings);
     const row = store.exportS3SettingsRow();
     expect(row).not.toBeNull();
-    expect(row!).toContain("enc:v1:");            // secret 已加密
+    expect(row!).toContain("enc:v2:");            // secret 已加密
     expect(row!).not.toContain("sk-secret");      // 绝无明文 secret
-    // 模拟新空库：import 原样写回 → 同机 safeStorage 可解密还原
+    // 模拟新空库：import 原样写回 → 同机（同 machine.key）可解密还原
     new Database(path.join(dir, "metadata.sqlite3")).prepare("DELETE FROM settings WHERE key='s3_settings'").run();
     expect(store.getS3Settings()).toBeNull();
     store.importS3SettingsRow(row!);
     expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
+  });
+
+  it("v1（safeStorage）旧密文读得到；下次保存自动换 v2（惰性迁移）", async () => {
+    const { safeStorage } = await import("electron");
+    const v1 = "enc:v1:" + safeStorage.encryptString("sk-legacy").toString("base64");
+    const legacyRow = JSON.stringify({ ...settings, secretAccessKey: v1 });
+    store.importS3SettingsRow(legacyRow);
+    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-legacy"); // v1 可解
+    store.saveS3Settings(store.getS3Settings()!);
+    const raw = rawDbValue("SELECT value FROM settings WHERE key='s3_settings'");
+    expect(raw ?? "").toContain("enc:v2:");       // 保存后即 v2
+    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-legacy");
   });
 });
 
@@ -2095,7 +2124,7 @@ describe("种子笔记本普通化（无默认/不可删笔记本）", () => {
     store.deleteTreeNode("notebook-personal");
     store.purgeTrashItem("notebook-personal");
     // 重新打开同一库（模拟重启/下次启动）
-    store = new Store(dir, createSafeStorageSecretCipher());
+    store = new Store(dir, createLocalSecretCipher(dir));
     const notebooks = store.listTreeNodes().filter((n) => n.nodeType === "notebook");
     expect(notebooks.some((n) => n.id === "notebook-personal")).toBe(false);
   });

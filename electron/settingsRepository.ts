@@ -17,7 +17,7 @@ import { normalizeUpdateSettings, UPDATE_SETTINGS_DEFAULTS, type UpdateSettings 
 /**
  * settings 表存取（S3 / 同步 / S3 GC / 历史保留策略 + 密钥加解密）。
  * 从事务语义到 SQL 全部原样迁移自 Store（REFACTOR：只搬家不改行为）。
- * 红线：S3 密钥用 SecretCipher（桌面默认 Electron safeStorage）加密落盘，
+ * 红线：S3 密钥用 SecretCipher（桌面默认本机加密 machine.key，261201）加密落盘，
  * exportS3SettingsRow 绝不解密成明文（A2 恢复 seed 密文直通）。
  */
 export class SettingsRepository {
@@ -62,15 +62,15 @@ export class SettingsRepository {
   }
 
   saveS3Settings(settings: S3Settings): void {
-    // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；**不可用时 fail-closed 抛错，绝不退回明文**
-    // （实现见 electron/secretCipher.ts 的 encrypt()：safeStorage 不可用/后端 basic_text 一律拒绝保存）
+    // 密钥用本机加密（AES-256-GCM + machine.key）加密落盘；**绝不退回明文**（261201 裁决，
+    // 防误读非安全边界；实现见 electron/secretCipher.ts，钥匙文件不可写才拒绝保存）
     const stored = { ...settings, secretAccessKey: this.encryptSecret(settings.secretAccessKey) };
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify(stored));
   }
 
   /**
-   * AI 设置（P0）：apiKey 用同一个 SecretCipher 加密落盘（safeStorage 不可用时 fail-closed）。
+   * AI 设置（P0）：apiKey 用同一个 SecretCipher 加密落盘（本机加密，261201；绝不落明文）。
    * 红线：ai_settings 是**独立的 settings key**，不参与 S3/同步/任何导出路径（A2 seed 只读 s3_settings）。
    */
   getAiSettings(): AiSettings {
@@ -83,7 +83,7 @@ export class SettingsRepository {
         try {
           provider.apiKey = this.decryptSecret(provider.apiKey);
         } catch {
-          // 密文不可解（换机/Keychain 变更）：当作未配置，绝不落明文、也不阻断其它设置
+          // 密文不可解（换机/钥匙丢失）：当作未配置，绝不落明文、也不阻断其它设置
           provider.apiKey = undefined;
         }
       }

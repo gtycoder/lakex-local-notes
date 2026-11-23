@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localAssetHttpUrl } from "../src/core/assetUrl.js";
 import { createInkDoc, createInkPage, inkToBody, parseInkBody, type InkDoc } from "../src/core/inkDoc.js";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 import { INK_PDF_PRINT_CSS, buildInkPageSvg, buildInkPdfBody, inkBackgroundFitCss } from "./noteExport.js";
 
 const electronMock = vi.hoisted(() => {
@@ -117,7 +117,7 @@ describe("NoteExport 的 ink PDF 内容准备 + kind 守卫", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-ink-pdf-test-"));
     electronMock.secrets.clear();
-    store = new Store(dir, createSafeStorageSecretCipher());
+    store = new Store(dir, createLocalSecretCipher(dir));
     outDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-ink-pdf-out-"));
   });
 

@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { createLocalSecretCipher } from "./secretCipher.js";
 
 const electronMock = vi.hoisted(() => {
   const secrets = new Map<string, string>();
@@ -44,7 +44,7 @@ type RawDb = import("better-sqlite3").Database;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-fallback-nb-"));
   electronMock.secrets.clear();
-  store = new Store(dir, createSafeStorageSecretCipher());
+  store = new Store(dir, createLocalSecretCipher(dir));
 });
 
 /** 去掉所有笔记本，模拟「用户把笔记本都删了、文档成了孤儿」的兜底态。 */
