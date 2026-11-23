@@ -35,7 +35,9 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
   const [probeHint, setProbeHint] = useState<string | null>(null);
   /** 保存 = 既有 saveS3（主进程落库）→ 成功失败都由它写 syncMsg，然后关弹窗把结果留给设置页状态条。 */
   const saveS3AndClose = async () => {
-    const prev = await native.getS3Settings().catch(() => null);
+    // 预读旧配置只服务「变更才探测」判定：读不到（无桥/异常）就当 null，**绝不挡保存**（含同步抛）。
+    let prev: Awaited<ReturnType<typeof native.getS3Settings>> | null = null;
+    try { prev = await native.getS3Settings(); } catch { prev = null; }
     await saveS3();
     closeS3();
     // 功能一：endpoint/region/bucket/prefix 变更 ⇒ 限前缀重探三态，只提示不提问（探测失败不影响保存）。
