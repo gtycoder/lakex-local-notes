@@ -19,7 +19,7 @@
 - 长期焦点：同步/存储热路径的性能与健壮性、移动端编辑收口、可维护性（安全/IPC/资源服务/渲染层职责/测试覆盖/拆大文件）。**待办只看 HANDOFF §3**；先修 Critical/Warning；不在没有测试护栏时做大规模架构重写。
 - **内核（lakex）资料检索顺序**（凡涉及内核 API/配置/命令必走）：
   ⓪ vendored 源码树 `vendor/lakex-doc-react/src/**` —— **按「能力」搜**（类名族 `ne-card-*` / `ne-ui-toolbar-*`；图标 `editor-main-*`；插入面板用 `quickInput` / `slash` / `cardSelect`，`insert-panel` 在 bundle 里 0 命中），别只盯运行时 bundle。⚠️ vendor 的 **React 包装层**（`LakexEditor` / `SvgIcon` / `ImageToolbar` / `BookmarkToolbar`）只挂在 `LakexEditor` 上，而我们直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）⇒ **该层从不运行**；`BlockHoverHandle` 是唯一自挂例外。按能力找，不要按调用栈找。
-  ① **官方出处优先** `docs/lakexEditor-developer-docs/`（75 篇官方镜像：47 通用配置 / 07 API 与事件 / 08 命令列表 / 48 envAdapter / 65 大纲 …）：先确认官方有没有该能力与语义，有就走官方途径，别反编译猜用法、别写私有 hack。
+  ① **官方出处优先** `docs/lakexEditor-developer-docs/`（75 篇官方镜像）：先确认官方有没有该能力与语义，有就走官方途径，别反编译猜用法、别写私有 hack。
   ② **本项目契约** `docs/LAKEX-CONTRACT.md`（已核实行为 + 调试速查）：**新观测必须回填此处**，别只留在 HANDOFF 或代码注释。
   ③ **源码字典** `lake-editor-main/`（第三方 VSCode 插件）、`lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。**最终仲裁 = vendor bundle + 运行时实测**（冲突以实测为准）。
 - 内核 vendored 并 pin（v1.99.0）：**不要随意升级**；必须改行为按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改；**不清理依赖侧冗余/未用路径/死代码**（不要再提议）。
@@ -78,7 +78,7 @@
 
 ## 4. 关键机制速览
 
-- **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json` + 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。深度清理 = 列举对象与当前 pointer/索引/声明对比删孤儿（`deepCleanup`）。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`（v4 编排内核 `src/core/s3v3/commit/*` + 单 DeviceStore，261029 收口）；适配器 `electron/s3v3/*`、`src/mobile/v3/*`。
+- **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json` + 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。深度清理 = 列举对象与当前 pointer/索引/声明对比删孤儿（`deepCleanup`）。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`（v4 编排内核 `src/core/s3v3/commit/*` + 单 DeviceStore，261029 收口）；适配器 `electron/s3v3/*`、`src/mobile/v3/*`。迁移零基线 = 合成 bootstrap 合并底稿走三方合并（`docs/PORTABLE-TRANSFER.md` §3.1），**绝不落拉全轮**（会物删小记/假删文档）。
 - **冲突判定 = 内容/位置/锁三套独立三方合并**（`core/s3v3Decision.ts` + `s3v3Merge.ts` + `s3v3/plan/positionMerge.ts`）：base×local×remote；内容顺序 = 恢复标记 → 本地删除意图 → 缺席/新增 → contentHash（位置/锁见 §3#23/#24、`SYNC-PROTOCOL.md` §9.5/§9.8）；远端已发布 ⇒ 远端胜，被覆盖版本先 `createHistorySnapshot`；设备基线 `sync-v3/baseline.json.gz`（**移动 = `sync-v3/baseline.json.gz.b64` 文件**；`sync_v3_state` 行只存意图/信封）**绝不上传**。`folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列。v3 资产按每文档声明差集并发传输（`runPool`，并发 12）；上传失败的笔记本轮不进新索引。
 - **macOS 应用菜单**：只 darwin 装，role 打底 + 中文 label；「设置…（⌘,）」只 `webContents.send(open-settings)`（主进程不造窗口）；标题取 bundle `CFBundleName`（`app.setName` 改不了）；**不做**多窗口切菜单/自定义热键/i18n。
 - **壳层双 origin**：打包版 = `lakexlocalnotes://app`（`appOrigin.ts`/`appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 恒为 `null`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产白名单/ACAO 同时放行 `APP_ORIGIN`。**主进程 external 从 dependencies 派生**（+`@smithy/`），别写死清单。
@@ -191,7 +191,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px、内核可能翻到 caret 上方）：`max-height`+`overflow-y:auto`+改锚点（内核写行内样式，只能 `!important`），落点 `src/mobile/mobile.css`（`body.lake-mobile`）。
 17. **程序化 focus 不弹软键盘**（无用户手势时）：`ShowKeyboardPlugin` + `native/nativeKeyboard.ts`；只有无手势入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须无键盘态）。
 18. **重依赖（内核/usheet/画板）不许进入口静态图**：一旦静态 import，入口挂 40+ 条 `modulepreload`，冷启动先拉解析才画首页。**后台工作排到首屏之后**：冷启动同步 = 就绪后第一段空闲；内核预热 = 就绪 4s 后（`requestIdleCallback` 的 timeout 只是上限）。判据探针 `boot-timeline.mjs`。
-19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器 `adb shell input tap/swipe` 不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（CSS px）；手势用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
+19. **设备级点按优先 CDP `Input.dispatch*`**（261123 复核：新镜像 AVD 上 `adb shell input tap` 实测可用，但以当前设备实测为准；`keyevent` 正常）：坐标取 `getBoundingClientRect()`（CSS px）；手势用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
 20. **容器级手势别用 `setPointerCapture`**：捕获会把 mousedown/up 与合成 click 目标重定向 ⇒ 子按钮 `onClick` 全失效。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那次**吞掉随后的 click**。
 
 ### 壳层 / 渲染

@@ -7,6 +7,15 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261123 · 六线并发批（Windows 顶栏 / usheet 行高 / 移动 dock 三修 / 迁移矩阵+bootstrap 基线 / 规模口径 / 设置文案；未发版，v1.5.6 之后）**：
+  - **Windows 融合标题栏**（`ae0c0399`）：win32 去掉系统标题栏+默认菜单栏两层（顶栏即标题栏：原生窗口按钮 overlay、拖拽/双击最大化、菜单只藏视觉保快捷键）；窗口选项抽 `electron/mainWindowOptions.ts` 纯函数（themes glue 测试钉配色）；附件预览右侧让位连带修。**真机 Windows 待验收**（本机出的是 win-arm64 包；用户机器 arch 待确认）。
+  - **usheet 自动行高持久化**（`6d43c71b`）：根因 = 内核 RowManager 对 ia=1 行渲染高度取 `rowData.ah` 缓存、打开从不重算（ba9c2434「删 ah」删掉了渲染高度载体）⇒ 修 = ah 随正文持久化 + 打开期视图层自愈（`usheetAutoHeightHeal`，不标脏）+ `usheetAutoHeightOnlyDiff`（ah-only 不算内容改动，「打开=只读」保持）；移动同款接线。
+  - **移动 dock 三修**：① 加密卡插表情吞卡（`f9011fcd`）：内核 insertAtSelection「非折叠选区被替换」官方语义 + 卡内 textarea 焦点被内核宿主抢走 ⇒ fieldInsert 输入面优先 / insertGuard 卡片保护区 / IME 谁聚焦抑制谁，小记写作卡同接；② 工具栏撤销/重做首屏不可见（8×49 定宽 > 335 滚动区回归）⇒ 49 上限 + 36 地板；③ 媒体/表格插入吞卡（`dd0c7847`）insertFiles/table 同接保护区。**已知边界**：小记「图片」为内核内置工具项无入口可拦（LAKEX-CONTRACT §5.63）。
+  - **迁移矩阵 + 同步**（`bec9bd47`/`906119f7`/`22863157`/`600350cb`/`0e192161`）：**合并底稿基线（bootstrap）**——零基线导入合成「导出时刻快照」当三方合并 base，首同步血缘对齐走正常合并（增量/删除传播/导入后新建上传不丢；真丢失安全中止保留；不动 wire；中招设备重导即修复）。真桶+设备 UI 级 E2E 四步路径 PASS（截图 `/tmp/lake-e2e-shots/`）。审计修复：坏基线**五路统一**「合成+警告」（旧桌面两路落拉全轮 = 小记物删/文档假删除面已封）、换位崩溃恢复 pending、契约写实（顺序边界 = 导出端先上云→导入端再同步）。**两 P0 闭环**：换位失败 catch 递归删原工作区、秒级隔离名撞名（it.fails 复现钉已翻正常驻护栏）。`stageFromPath` Kotlin 验缝。
+  - **规模口径（用户裁决）**：测试规模 = **5k 文档 / 1 万附件**；全仓「2 万文档 / 20 万附件」表述清除（`9525272b`）。规模/对抗批（`0b35dfc1`）7 文件 49 例：往返一致 / 行映射 5 万行 37ms / ZIP64 66k / 真桶 135 对象；对抗 30 例全拒（zip-slip/CRC/恶意清单）；P3 现状钉住 4 项。
+  - **设置文案精简**（`c62e11b5`）：两端约 70 处改「一句话讲清控制什么/能做什么」，删过程性解释（安全边界只砍过程不砍后果）；settingsSearch 未动名称无需变更。**S3 表单重开不水合**修复（`40dc636a`）：页面级水合信号 + 留空沿用已存值。
+  - 门禁（15:30 收口实测）：全量 vitest **1117 文件 / 0 failed**；tsc 双 0；ui-metrics 0；check:core 184/0；check:mobileui 过；check:bundle+arch PASS（desktop 580,130/592,000、mobile 341,446/345,000、entry 44,104/46,000）；git diff --check 0。共 14 提交（ae0c0399…40dc636a）。
+
 - **261122 · 大统一迁移包 v2（各端互导；规格 = docs/PORTABLE-TRANSFER.md 重写版）**：
   - **用户裁决**：一份 `.zip.lln` 各端互导（未来 iPhone 复用移动布局）；上限**维持 4GiB**；**历史快照不进导入导出**（连 note_history 索引行都清）；**AI 会话不随包**；草稿/画板素材随包；密钥不随包（配好 S3 即增量——包内带同步基线）；不写 v1 兼容（formatVersion **2**）。
   - **格式层**：`core/portable/portableFormat.ts` = 清单唯一校验器（layout↔platform 配对、无 hasHistory）；移动 `MobileSnapshotManifest` 第二方言删除；as* 助手上移 `core/portableRows.ts`（R4 禁 electron→src/mobile）。
@@ -667,6 +676,13 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261123 · 六线并发批基线（未发版；v1.5.6 之后）**
+
+- 14 提交（61967f18..HEAD）：ae0c0399 Windows 顶栏 / 6d43c71b usheet 行高 / bec9bd47 bootstrap 核心 / b1d0e30d 触点登记 / f9011fcd dock 两 bug / 906119f7 整库目录+真桶集成 / 22863157 stageFromPath / 9525272b 规模口径 / dd0c7847 P1-B / 600350cb 审计修复批 / 0b35dfc1 规模对抗测试 / 0e192161 两 P0 闭环 / c62e11b5 设置文案 / 40dc636a S3 表单水合。
+- 门禁实测：全量 vitest 1117 文件 0 failed；tsc 双 0；ui-metrics 0（!important 9 = 清单）；check:core 184/0；check:mobileui 过；check:bundle+arch PASS（desktop 580,130/592,000、mobile 341,446/345,000、entry 44,104/46,000、preload 12/12）；git diff --check 0。
+- 规模/对抗测试新增门控层：对抗 3 文件并入日常全量（<1s）；规模 3 文件 `LLN_SCALE=1` 门控（~10s）；真桶 `LLN_SCALE=1 S3V3_IT=1` 双门控（凭据走 env）。
+- 视觉快照未跑（本批含约 70 处文案变化 ⇒ 设置屏快照指纹可能红，发版前全量快照按「文案批」归因重烤）。Android debug 包为 261123 中段构建（含 dock 修复）；Windows 包未重打（待用户确认 arch）。
+
 **261122 · 大统一迁移包批基线（未发版；v1.5.4 之后）**
 
 - 起点 = `master` @ `4b816b63`；本批全部门禁见 §0 记录（全量 vitest 1089 文件 / 6913 例 0 failed；双端 build + check:arch/check:bundle PASS；ui-metrics 0；tsc 0）。
@@ -847,6 +863,20 @@
 ## 3. 待办（唯一待办清单）
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+
+**261123 六线并发批待办**
+
+- **Windows 真机验收**（顶栏融合）：先确认用户机器 arch（x64/ARM）再出对应安装包；验收 8 步 = 顶栏单层/拖拽双击最大化/按钮不被三键遮/主题跟随/F11 全屏/附件预览关闭可点/快捷键/贴靠（清单在 ae0c0399 交付简报）。
+- **真机（小米）点收**（模拟器已验）：卡内打字插表情不吞卡、工具栏 ↶↷ 可见可点、整卡选中插图/插表出提示且卡完好、表格行高重开保持、S3 表单重开水合。
+- **移动→移动双 AVD 设备级矩阵格**：管线级已 PASS（重导收敛即其语义核心），设备级待补（磁盘充足可起 lake_sync2）。
+- **multi-end「迁入迁出后同步」固化**：按 bootstrapMigration.s3.integration 同款套路补 2 个真桶集成测试（桌面两路迁后同步）。
+- **P2-B 大规模缺席保护待用户裁决**：现契约 = 顺序约束（导出端先上云→导入端再同步）；要加保护（首同步大规模缺席时拒绝自动删除待确认）需改同步语义+测试。
+- **P3×4 现状钉住**（portable 对抗测试注释内有细节）：counts 不对照 / 条目名 UTF-8 字节数 / mapDesktopTree 去重 / 穿越名静默跳过 warning。it3 抖动观察项（疑测试基建：saveV3State 默认基线路径 + testSetup BodyStore 重置；断言已埋自诊断）。
+- **小记「图片」内核内置工具项吞卡边界**（LAKEX-CONTRACT §5.63）：无我方可拦入口，需探索内核配置层；桌面媒体链接 insertGuard 接线 + insertBlockedNotifier 桌面宿主提示接线（通道已留）。
+- **guide 同步清单（设置文案批）**：guide/12 备份与恢复、S3 配置页/第三方说明、AI 助手、空间开关、附件上限、更新中心的长说明句已变短——正文逐字引用需换新句（截图按惯例「以界面为准」）。
+- **设置屏快照指纹**：文案变化可能致设置屏快照红，发版前全量快照按「文案批」归因重烤（本批纯文案无几何改动）。
+- settings 待确认 3 条（低风险已删）：思考强度「默认 high」、浏览器端行为差异说明、自动备份 6h 节奏说明；移动 save() 只回写 endpoint/region 两字段的小统一（settings-copy 观察项）。
+- **AGENTS §7#19 复核**：lake_sync（emulator-5558）上 `adb shell input tap` 实测可用，与既有记载不符——按实测更新记载（见 AGENTS 该条 261123 注）。
 
 **261122 大统一迁移包批待办**
 
