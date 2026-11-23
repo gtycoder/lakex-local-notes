@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 import Database from "better-sqlite3";
 import { replaceWorkspaceWith, restoreWorkspaceMirror, type MirrorRestoreFsOps } from "./workspaceBackup.js";
 
@@ -61,6 +62,34 @@ describe("restoreWorkspaceMirror（A3 整库导入：目录模式）", () => {
     const quarantinePath = result.quarantinePath!;
     expect(fs.readFileSync(path.join(quarantinePath, "notes", "old.lake"), "utf8")).toBe("<p>old</p>");
     expect(fs.readFileSync(path.join(quarantinePath, "metadata.sqlite3"), "utf8")).toBe("OLD-LIVE-DB");
+  });
+
+  it("261123：备份无云端基线（源端从未配 S3）⇒ 恢复后合成「合并底稿」基线", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lake-mirror-"));
+    const backup = makeBackupDir(tmp);
+    const ws = makeWorkspace(tmp);
+    const result = restoreWorkspaceMirror({ backupDir: backup, workspaceRoot: ws });
+    expect(result.ok).toBe(true);
+    // 与便携包两条导入路线同口径（docs/PORTABLE-TRANSFER.md §3.1）：bootstrap 底稿 + 谱系留空。
+    const gz = path.join(ws, "sync-v3", "baseline.json.gz");
+    expect(fs.existsSync(gz)).toBe(true);
+    const parsed = JSON.parse(gunzipSync(fs.readFileSync(gz)).toString("utf8")) as { bootstrap?: boolean; epoch: string };
+    expect(parsed.bootstrap).toBe(true);
+    expect(parsed.epoch).toBe("");
+  });
+
+  it("备份自带云端基线 ⇒ 原样保留、不合成", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lake-mirror-"));
+    const backup = makeBackupDir(tmp);
+    fs.mkdirSync(path.join(backup, "sync-v3"), { recursive: true });
+    const real = { epoch: "e-1", generation: 2, lakeCommit: "lc", quickNotesCommit: "qc", lake: { notes: [] }, quickNotes: { items: [] } };
+    fs.writeFileSync(path.join(backup, "sync-v3", "baseline.json.gz"), gzipSync(Buffer.from(JSON.stringify(real))));
+    const ws = makeWorkspace(tmp);
+    const result = restoreWorkspaceMirror({ backupDir: backup, workspaceRoot: ws });
+    expect(result.ok).toBe(true);
+    const parsed = JSON.parse(gunzipSync(fs.readFileSync(path.join(ws, "sync-v3", "baseline.json.gz"))).toString("utf8")) as { epoch: string; bootstrap?: boolean };
+    expect(parsed.epoch).toBe("e-1");
+    expect(parsed.bootstrap ?? false).toBe(false);
   });
 
   it("旧备份无小记库：仍可恢复，quickNotesRestored=false", () => {

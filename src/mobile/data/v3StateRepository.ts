@@ -14,6 +14,8 @@ export interface MobileV3Baseline {
   quickNotesCommit: string;
   lake: LakeIndex;
   quickNotes: QuickNotesIndex;
+  /** 便携包零基线迁移的「合并底稿」标记（261123，docs/PORTABLE-TRANSFER.md §3.1）；与 core DeviceBaseline 同步。 */
+  bootstrap?: boolean;
 }
 
 /**

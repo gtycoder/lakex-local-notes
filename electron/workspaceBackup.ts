@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import { inspectBackupDatabase, inspectQuickNotesDatabase } from "./workspaceRestoreFromBackup.js";
+import { buildBootstrapBaselineFromDesktopWorkspace, writeBootstrapBaselineGz } from "./portable/bootstrapFromWorkspace.js";
 
 const SQLITE_BASENAMES = new Set(["metadata.sqlite3", "metadata.sqlite3-wal", "metadata.sqlite3-shm"]);
 
@@ -190,6 +191,15 @@ export function restoreWorkspaceMirror(options: MirrorRestoreOptions): MirrorRes
       ops.mkdirSync(freshRoot, { recursive: true });
       for (const entry of ops.readdirSync(backupDir)) {
         ops.cpSync(path.join(backupDir, entry.name), path.join(freshRoot, entry.name));
+      }
+      // 261123（docs/PORTABLE-TRANSFER.md §3.1）：备份里没有云端基线（源端从未配过 S3）⇒ 合成「合并底稿」基线，
+      // 与便携包两条导入路线完全同口径（配好 S3 后首同步走三方合并，不走拉全轮）。合成失败不阻断恢复。
+      try {
+        if (!fs.existsSync(path.join(freshRoot, "sync-v3", "baseline.json.gz"))) {
+          writeBootstrapBaselineGz(freshRoot, buildBootstrapBaselineFromDesktopWorkspace(freshRoot));
+        }
+      } catch (error) {
+        console.warn("[workspace-backup] 合成合并底稿基线失败（按无基线恢复）", error);
       }
     },
   });
