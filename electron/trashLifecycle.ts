@@ -144,11 +144,11 @@ export class TrashLifecycle {
         // restore_pending_at 一并清除：恢复后未同步再删除，残留标记会以"恢复语义"上传（trashedAt:null）
         // 导致本地删除不传播、云端复活（与 applyRemoteMoveToTrash/applyRemoteRestore 同口径清理）。
         this.ctx.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL AND trashed_at IS NULL"
         ).run(this.ctx.trashNotebookId, now, node.parentId, now, node.noteFileId);
       }
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL AND trashed_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, node.parentId, now, id);
       // 级联：子树所有节点（嵌套分组 + 笔记/文档下的多级子文档）跟随根进回收站——trashed_at 必须标上，
       // 否则同步发布时子树按"正常"传播，其他端不跟随删除（内容"没删掉"、根恢复/删除语义不一致）。
@@ -162,7 +162,9 @@ export class TrashLifecycle {
           // F-01（P0）：子树每个节点都要记「删除前原始父」。只记根节点会让同步把子文档 parent 扁平化后
           // **原始父链彻底丢失** ⇒ purge 无法按 deleted_from_parent_id 找到后代（子文档漏删、云端索引残留）。
           this.ctx.db.prepare(
-            `UPDATE tree_nodes SET trashed_at=?,updated_at=?,is_dirty=1,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${ph}) AND deleted_at IS NULL`,
+            // 261124 B6（审计④F3）：已 trashed 的后代**不动**（缺这把守卫会覆写删除时刻/updatedAt ——
+            // 90 天过期钟被重置，updatedAt 推新还可能压掉他端并发恢复的 LWW 判据）。
+            `UPDATE tree_nodes SET trashed_at=?,updated_at=?,is_dirty=1,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${ph}) AND deleted_at IS NULL AND trashed_at IS NULL`,
           ).run(now, now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
@@ -170,7 +172,7 @@ export class TrashLifecycle {
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
           this.ctx.db.prepare(
-            `UPDATE notes SET trashed_at=?,updated_at=?,is_dirty=1,restore_pending_at=NULL,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${nph}) AND deleted_at IS NULL`,
+            `UPDATE notes SET trashed_at=?,updated_at=?,is_dirty=1,restore_pending_at=NULL,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${nph}) AND deleted_at IS NULL AND trashed_at IS NULL`,
           ).run(now, now, ...batch);
         }
       }
@@ -255,15 +257,17 @@ export class TrashLifecycle {
         parentId = ensureDiaryGroupsForRestore(this.ctx.db, this.ctx.createGroup, diaryRestore.notebookId, diaryRestore.title);
       }
       if (node.note_file_id) {
+        // 261124 B4（审计④F1/F6）：恢复 = local-wins 显式例外 ⇒ 根行写 restore_pending（下轮上传覆盖）+
+        // 清「云端已删除（仅本地）」标（与 quick 侧恢复同语义，否则 settleCloudDeleted 永不失效）。
         this.ctx.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=? WHERE id=?"
+          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=?,cloud_deleted=0 WHERE id=?"
         ).run(parentId, now, now, node.note_file_id);
         const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
         const caches = this.ctx.readNoteCaches(node.note_file_id);
         this.ctx.upsertSearch(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
       }
       this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0 WHERE id=?"
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0 WHERE id=?"
       ).run(parentId, now, id);
       // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复。
       // F-01 复核（task-62）：子树集合与 purge 同口径（parent 链 ∪ 被同步扁平化的 trashed 后代的 dfp 链）；
@@ -276,7 +280,7 @@ export class TrashLifecycle {
         for (const batch of sqlParameterBatches(subtreeIds)) {
           const ph = batch.map(() => "?").join(",");
           this.ctx.db.prepare(
-            `UPDATE tree_nodes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`,
+            `UPDATE tree_nodes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,cloud_deleted=0 WHERE id IN (${ph}) AND deleted_at IS NULL`,
           ).run(now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
@@ -284,9 +288,18 @@ export class TrashLifecycle {
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
           // F-01 复核：notes 行同样回原父（扁平化子文档）。非扁平化行 COALESCE 保持原父，行为不变。
+          // 261124 B4（审计④F1）：**子树 notes 同样写 restore_pending + 清 cloud_deleted** ——
+          // 旧实现只给根写 ⇒ 远端缺席（基线有）时下一轮把子文档移回回收站，恢复被静默回滚。
           this.ctx.db.prepare(
-            `UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1 WHERE id IN (${nph}) AND deleted_at IS NULL`,
-          ).run(now, ...batch);
+            `UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,restore_pending_at=?,cloud_deleted=0 WHERE id IN (${nph}) AND deleted_at IS NULL`,
+          ).run(now, now, ...batch);
+        }
+        // 261124 B7（审计④F4）：恢复后子树文档**全部**回填搜索（删除是整树移出 FTS，恢复不能只回填根 ——
+        // 旧实现子树文档恢复后搜不到，与移动 reconcileIndex 口径不一致）。
+        for (const nid of subNoteIds) {
+          const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(nid) as { title: string } | undefined;
+          const caches = this.ctx.readNoteCaches(nid);
+          this.ctx.upsertSearch(nid, titleRow?.title ?? "", caches.plain ?? null);
         }
       }
       // F-10/D4（261113）：恢复 = 撤销本地删除 ⇒ 退役本次恢复涉及的「未结算」墓碑（purged_at IS NULL）。

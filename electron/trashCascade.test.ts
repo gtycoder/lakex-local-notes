@@ -76,6 +76,54 @@ function buildNestedFixture(): Fixture {
   return { store, nb: nb.id, groupA: groupA.id, groupB: groupB.id, docRoot: docRoot.id, childDoc: childDoc.id, grandDoc: grandDoc.id, sibling: sibling.id };
 }
 
+describe("261124 B4/B6/B7：恢复收尾与级联时间戳（审计④F1/F3/F4）", () => {
+  it("B4：恢复根节点时子树 notes 也写 restore_pending + 清 cloud_deleted（远端已 purge 时恢复不被下轮回滚）", () => {
+    const f = buildNestedFixture();
+    f.store.deleteTreeNode(f.groupA);
+    // 模拟「云端已删除（仅本地）」打标（远端 purge 传播落的标）
+    withRawDb((db) => {
+      db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id IN (?,?,?)").run(f.docRoot, f.childDoc, f.grandDoc);
+      db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE id IN (?,?,?,?)").run(f.groupA, f.groupB, f.docRoot, f.childDoc);
+    });
+    f.store.restoreTrashItem(f.groupA);
+    const rows = withRawDb((db) => db.prepare(
+      "SELECT id, restore_pending_at, cloud_deleted FROM notes WHERE id IN (?,?,?)",
+    ).all(f.docRoot, f.childDoc, f.grandDoc) as Array<{ id: string; restore_pending_at: string | null; cloud_deleted: number }>);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      // 旧实现只给根写 restore_pending ⇒ 远端缺席（基线有）下轮把子文档移回回收站，恢复被静默回滚
+      expect(row.restore_pending_at, row.id + " 缺 restore_pending").toBeTruthy();
+      expect(row.cloud_deleted, row.id + " cloud_deleted 未清 ⇒ 「云端已删除」徽标永不失效").toBe(0);
+    }
+    const treeRows = withRawDb((db) => db.prepare(
+      "SELECT cloud_deleted FROM tree_nodes WHERE id IN (?,?,?,?)",
+    ).all(f.groupA, f.groupB, f.docRoot, f.childDoc) as Array<{ cloud_deleted: number }>);
+    for (const row of treeRows) expect(row.cloud_deleted).toBe(0);
+  });
+
+  it("B6：级联删除不覆写已 trashed 后代的删除时刻/updatedAt（90 天钟与 LWW 输入不被改写）", () => {
+    const f = buildNestedFixture();
+    f.store.deleteTreeNode(f.childDoc); // 先单独删子文档：记自己的删除时刻
+    const before = withRawDb((db) => db.prepare("SELECT trashed_at, updated_at FROM tree_nodes WHERE id=?").get(f.childDoc) as { trashed_at: string | null; updated_at: string });
+    expect(before.trashed_at).toBeTruthy();
+    f.store.deleteTreeNode(f.groupA); // 再删祖先（级联）—— 已 trashed 的后代不得被重写
+    const after = withRawDb((db) => db.prepare("SELECT trashed_at, updated_at FROM tree_nodes WHERE id=?").get(f.childDoc) as { trashed_at: string | null; updated_at: string });
+    expect(after.trashed_at).toBe(before.trashed_at); // 旧实现被改成 now ⇒ 过期钟重置
+    expect(after.updated_at).toBe(before.updated_at); // 且 updatedAt 推新可能压掉他端并发恢复（LWW）
+  });
+
+  it("B7：恢复整棵子树后子树文档都回到搜索（删除清整树，恢复不能只回填根）", () => {
+    const f = buildNestedFixture();
+    f.store.deleteTreeNode(f.groupA);
+    expect(f.store.searchNotes("孙文档")).toHaveLength(0);
+    f.store.restoreTrashItem(f.groupA);
+    // 旧实现只对根 upsertSearch ⇒ 子树文档恢复后搜不到（移动有 reconcileIndex，桌面漏）
+    expect(f.store.searchNotes("孙文档").map((r) => r.id)).toContain(f.grandDoc);
+    expect(f.store.searchNotes("子文档").map((r) => r.id)).toContain(f.childDoc);
+    expect(f.store.searchNotes("根文档").map((r) => r.id)).toContain(f.docRoot);
+  });
+});
+
 describe("261114 级联软删：带子级/多级子级的删除", () => {
   it("删分组：整棵多级子树（分组+子分组+多级文档）一起进回收站，可整棵恢复", () => {
     const f = buildNestedFixture();
