@@ -4,12 +4,12 @@ import type { SyncWarning, SyncWarningKind } from "./sharedTypes.js";
 
 /**
  * 同步 warning 文案单一来源（261112 UI 审计 17 P1）：
- * ① 7 个 kind 全覆盖；② retryable=false 的三类不写「下次同步会重试」；③ 摘要/排序/标题回退稳定。
+ * ① 全部 kind 全覆盖；② retryable=false 的三类不写「下次同步会重试」；③ 摘要/排序/标题回退稳定。
  */
-const KINDS: SyncWarningKind[] = ["remote_incomplete", "asset_missing", "local_body_missing", "body_suspicious_external_change", "local_body_restored", "asset_kept_remote", "asset_invalid_name", "apply_skipped", "conflict_kept_history"];
+const KINDS: SyncWarningKind[] = ["remote_incomplete", "asset_missing", "local_body_missing", "body_suspicious_external_change", "local_body_restored", "asset_kept_remote", "asset_invalid_name", "apply_skipped", "conflict_kept_history", "cycle_parent_rejected"];
 
 describe("syncWarningText（同步 warning 文案单一来源）", () => {
-  it("7 个 kind 全覆盖，label/hint 非空且不含中点", () => {
+  it("全部 kind 全覆盖，label/hint 非空且不含中点", () => {
     expect(Object.keys(SYNC_WARNING_COPY).sort()).toEqual([...KINDS].sort());
     for (const kind of KINDS) {
       const copy = syncWarningCopy(kind);
