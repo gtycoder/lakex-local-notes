@@ -65,9 +65,12 @@ describe("目标身份比较 sameSyncTargetKey（261124：忽略 region）", () 
     expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), "")).toBe(false);
     expect(sameSyncTargetKey("a\u0000b", "a\u0000b\u0000c\u0000d")).toBe(false);
   });
-  it("⑤P3-1：两个同样截断的短键不得自匹配（旧实现 undefined==undefined 互判同目标）", () => {
-    expect(sameSyncTargetKey("a\u0000b", "a\u0000b")).toBe(false);
-    expect(sameSyncTargetKey("https://s3.x.com", "https://s3.x.com")).toBe(false);
+  it("⑤P3-1：截断短键判据 —— 同一字符串恒同目标；不同短键互判不等（缺段对齐不再互认）", () => {
+    // 同一字符串 = 同一记录目标（基线盖章/闸门自比；首轮「一律不等」曾打断 ask-once 闸门）
+    expect(sameSyncTargetKey("a\u0000b", "a\u0000b")).toBe(true);
+    // 不同截断键不得经缺段对齐互判同目标（旧 undefined==undefined 洞）
+    expect(sameSyncTargetKey("a\u0000b", "a\u0000c")).toBe(false);
+    expect(sameSyncTargetKey("a\u0000b", "a\u0000b\u0000x")).toBe(false);
     expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), key("https://s3.x.com", "r", "b", "p"))).toBe(true); // 完整键照常
   });
 });

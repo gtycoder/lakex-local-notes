@@ -39,8 +39,10 @@ export function sameSyncTargetKey(a: string | undefined | null, b: string | unde
   const parts = (k: string) => k.split("\u0000").map((x) => x.trim());
   const pa = parts(a);
   const pb = parts(b);
-  // 261124 ⑤P3-1：不足三段的**截断键**不得互判「同目标」——pick 对缺段按 undefined 比较，
-  // 两个同样截断的键会自匹配（换桶保护的输入被静默放行）。
+  // 261124 ⑤P3-1：不足三段的**截断键**只在「同一字符串」时判同目标——pick 对缺段按 undefined
+  // 比较，不同截断键会经缺段对齐互判「同目标」（换桶保护输入被静默放行）。同一字符串恒同目标
+  // （基线盖章/闸门「同 targetKey」自比语义；首轮把短键一律判不等曾打断 ask-once 闸门，勿回退）。
+  if (a === b) return true;
   if (pa.length < 3 || pb.length < 3) return false;
   // 四段式 [endpoint, region, bucket, prefix]；三段式无 region。endpoint 小写归一、prefix 去首尾 /（与 targetKeyOf 同口径）。
   const norm = (v: string | undefined, kind: "ep" | "rest") => {
