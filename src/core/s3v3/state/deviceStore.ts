@@ -787,8 +787,20 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if (stagedMoves.length > 0) await p.moveStagedBodyFiles?.(stagedMoves);
     await p.flushWriteBatch?.();
 
+    const bodyUnreadable: string[] = [];
     for (const cur of current.values()) {
       if (wanted.has(cur.id)) continue;
+      // 261124 A3（审计②P1-4）：收敛删除前必须区分「行真不该在」与「正文暂不可读」——
+      // 桌面 listNotesSyncMeta 恒空 content_hash、loadState 靠文件现算，stat/read 失败（缺正文/
+      // 瞬时 IO，FileDriver 吞错误）会丢行 ⇒ 旧收敛把这些行连子树拖进回收站（桌面 deleteNote=
+      // deleteTreeNode 级联；移动还误打「云端已删除」标）。缺正文 ≠ 删除（RESILIENCE 口径）：
+      // 正文读不出的行**不动**，进正文恢复队列（引擎下轮从云端拉回）。
+      const probe = await files.read(p.noteBodyPath(cur.id));
+      if (!probe) {
+        hashCache.delete(cur.id);
+        bodyUnreadable.push(cur.id);
+        continue;
+      }
       hashCache.delete(cur.id);
       // I0（桌面）：收敛阶段「不在本轮状态」的行只软删（进回收站），禁止在同步路径上做不可恢复删除。
       // 移动旧语义不同：写 deleted_notes 墓碑 + 删行（删除传播）。由端口能力表达，不在 core if(platform)。
@@ -796,6 +808,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         if (p.purgeLocalNote) await p.purgeLocalNote(cur.id);
         else await p.deleteNote(cur.id);
       } catch { /* 已不在 */ }
+    }
+    if (bodyUnreadable.length > 0) {
+      await p.markBodyRecoveryPending(bodyUnreadable);
+      for (const id of bodyUnreadable) {
+        deps.log?.("[sync][converge][warn] 正文暂不可读，跳过收敛删除并登记恢复：" + id);
+        deps.onApplyWarning?.({ code: "local_body_missing", space: "lake", id, detail: "收敛阶段跳过删除（正文缺失/IO 抖动），已登记正文恢复" });
+      }
     }
 
     await saveQuickNotes(state);

@@ -376,6 +376,50 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(applied.trashedAt).toBe("T5");
   });
 
+  it("A3：正文不可读的行不得被收敛删除（瞬时 IO/缺正文 ⇒ 进正文恢复队列，不进回收站）", async () => {
+    // 桌面 listNotesSyncMeta 恒空 content_hash ⇒ loadState 靠文件现算；stat/read 失败丢行 ⇒
+    // 收敛循环把「行还在、正文暂不可读」当「不该在」连子树拖进回收站（deleteNote=deleteTreeNode 级联）。
+    const files = memoryFiles(); // 不放 bodies/n1.lake
+    const platform = memoryPlatform({ notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: "", kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null }] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    expect(platform.calls).not.toContain("deleteNote:n1"); // 绝不收敛删除
+    expect(platform.calls).toContain("markBodyRecoveryPending:n1"); // 进正文恢复队列
+  });
+
+  it("A3 对照：正文可读的行不在状态里 ⇒ 收敛删除照常（删除语义不回归）", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body-a") });
+    const platform = memoryPlatform({ notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: "", kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null }] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    expect(platform.calls).toContain("deleteNote:n1");
+    expect(platform.calls).not.toContain("markBodyRecoveryPending:n1");
+  });
+
   it("quick 缺失三态（C-3 第 4 处漂移）：purge / baseline 内→软删打标 / 从未同步→软删（261124 A1 绝不物删，discardQuickNote 不再被清扫调用）", async () => {
     const files = memoryFiles();
     const platform = memoryPlatform({
