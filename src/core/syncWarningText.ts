@@ -60,6 +60,12 @@ export const SYNC_WARNING_COPY: Record<SyncWarningKind, SyncWarningCopy> = {
     hint: "这篇两端都改过；已保留你的版本（历史快照），当前显示云端版本。",
     retryable: false,
   },
+  // 261124 ①P3-2：远端父级成环被拒（原借壳 remote_incomplete，按 kind 聚合排障误导）。
+  cycle_parent_rejected: {
+    label: "远端父级成环，已拒绝",
+    hint: "云端这条的父级关系形成环（疑似坏数据），已保留本地原父；无需处理。",
+    retryable: false,
+  },
   // task-66：单篇 apply（远端落本地）失败被跳过—— truthful：不是"远端内容不全"，是"本地这篇本轮没落地"。
   apply_skipped: {
     label: "本篇本轮未应用",

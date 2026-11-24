@@ -63,6 +63,9 @@ export function planStateOf(state: DeviceState): PlanState {
     // loadState 已把本地 purge 墓碑投影成 state.intents（含目录 id）。这里必须一并交给 plan，
     // 否则「本地已 purge + 远端 folders[] 仍有它」只会退化成 local-delete（无基线时甚至变成 download），
     // 索引条目永远清不干净（task-77）。
+    // 261124 ①P3-1：purgeIntents 与 folderPurgeIntents 同源**是有意的**（三个循环各按 id 查同一
+    // 集合）；**正确性前提 = id 全局唯一**（tree_nodes 单命名空间，note/folder/quick id 不复用）。
+    // 若未来引入跨命名空间 id 复用，必须给 intents 记录补 kind 并按类过滤（勿直接改这里）。
     folderPurgeIntents: state.intents.map((i) => i.noteId),
     quickDeletes: state.quickDeletes ?? [],
     purgedQuickIds: state.quickPurges ?? [],

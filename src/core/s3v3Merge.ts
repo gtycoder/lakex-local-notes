@@ -140,12 +140,12 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
   for (const [id] of remoteNotes) {
     if (!cyclicIds.has(id)) continue;
     parentFix.set(id, localNotes.get(id)?.parentId ?? baseNotes.get(id)?.parentId ?? null);
-    cycleWarnings.push({ code: "remote_incomplete", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
+    cycleWarnings.push({ code: "cycle_parent_rejected", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
   }
   for (const [id] of byId(remote.folders)) {
     if (!cyclicIds.has(id)) continue;
     parentFix.set(id, localFolders.get(id)?.parentId ?? baseFolders.get(id)?.parentId ?? null);
-    cycleWarnings.push({ code: "remote_incomplete", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
+    cycleWarnings.push({ code: "cycle_parent_rejected", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
   }
   const safeRemote = <T extends { id: string; parentId: string | null }>(entry: T | null): T | null => {
     if (!entry || !parentFix.has(entry.id)) return entry;

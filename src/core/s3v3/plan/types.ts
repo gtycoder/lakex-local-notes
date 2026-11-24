@@ -103,7 +103,9 @@ export interface PlanWarning {
     | "body_suspicious_external_change"
     /** 261112 task-104（F-07）：单篇 apply（远端落本地）失败被跳过、下一轮重试。**核心出这个 code**，
      *  两端不再各自把 remote_incomplete 改写成 apply_skipped。 */
-    | "apply_skipped";
+    | "apply_skipped"
+    /** 261124 ①P3-2：远端父级成环被拒（原借壳 remote_incomplete ⇒ 按 kind 聚合排障误导）。 */
+    | "cycle_parent_rejected";
   space: Space;
   id?: string;
   title?: string;

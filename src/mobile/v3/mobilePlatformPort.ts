@@ -343,6 +343,12 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
 
     // ===== 批量/生命周期钩子（C-3b-2）=====
     async beginWriteBatch(): Promise<void> {
+      // 261124 ②P3-12：旧 batch 未 flush（异常路径跳过 flushWriteBatch）就开新窗会**静默丢已排队语句** ——
+      // 先补提交再重置（正常路径 batch 已在 flush 后置空，零开销）；补提交再失败也告警出来。
+      if (batch && batch.statements.length > 0) {
+        console.warn("[mobilePlatformPort] beginWriteBatch 发现未提交批（上次 flush 被异常跳过），先补提交 " + batch.statements.length + " 条");
+        try { await this.flushWriteBatch?.(); } catch (e) { console.warn("[mobilePlatformPort] 补提交失败（语句丢失）: " + (e instanceof Error ? e.message : String(e))); }
+      }
       batch = { statements: [], legacyBodies: [], importedIds: new Set() };
     },
     async flushWriteBatch(): Promise<void> {

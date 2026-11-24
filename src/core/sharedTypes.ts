@@ -40,6 +40,8 @@ export type SyncWarningKind =
   | "asset_kept_remote"
   /** 资产文件名非法（空格/中文/超长等，无法进 S3 key）⇒ 跳过该文件、本轮继续（P1-7）。 */
   | "asset_invalid_name"
+  /** 261124 ①P3-2：远端父级成环被拒（保留本地/基线原父；原借壳 remote_incomplete 会误导排障聚合）。 */
+  | "cycle_parent_rejected"
   /** 内部 kind（**不进 wire 协议**，task-66）：单篇 apply（把远端落本地）失败被跳过，下一轮重试。
    *  与 remote_incomplete 的区别：那是"远端内容不全"，这是"本地写失败/未落地"——文案不得混用。 */
   | "apply_skipped"
