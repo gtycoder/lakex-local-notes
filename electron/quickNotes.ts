@@ -44,7 +44,8 @@ export function createUnavailableQuickNotesStore(message: string): QuickNotesSto
     listQuickNotesForSync: emptyList,
     listQuickNoteTagIds: emptyList,
     countQuickNotes: () => 0,
-    getPendingSyncSummary: () => ({ items: 0, resources: 0 }),
+    getPendingSyncSummary: () => ({ items: 0, resources: 0, tags: 0 }),
+    clearTagsPending: () => undefined, // 计数只是提示：降级静默 no-op
     getTombstonesWaterline: () => "0",
     search: emptyList,
     // 派生索引维护是幂等后台动作：降级时静默 no-op（启动对账/搜索重建不会因此报错）。

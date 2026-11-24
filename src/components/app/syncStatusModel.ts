@@ -5,6 +5,8 @@ export interface SyncStatusModelInput {
   pendingDocuments: number;
   pendingFolders?: number;
   pendingQuickNotes?: number;
+  /** 261204：标签变动（目录增删改名 + 打标）也进待同步。 */
+  pendingTags?: number;
   cloudEnabled: boolean;
   conflictSnapshotCount?: number;
 }
@@ -18,7 +20,7 @@ export interface SyncStatusModel {
 }
 
 export function buildSyncStatusModel(input: SyncStatusModelInput): SyncStatusModel {
-  const pendingTotal = Math.max(0, input.pendingDocuments + (input.pendingFolders ?? 0) + (input.pendingQuickNotes ?? 0));
+  const pendingTotal = Math.max(0, input.pendingDocuments + (input.pendingFolders ?? 0) + (input.pendingQuickNotes ?? 0) + (input.pendingTags ?? 0));
   let statusClass: SyncStatusModel["statusClass"] = "local";
   let statusLabel = "仅本地保存";
   if (!input.cloudEnabled) {

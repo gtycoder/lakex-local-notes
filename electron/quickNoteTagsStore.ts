@@ -35,6 +35,32 @@ const MANUAL_ORDER_KEY = "quick_tags_manual_order";
 const PENDING_DELETES_KEY = "tag_deleted";
 /** 一次性迁移标记：旧库「删除=墓碑」→ 新语义「删除=缺席」只跑一次。 */
 const ABSENCE_MIGRATED_KEY = "tag_absent_migrated";
+/** 261204：本地标签变动计数（目录增删改名/合并/打标）——云按钮据此显示「待同步」；成功同步清零。 */
+const TAGS_PENDING_KEY = "tags_pending";
+
+/** 本地标签变动 +1（只挂**本地用户写**；远端应用 mergeQuickTags 不计）。计数失败不阻断标签操作。 */
+export function bumpTagsPending(db: DbLike): void {
+  try {
+    const row = db.prepare("SELECT value FROM device_state WHERE key=?").get(TAGS_PENDING_KEY) as { value?: string } | undefined;
+    const next = (Number.parseInt(row?.value ?? "0", 10) || 0) + 1;
+    db.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(TAGS_PENDING_KEY, String(next));
+  } catch { /* 计数只是提示，失败不阻断 */ }
+}
+
+/** 成功同步后清零（与墓碑水线同刻；见 s3v3/desktopSync）。 */
+export function clearTagsPending(db: DbLike): void {
+  try {
+    db.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(TAGS_PENDING_KEY, "0");
+  } catch { /* 记账失败不影响同步结果 */ }
+}
+
+/** 待同步标签变动数（getPendingSyncSummary 口径）。 */
+export function readTagsPendingCount(db: DbLike): number {
+  try {
+    const row = db.prepare("SELECT value FROM device_state WHERE key=?").get(TAGS_PENDING_KEY) as { value?: string } | undefined;
+    return Math.max(0, Number.parseInt(row?.value ?? "0", 10) || 0);
+  } catch { return 0; }
+}
 
 function mapTagRow(row: QuickNoteTagRow): QuickNoteTag {
   return {

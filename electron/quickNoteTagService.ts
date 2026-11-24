@@ -13,6 +13,7 @@ import {
   type QuickNoteTag,
 } from "../src/core/quickNoteTags.js";
 import type { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
+import { bumpTagsPending } from "./quickNoteTagsStore.js";
 import type { QuickNoteTagLinksStore } from "./quickNoteTagLinksStore.js";
 
 export class QuickNoteTagService {
@@ -34,13 +35,18 @@ export class QuickNoteTagService {
   }
 
   create(name: string): QuickNoteTag {
-    return this.tags.create(name);
+    const tag = this.tags.create(name);
+    bumpTagsPending(this.db); // 261204：本地标签变动 → 云按钮「待同步」
+    return tag;
   }
 
   update(id: string, patch: { name?: string }): QuickNoteTag {
     const before = this.tags.list().find((tag) => tag.id === id)?.name;
     const tag = this.tags.update(id, patch);
-    if (before !== undefined && before !== tag.name) this.onTagNamesChanged([id]);
+    if (before !== undefined && before !== tag.name) {
+      this.onTagNamesChanged([id]);
+      bumpTagsPending(this.db); // 改名才计（同名重写不算变动）
+    }
     return tag;
   }
 
@@ -63,6 +69,7 @@ export class QuickNoteTagService {
       this.tags.addPendingDeletes([id]);
     })();
     this.onTagNamesChanged([id], noteIds);
+    bumpTagsPending(this.db); // 261204：删除标签 → 待同步
     return { updated: noteIds.length, failed: 0 };
   }
 
@@ -79,6 +86,7 @@ export class QuickNoteTagService {
       this.tags.addPendingDeletes([sourceId]);
     })();
     this.onTagNamesChanged([sourceId, targetId], noteIds);
+    bumpTagsPending(this.db); // 261204：合并标签 → 待同步
     return { updated: noteIds.length, failed: 0 };
   }
 
@@ -98,7 +106,11 @@ export class QuickNoteTagService {
     // 标签存在性校验放在协调层：关系 store 不认识目录 store（只接收已校验的 ID）。
     const tagIds = this.normalizeTagIds(rawTagIds);
     this.tags.assertExist(tagIds);
-    return this.links.setForNote(noteId, tagIds);
+    const before = this.links.listFor(noteId);
+    const next = this.links.setForNote(noteId, tagIds);
+    // 261204：打标/取消打标 → 待同步（关系集合真变了才计；远端 applyRemoteLinks 不走这里）
+    if (before.join("\u0000") !== next.join("\u0000")) bumpTagsPending(this.db);
+    return next;
   }
 
   applyRemoteLinks(noteId: string, tagIds: readonly string[], tagsUpdatedAt: string): boolean {

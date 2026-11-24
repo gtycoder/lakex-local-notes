@@ -71,6 +71,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         pendingDocuments={pendingSummary.documents}
         pendingFolders={pendingSummary.folders}
         pendingQuickNotes={pendingSummary.quickNotes}
+        pendingTags={pendingSummary.tags}
         cloudEnabled={cloudEnabled}
         cloudConfigured={cloudConfigured}
         conflictSnapshots={conflictSnapshots}

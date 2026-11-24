@@ -23,6 +23,8 @@ export interface SyncStatusPopoverProps {
   pendingDocuments: number;
   pendingFolders?: number;
   pendingQuickNotes?: number;
+  /** 261204：标签变动（目录增删改名 + 打标）也进待同步。 */
+  pendingTags?: number;
   cloudEnabled: boolean;
   cloudConfigured: boolean;
   conflictSnapshots?: Array<{ noteId: string; title: string }>;
@@ -67,6 +69,7 @@ export function SyncStatusPopover({
   pendingDocuments,
   pendingFolders = 0,
   pendingQuickNotes = 0,
+  pendingTags = 0,
   cloudEnabled,
   cloudConfigured,
   conflictSnapshots = [],
@@ -83,7 +86,7 @@ export function SyncStatusPopover({
   const localButtonRef = useRef<HTMLButtonElement | null>(null);
   const resolvedButtonRef = buttonRef ?? localButtonRef;
   const controlRef = useRef<HTMLDivElement | null>(null);
-  const model = buildSyncStatusModel({ sync, pendingDocuments, pendingFolders, pendingQuickNotes, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
+  const model = buildSyncStatusModel({ sync, pendingDocuments, pendingFolders, pendingQuickNotes, pendingTags, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
   /**
    * 同步记录（P1 第 4 项）：账本读数**跟这个组件走**（角标要常显，所以不必等面板打开）。
    * 4 份 keep-alive 顶栏只有可见那份拉取（visible=false 直接跳过），避免重复 IPC。
@@ -161,6 +164,9 @@ export function SyncStatusPopover({
   const downQuick = stats?.downloadedQuickNotes ?? qn?.downloaded ?? 0;
   const upFolders = stats?.foldersUploaded ?? 0;
   const downFolders = stats?.foldersDownloaded ?? 0;
+  // 261204：标签是跨端独立数据（随 quick 索引同步、无正文段）——展示维度补齐。
+  const upTags = stats?.uploadedTags ?? 0;
+  const downTags = stats?.downloadedTags ?? 0;
   const upBytes = stats?.uploadedBytes ?? 0;
   const downBytes = stats?.downloadedBytes ?? 0;
 
@@ -223,15 +229,15 @@ export function SyncStatusPopover({
               {/* 上传/下载细分：用户要求始终展示（0 也显示）；字节仅统计正文+资源。 */}
               <div>
                 <dt>上传</dt>
-                <dd>文档 {upDocs}，目录 {upFolders}，小记 {upQuick}，{formatBytesCompact(upBytes)}</dd>
+                <dd>文档 {upDocs}，目录 {upFolders}，小记 {upQuick}，标签 {upTags}，{formatBytesCompact(upBytes)}</dd>
               </div>
               <div>
                 <dt>下载</dt>
-                <dd>文档 {downDocs}，目录 {downFolders}，小记 {downQuick}，{formatBytesCompact(downBytes)}</dd>
+                <dd>文档 {downDocs}，目录 {downFolders}，小记 {downQuick}，标签 {downTags}，{formatBytesCompact(downBytes)}</dd>
               </div>
               <div>
                 <dt>待同步</dt>
-                <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments}，目录 ${pendingFolders}，小记 ${pendingQuickNotes}）`}</dd>
+                <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments}，目录 ${pendingFolders}，小记 ${pendingQuickNotes}，标签 ${pendingTags}）`}</dd>
               </div>
             </dl>
           </section>

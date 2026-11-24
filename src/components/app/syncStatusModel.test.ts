@@ -4,6 +4,11 @@ import { buildSyncStatusModel } from "./syncStatusModel";
 const base = { phase: "idle" as const, message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 };
 
 describe("buildSyncStatusModel", () => {
+  it("261204 标签变动计入待同步（pendingTotal 含 tags、状态翻待同步）", () => {
+    const base = { phase: "idle" as const, message: "", lastSyncedAt: "2026-11-24T00:00:00.000Z", pendingChanges: 0 };
+    expect(buildSyncStatusModel({ sync: base, pendingDocuments: 0, pendingTags: 2, cloudEnabled: true })).toMatchObject({ pendingTotal: 2, statusClass: "pending", statusLabel: "待同步" });
+    expect(buildSyncStatusModel({ sync: base, pendingDocuments: 1, pendingFolders: 1, pendingQuickNotes: 1, pendingTags: 1, cloudEnabled: true }).pendingTotal).toBe(4);
+  });
   it("defaults to local saved and exposes pending counts", () => {
     expect(buildSyncStatusModel({ sync: base, pendingDocuments: 0, cloudEnabled: true })).toMatchObject({ statusLabel: "仅本地保存", statusClass: "local", pendingTotal: 0 });
     expect(buildSyncStatusModel({ sync: base, pendingDocuments: 2, pendingFolders: 1, pendingQuickNotes: 1, cloudEnabled: true })).toMatchObject({ statusLabel: "待同步", statusClass: "pending", pendingTotal: 4 });

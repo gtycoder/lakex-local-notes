@@ -206,6 +206,8 @@ export interface SyncPendingSummary {
   folders: number;
   resources: number;
   quickNotes: number;
+  /** 261204：标签变动（目录增删改名 + 文档/小记打标）也进待同步（标签是跨端独立数据）。 */
+  tags: number;
   total: number;
   generatedAt: string;
 }
@@ -234,6 +236,9 @@ export interface SyncResult {
   downloadedDocuments?: number;
   uploadedQuickNotes?: number;
   downloadedQuickNotes?: number;
+  /** 261204：标签变更（随 quick 索引同步，无正文段）。 */
+  uploadedTags?: number;
+  downloadedTags?: number;
   /** 本次同步总耗时（毫秒）。 */
   durationMs?: number;
   /** 本次同步移入回收站的文档数。 */

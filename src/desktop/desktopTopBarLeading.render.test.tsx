@@ -42,7 +42,7 @@ const SPACE_LABEL: Record<DesktopWorkspace, string> = {
 };
 const SYNC: SyncStatus = { phase: "idle", message: "", lastSyncedAt: null, pendingChanges: 0 };
 const PENDING: SyncPendingSummary = {
-  documents: 0, folders: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "2026-10-28T00:00:00.000Z",
+  documents: 0, folders: 0, resources: 0, quickNotes: 0, tags: 0, total: 0, generatedAt: "2026-10-28T00:00:00.000Z",
 };
 const noop = () => undefined;
 

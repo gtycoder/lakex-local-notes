@@ -22,7 +22,7 @@ export function useWorkspaceState() {
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [s3Settings, setS3Settings] = useState<S3Settings | null>(null);
-  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, folders: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
+  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, folders: 0, resources: 0, quickNotes: 0, tags: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [syncAnchorRect, setSyncAnchorRect] = useState<DOMRect | null>(null);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);

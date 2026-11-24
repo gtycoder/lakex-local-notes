@@ -171,6 +171,8 @@ export async function syncWithV3(
       const at = new Date().toISOString();
       store.markTombstonesWaterline(at);
       quickNotes?.markTombstonesWaterline(at);
+      // 261204：成功同步后清零标签变动计数（标签随 quick 索引发布，任何成功轮都已携带）。
+      quickNotes?.clearTagsPending();
     } catch { /* 记账失败不影响同步结果；下一轮再补 */ }
     // 目录归位（缺此步 is_dirty 永不清 → 「待同步 folders」常驻、便携包导出被挡）：
     // 引擎只把 folders 放进索引，不负责清 dirty；成功后按构建索引时的 updatedAt 快照条件归位。

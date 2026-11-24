@@ -22,7 +22,7 @@ import path from "node:path";
 import type { DbLike } from "../dbLike.js";
 import type { QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput, QuickNoteDeleted } from "../quickNoteTypes.js";
 import type { QuickNoteTag } from "../../src/core/quickNoteTags.js";
-import { QuickNoteTagsStore } from "../quickNoteTagsStore.js";
+import { QuickNoteTagsStore, clearTagsPending, readTagsPendingCount } from "../quickNoteTagsStore.js";
 import { QuickNoteTagLinksStore } from "../quickNoteTagLinksStore.js";
 import { QuickNoteTagService } from "../quickNoteTagService.js";
 import { QuickNotesQueries } from "../quickNotesQueries.js";
@@ -348,12 +348,15 @@ export class QuickNotesStore {
 
   // ===== 同步适配（水线 / 基线 / 标记 / 列表）：薄 DB 封装留在这里 =====
 
-  getPendingSyncSummary(): { items: number; resources: number } {
+  getPendingSyncSummary(): { items: number; resources: number; tags: number } {
     const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE is_dirty=1").get() as { items: number; resources: number };
     // 墓碑计数只算「可发布且晚于成功同步水线」的（Del-6：deleted_at > waterline，替代逐行 published_at）
     const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > ?").get(this.getTombstonesWaterline()) as { items: number };
-    return { items: row.items + deleted.items, resources: row.resources };
+    return { items: row.items + deleted.items, resources: row.resources, tags: readTagsPendingCount(this.db) };
   }
+
+  /** 261204：成功同步后清零标签变动计数（与墓碑水线同刻）。 */
+  clearTagsPending(): void { clearTagsPending(this.db); }
 
   /** 成功同步后推进小记墓碑水线（P1-3：单调 + 夹到 now，永不写未来值）。 */
   markTombstonesWaterline(at: string = nowIso()): void {

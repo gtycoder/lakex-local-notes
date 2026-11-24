@@ -99,7 +99,8 @@ describe("降级替身 createUnavailableQuickNotesStore", () => {
     expect(stub.listDeletedForSync()).toEqual([]);
     expect(stub.listQuickNotesForSync()).toEqual([]);
     expect(stub.countQuickNotes()).toBe(0);
-    expect(stub.getPendingSyncSummary()).toEqual({ items: 0, resources: 0 });
+    expect(stub.getPendingSyncSummary()).toEqual({ items: 0, resources: 0, tags: 0 });
+    expect(stub.clearTagsPending()).toBeUndefined(); // 降级静默 no-op（记账不阻断）
     expect(stub.search("任意")).toEqual([]);
     expect(stub.tagService.list()).toEqual([]);
     // 启动/后台维护类幂等 no-op，不抛错。

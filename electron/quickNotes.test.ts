@@ -35,16 +35,41 @@ describe("QuickNotesStore", () => {
     const draftId = crypto.randomUUID();
     const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "summary.png" });
     const note = quickNotes.createQuickNote({ text: "待同步摘要", draftId, stagedImageIds: [image.id] });
-    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 1 });
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 1, tags: 0 });
     quickNotes.deleteQuickNote(note.id);
     // 墓碑 deleted_at 晚于水线（初始 "0"）⇒ 计入待同步；逐行 published_at 已删
-    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 0 });
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 0, tags: 0 });
     expect(quickNotes.listDeletedForSync().map((item) => item.id)).toContain(note.id);
     // 成功同步后推进小记水线 ⇒ 墓碑清零（记录本身保留供 LWW）
     quickNotes.markTombstonesWaterline(new Date(Date.now() + 60_000).toISOString());
-    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 0, resources: 0 });
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 0, resources: 0, tags: 0 });
     expect(quickNotes.listDeletedForSync()).toEqual([]);
     expect(quickNotes.listAllDeleted().map((item) => item.id)).toContain(note.id);
+  });
+
+  it("261204 标签变动进待同步（建/改名/打标/删）；成功同步清零；远端应用不计", async () => {
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(0);
+    const tag = quickNotes.tagService.create("新标签");
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(1);
+    quickNotes.tagService.update(tag.id, { name: "改名" });
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(2);
+    const note = quickNotes.createQuickNote({ text: "打标", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    quickNotes.setQuickNoteTags(note.id, [tag.id]);
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(3);
+    // 远端应用（applyRemoteLinks / mergeQuickTags 路径）不计 —— 不是本地待上传
+    quickNotes.tagService.applyRemoteLinks(note.id, [tag.id], new Date().toISOString());
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(3);
+    // 成功同步后清零（desktopSync 与墓碑水线同刻）
+    quickNotes.clearTagsPending();
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(0);
+    // 删除标签也计
+    quickNotes.tagService.delete(tag.id);
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(1);
+    // 打标集合不变 ⇒ 不计（此处已被上面的 clearTagsPending 清零，保持 0）
+    quickNotes.clearTagsPending();
+    quickNotes.setQuickNoteTags(note.id, []);
+    quickNotes.setQuickNoteTags(note.id, []);
+    expect(quickNotes.getPendingSyncSummary().tags).toBe(0);
   });
 
   it("Del-6 迁移：旧快速库 quick_note_deleted.published_at 回填水线后删列", () => {

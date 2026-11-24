@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceState } from "../../s3v3DeviceStore.js";
 import { indexHashOf, serializeLakeIndex, serializeQuickNotesIndex, type LakeNoteEntry, type QuickNoteEntry } from "../protocol/index.js";
-import { finalizeRemotePurged, intentLogOf, mergeRoundIntoState, planStateOf, planWorldOf } from "./engineBridge.js";
+import { finalizeRemotePurged, intentLogOf, mergeRoundIntoState, planStateOf, planWorldOf, tagChangeDirections } from "./engineBridge.js";
 import type { RoundResult } from "./runSyncRound.js";
 
 const ISO = "2026-10-28T00:00:00.000Z";
@@ -102,6 +102,28 @@ describe("A7/A8：失败轮不回滚本地（发布回写半通道，261124 审�
     const r = round({ publish, commit: publishedCommit });
     const out = mergeRoundIntoState(s, r);
     expect(out.lake.notes.find((n) => n.id === "a")!.title).toBe("发布后的新名");
+  });
+});
+
+describe("261204 tagChangeDirections：标签变更方向计数（展示口径）", () => {
+  const t = (id: string, name: string, updatedAt: string) => ({ id, name, createdAt: "T0", updatedAt });
+  it("本地赢（新增/改名/删除）计 up；远端赢计 down", () => {
+    // 改名：本地先改（本地值=合并值）⇒ up
+    const up = tagChangeDirections([t("a", "旧", "T1")], [t("a", "新", "T2")], [t("a", "新", "T2")]);
+    expect(up).toEqual({ up: 1, down: 0 });
+    // 远端改名（合并值 ≠ 改前本地）⇒ down
+    const down = tagChangeDirections([t("a", "旧", "T1")], [t("a", "旧", "T1")], [t("a", "新", "T2")]);
+    expect(down).toEqual({ up: 0, down: 1 });
+  });
+  it("删除同理反向；基线与合并一致不算变更", () => {
+    // 本地删（改前本地已无）⇒ up
+    expect(tagChangeDirections([t("a", "A", "T1")], [], [])).toEqual({ up: 1, down: 0 });
+    // 远端删（改前本地还有）⇒ down
+    expect(tagChangeDirections([t("a", "A", "T1")], [t("a", "A", "T1")], [])).toEqual({ up: 0, down: 1 });
+    // 无变化
+    expect(tagChangeDirections([t("a", "A", "T1")], [t("a", "A", "T1")], [t("a", "A", "T1")])).toEqual({ up: 0, down: 0 });
+    // 远端新增 ⇒ down
+    expect(tagChangeDirections([], [], [t("b", "B", "T1")])).toEqual({ up: 0, down: 1 });
   });
 });
 

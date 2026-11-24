@@ -22,7 +22,7 @@ import { validatePointer } from "./s3v3/protocol/s3v3Types.js";
 import { runSyncRound } from "./s3v3/commit/runSyncRound.js";
 import { initialRound } from "./s3v3/commit/initialRound.js";
 import { pullRound, readRemoteIndexes } from "./s3v3/commit/pullRound.js";
-import { fieldChangedIdsOf, finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
+import { fieldChangedIdsOf, finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf, tagChangeDirections } from "./s3v3/commit/engineBridge.js";
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
 import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
@@ -88,6 +88,10 @@ export interface S3v3SyncReport {
   downloadedFolders?: number;
   uploadedBytes?: number;
   downloadedBytes?: number;
+  /** 261204：本轮随索引发布的标签变更（新增/改名/删除；标签随 quick 索引同步，无正文段）。 */
+  uploadedTags?: number;
+  /** 261204：本轮从远端应用的标签变更。 */
+  downloadedTags?: number;
   deletedObjects: number;
   published: boolean;
   generation: number | null;
@@ -686,6 +690,16 @@ export class S3v3SyncEngine {
     report.downloadedQuickNotes = round.apply.downloaded.quickNotes;
     report.uploadedDocuments = round.apply.uploaded.documents;
     report.uploadedQuickNotes = round.apply.uploaded.quickNotes;
+    // 261204：标签变更方向计数（标签随 quick 索引同步、无正文段；展示口径见 tagChangeDirections）。
+    {
+      const tagDirs = tagChangeDirections(
+        baseline.quickNotes.tags,
+        state.quickNotes.tags,
+        (round.publish?.quickNotes ?? nextState.quickNotes).tags,
+      );
+      report.uploadedTags = tagDirs.up;
+      report.downloadedTags = tagDirs.down;
+    }
     report.downloadedBytes = round.apply.downloaded.bytes + round.assets.downloaded.bytes;
     report.uploadedBytes = round.apply.uploaded.bytes + round.assets.uploaded.bytes;
     report.downloadedNotes = round.apply.downloaded.documents + round.apply.downloaded.quickNotes;

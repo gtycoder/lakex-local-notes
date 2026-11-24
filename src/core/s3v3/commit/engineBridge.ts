@@ -13,7 +13,7 @@ import { mergeQuickNoteTags, sameQuickNoteTagDirectory } from "../../quickNoteTa
 import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
 import type { PlanState, PlanWorld } from "../plan/plan.js";
 import { positionOf } from "../plan/positionMerge.js";
-import type { LakeNoteEntry } from "../protocol/index.js";
+import type { LakeNoteEntry, QuickNoteTagEntry } from "../protocol/index.js";
 import { settleCloudDeleted } from "../state/cloudDeleted.js";
 import type { IntentLogState } from "./intentLog.js";
 import type { RoundResult } from "./runSyncRound.js";
@@ -39,6 +39,33 @@ export function planWorldOf(state: DeviceState): PlanWorld {
  * state 是行形态（桌面 trashed 行 parent=notebook-trash）——裸比较会让每条已发布回收站条目每轮
  * 误判字段变更 ⇒ 零变更短路永久失效（每轮全量序列化双索引）+ restoresIds 结算输入被污染。
  */
+/**
+ * 261204：标签变更**方向**计数（同步弹层展示用）——base / 改前本地 / 合并后 三方对比：
+ * 合并值与「改前本地」一致 ⇒ 本地赢（up，随发布上传）；否则远端赢（down，本轮下载应用）。
+ * 删除同理反向（合并缺席 + 本地改前已无 ⇒ 本地删）；双方同值算 up（展示口径，无语义影响）。
+ */
+export function tagChangeDirections(
+  baseTags: readonly QuickNoteTagEntry[] | undefined,
+  localBeforeTags: readonly QuickNoteTagEntry[] | undefined,
+  mergedTags: readonly QuickNoteTagEntry[] | undefined,
+): { up: number; down: number } {
+  const key = (t: QuickNoteTagEntry) => t.name + "\u0000" + (t.updatedAt ?? "");
+  const b = new Map((baseTags ?? []).map((t) => [t.id, key(t)] as const));
+  const l = new Map((localBeforeTags ?? []).map((t) => [t.id, key(t)] as const));
+  const m = new Map((mergedTags ?? []).map((t) => [t.id, key(t)] as const));
+  let up = 0;
+  let down = 0;
+  for (const [id, k] of m) {
+    if (b.get(id) === k) continue;
+    if (l.get(id) === k) up += 1; else down += 1;
+  }
+  for (const [id] of b) {
+    if (m.has(id)) continue;
+    if (!l.has(id)) up += 1; else down += 1;
+  }
+  return { up, down };
+}
+
 export function fieldChangedIdsOf(
   lakeNotes: readonly LakeNoteEntry[],
   baseById: ReadonlyMap<string, LakeNoteEntry>,
