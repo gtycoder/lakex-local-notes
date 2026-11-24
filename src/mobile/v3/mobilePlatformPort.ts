@@ -8,6 +8,8 @@ import type {
   QuickNoteWrite, QuickPurgeRow, QuickTagRow, SyncFolderRow, SyncNoteMetaRow, SyncNoteWrite,
 } from "../../core/s3v3/state/platformPort.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
+import { trashSubtree } from "../data/trashSubtree.js";
+import { removeNoteFromIndex } from "../data/searchIndex.js";
 import {
   deleteNoteBodies, deleteQuickNoteBody, moveStagedBodyFiles as moveStagedBodyFilesFs, readNoteBody, readQuickNoteBody,
   writeNoteBodiesBatch, writeNoteBody, writeQuickNoteBody,
@@ -558,7 +560,12 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, space, folder.id);
     },
     async deleteTreeNode(nodeId: string): Promise<void> {
-      await db.prepare("DELETE FROM folders WHERE id=?").run(nodeId);
+      // 261124 B8-P2-8（审计②P2-8）：**软删整棵子树**（端口能力契约 =「移入回收站」，与桌面
+      // deleteTreeNode 同义；旧实现硬删 DELETE FROM folders ⇒ 名称/图标/层级不可恢复、子文档
+      // parent 悬空 ⇒ 下一轮 resolveRemoteParent 改写到「未分类」= P0 同型）。trashSubtree 覆盖
+      // folder+note 子树（含 dfp 边）且单事务、trashed_at IS NULL 幂等守卫。
+      const noteIds = await trashSubtree(db, nodeId);
+      for (const nid of noteIds) await removeNoteFromIndex(db, nid); // 回收站行不进搜索（与 trashNote 同口径）
     },
 
     // ===== 小记写 =====

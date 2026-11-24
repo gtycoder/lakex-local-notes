@@ -53,6 +53,35 @@ function stateFor(ids: string[]): DeviceState {
   };
 }
 
+describe("B8-P2-8：deleteTreeNode 软删整棵子树（能力契约 = 移入回收站）", () => {
+  it("目录删除不硬删：folder+note 子树标 trashed_at + 留 dfp（可恢复；旧实现行直接消失）", async () => {
+    const { db } = await freshStore();
+    try {
+      const port = createMobilePlatformPort(db);
+      const TS = "2026-11-20T00:00:00.000Z";
+      const folder = (id: string, parentId: string | null) => ({
+        id, title: id, parentId, sortOrder: 0, nodeType: "notebook" as const, icon: null, updatedAt: TS, trashedAt: null, deletedFromParentId: null, space: null,
+      });
+      await port.importRemoteFolder(folder("f1", null));
+      await port.importRemoteFolder(folder("f2", "f1"));
+      await port.importRemoteNote({
+        id: "n1", title: "N1", parentId: "f2", sortOrder: 0, updatedAt: TS,
+        contentHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        isConflict: false, isEditLocked: false, editLockedAt: null, icon: null, trashedAt: null, deletedFromParentId: null, kind: "doc",
+      }, new TextEncoder().encode("body"));
+      await port.deleteTreeNode("f1");
+      const f1 = await db.prepare("SELECT trashed_at, deleted_from_parent_id FROM folders WHERE id=?").get("f1") as { trashed_at: string | null; deleted_from_parent_id: string | null };
+      const f2 = await db.prepare("SELECT trashed_at FROM folders WHERE id=?").get("f2") as { trashed_at: string | null };
+      const n1 = await db.prepare("SELECT trashed_at FROM notes WHERE id=?").get("n1") as { trashed_at: string | null };
+      // 旧实现 = DELETE FROM folders WHERE id=？（硬删）⇒ f1 行消失、名称/图标/层级不可恢复、
+      // 子文档 parent 悬空 ⇒ 下一轮 resolveRemoteParent 改写到「未分类」（P0 同型）。
+      expect(f1.trashed_at, "根目录应软删进回收站").toBeTruthy();
+      expect(f2.trashed_at, "子目录级联").toBeTruthy();
+      expect(n1.trashed_at, "子文档级联（note 也可作父）").toBeTruthy();
+    } finally { await db.close(); }
+  });
+});
+
 describe("B8-P2-5/P2-6：apply 元数据的 parent 三态与 updated_at 对齐（261124 审计②）", () => {
   const baseNote = {
     id: "n1", title: "N1", parentId: "old-parent", sortOrder: 0, updatedAt: "2026-11-20T00:00:00.000Z",
