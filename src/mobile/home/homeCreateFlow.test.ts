@@ -103,11 +103,12 @@ describe("首页新建流（261014）", () => {
     expect(CSS).toMatch(/\.mb-home-fab\s*\{[^}]*border-radius:\s*50%/);
   });
 
-  it("同步进行中渲染可视进度条（P0-6）：条 + 阶段文案 + 百分比，读索引阶段走不确定态", () => {
-    expect(HOME).toContain("mobile-sync-strip");
-    expect(HOME).toContain("mobile-sync-strip__bar");
-    expect(HOME).toContain("describeSyncProgress(syncProgress)");
-    expect(HOME).toContain("is-indeterminate");
+  it("同步反馈走气泡（261124 用户点单）：点云立刻弹『正在同步』、进度实时进气泡、不再顶栏弹进度条", () => {
+    expect(HOME).toContain('showToast("正在同步…", { id: SYNC_BUBBLE_ID, timeout: 0 })'); // 点击立刻给反馈
+    expect(HOME).toContain('showToast("正在同步：" + describeSyncProgress(syncProgress)'); // 进度进气泡（同 id 覆盖）
+    expect(HOME).toContain("hideToast(SYNC_BUBBLE_ID)"); // 收尾收气泡
+    expect(HOME).not.toContain("mobile-sync-strip"); // 顶栏进度条已拆
+    expect(HOME).toContain("describeSyncProgress(syncProgress)"); // 云按钮 aria/tooltip 仍报进度
     expect(HOME).not.toContain("alert(");
   });
 

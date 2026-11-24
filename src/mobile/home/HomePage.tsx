@@ -40,7 +40,10 @@ import { longPressFeedback } from "../ui/haptics";
 // 懒加载，不进首屏静态图（Suspense 兜底 null：只有长按打开面板那一刻会拉分包，基本无感）。
 const MobileNodeIconPicker = lazy(() => import("../ui/NodeIconPicker").then((m) => ({ default: m.MobileNodeIconPicker })));
 import { confirmMobile } from "../ui/ConfirmDialog";
-import { showToast } from "../ui/toastBus";
+import { showToast, hideToast } from "../ui/toastBus";
+
+/** 同步气泡（261124 用户点单）：点云立刻弹「正在同步」（否则以为没触发）；进度与收尾都进气泡，不再顶栏弹进度条。 */
+const SYNC_BUBBLE_ID = "sync-bubble";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 // 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
 import { quickNoteStartsWithMedia, toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
@@ -197,6 +200,11 @@ export function HomePage(props: HomePageProps) {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
+  // 同步气泡（261124）：进度快照变化即同 id 覆盖气泡文案；同步收尾（快照清空）收掉气泡（结果 toast 另起、不受影响）。
+  useEffect(() => {
+    if (syncProgress) showToast("正在同步：" + describeSyncProgress(syncProgress), { id: SYNC_BUBBLE_ID, timeout: 0 });
+    else hideToast(SYNC_BUBBLE_ID);
+  }, [syncProgress]);
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail, cacheDetail: cacheQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
@@ -540,6 +548,8 @@ export function HomePage(props: HomePageProps) {
   }, [composer]);
   const switchTab = (next: HomeTab): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
+    // 261124：点击立刻给反馈（气泡）；进度由 syncProgress 效果实时刷新进同一气泡。
+    showToast("正在同步…", { id: SYNC_BUBBLE_ID, timeout: 0 });
     try {
       const r = await bridge.syncNow();
       // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
@@ -751,20 +761,6 @@ export function HomePage(props: HomePageProps) {
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
 
-  /**
-   * P0-6 可视进度条（261026）：用户点单"先让文档展示出来 + 加进度条"。
-   * 计数优先（正文/附件张数），没有计数就用字节；两者都没有（metadata/finalize）= 不确定态。
-   * 只有同步进行中才渲染；结束后条消失，布局回到原样。
-   */
-  const syncPct = (() => {
-    if (!syncProgress) return -1;
-    const counted = syncProgress.total !== undefined && syncProgress.total > 0;
-    const bytes = syncProgress.bytesTotal !== undefined && syncProgress.bytesTotal > 0;
-    if (counted) return Math.max(0, Math.min(100, Math.round(((syncProgress.done ?? 0) / (syncProgress.total as number)) * 100)));
-    if (bytes) return Math.max(0, Math.min(100, Math.round(((syncProgress.bytesDone ?? 0) / (syncProgress.bytesTotal as number)) * 100)));
-    return -1;
-  })();
-
   const renderQuickNoteCard = (note: MobileQuickNote) => (
     <QuickNoteCard
       key={note.id}
@@ -823,19 +819,6 @@ export function HomePage(props: HomePageProps) {
         </div>
       </header>
       ))}
-
-      {syncProgress && (
-        <div className={"mobile-sync-strip" + (syncPct < 0 ? " is-indeterminate" : "")} role="status" aria-live="polite">
-          <div className="mobile-sync-strip__text">
-            <span className="mobile-sync-strip__label">{describeSyncProgress(syncProgress)}</span>
-            {syncPct >= 0 && <span className="mobile-sync-strip__pct">{syncPct}%</span>}
-          </div>
-          <div className="mobile-sync-strip__bar" aria-hidden="true">
-            {/* 不确定进度交给 CSS 动画（width 由 .is-indeterminate 规则给），不下发 inline width。 */}
-            <span style={syncPct < 0 ? undefined : { width: syncPct + "%" }} />
-          </div>
-        </div>
-      )}
 
       <div
         ref={stageRef}

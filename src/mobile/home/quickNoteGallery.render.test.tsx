@@ -41,7 +41,7 @@ vi.mock("../bridge", () => ({
   },
 }));
 vi.mock("../ui/ConfirmDialog", () => ({ confirmMobile: vi.fn(async () => true) }));
-vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
+vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast, hideToast: () => undefined }));
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: () => ({
     getVirtualItems: () => [],

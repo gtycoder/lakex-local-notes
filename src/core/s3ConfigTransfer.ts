@@ -110,7 +110,7 @@ export async function encodeS3ConfigTransfer(settings: S3Settings, exportedAt: D
   const normalized: S3Settings = {
     ...settings,
     endpoint: normalizeEndpoint(settings.endpoint),
-    region: settings.region.trim() || "cn-east-1",
+    region: settings.region.trim() || "cn-north-1", // 261124 用户定稿：region 默认一律 cn-north-1（七牛主用区）
     prefix: settings.prefix,
   };
   try {
@@ -245,7 +245,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   }
   const settings: S3Settings = {
     endpoint: normalizeEndpoint(raw.endpoint!.trim()),
-    region: raw.region!.trim() || "cn-east-1",
+    region: raw.region!.trim() || "cn-north-1", // 261124 用户定稿：region 默认一律 cn-north-1
     bucket: raw.bucket!.trim(),
     prefix: raw.prefix!,
     accessKeyId: raw.accessKeyId!.trim(),

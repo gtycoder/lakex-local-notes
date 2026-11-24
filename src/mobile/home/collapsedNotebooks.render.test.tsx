@@ -26,7 +26,7 @@ vi.mock("../bridge", () => ({
     getWorkspaceSnapshot: vi.fn(async () => ({ notebook: { id: "nb", title: "nb", icon: null }, tree: [] })),
   },
 }));
-vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
+vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast, hideToast: () => undefined }));
 // NotebookGrid 是 React.lazy：测试只关心「传哪些本、落在哪个分区」，用同构桩替换（避免等懒 chunk）。
 vi.mock("./NotebookGrid", () => ({
   NotebookGrid: (props: { notebooks: Array<{ id: string; title: string }>; view: string }) =>

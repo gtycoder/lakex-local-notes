@@ -22,9 +22,12 @@ export function getToastSnapshot(): ToastItem[] {
   return cacheList;
 }
 
-export function showToast(text: string, opts: { type?: ToastType; timeout?: number } = {}): string {
-  const id = "t" + ++seq;
+export function showToast(text: string, opts: { type?: ToastType; timeout?: number; id?: string } = {}): string {
+  // 261124：传 id = **同 id 覆盖**（可更新气泡，如同步进度）；timeout=0 = 不自动消失（由调用方收尾）。
+  const id = opts.id ?? "t" + ++seq;
   const timeout = opts.timeout ?? 6000;
+  const prevTimer = timers.get(id);
+  if (prevTimer != null) { window.clearTimeout(prevTimer); timers.delete(id); }
   items.set(id, { id, text, type: opts.type ?? "info", timeout });
   emit();
   if (timeout > 0) {

@@ -23,7 +23,7 @@ vi.mock("../bridge", () => ({
     saveQuickNoteContent: mocks.saveQuickNoteContent,
   },
 }));
-vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
+vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast, hideToast: () => undefined }));
 // 卡片数 < 阈值时走普通列表；这里仍给一个桩，避免真实 virtualizer 在 jsdom 里量尺寸。
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: () => ({

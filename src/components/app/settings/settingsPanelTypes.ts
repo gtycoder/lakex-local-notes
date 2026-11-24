@@ -46,6 +46,6 @@ export interface SettingsPanelProps {
   cloudEnabled?: boolean;
 }
 
-export const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lakex-local-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
+export const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-north-1", bucket: "", prefix: "lakex-local-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
 
 /** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */

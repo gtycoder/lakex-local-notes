@@ -38,7 +38,7 @@ vi.mock("../bridge", () => ({
     readQuickNote: mocks.readQuickNote,
   },
 }));
-vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
+vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast, hideToast: () => undefined }));
 vi.mock("../ui/ConfirmDialog", () => ({ confirmMobile: mocks.confirmMobile }));
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: () => ({
