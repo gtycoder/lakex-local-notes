@@ -21,21 +21,18 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * 失败语义：解密失败（换锁屏 / 恢复出厂 / 数据损坏）⇒ **清掉该键并返回空**，让用户重填 ——
  * 对齐桌面 safeStorage 密钥丢失的语义（绝不返回错误密钥去签名）。
  *
- * 261112 R1（Q22A）：加解密实现统一到 [SecretBox]（AES-256-GCM + Keystore 生成/保管 + 失败清键），
- * 本插件只保留「别名/prefs 名 + JS 契约」。ALIAS/PREFS 两个值**不可改**：改了等于换密钥库，
+ * 261112 R1（Q22A）：加解密实现统一到 [SecretBox]（AES-256-GCM + 自管理密钥 + 失败清键），
+ * 本插件只保留「prefs 名 + JS 契约」。PREFS **不可改**：改了等于换密钥库，
  * 已保存的 S3 密钥会全部解不开（用户需重填）。
  */
 @CapacitorPlugin(name = "SecureStore")
 class SecureStorePlugin : Plugin() {
     companion object {
-        /** 加密密钥在 AndroidKeyStore 里的别名（历史值，不可改）。 */
-        private const val ALIAS = "lakex-local-notes-mobile.secret.v1"
-
         /** 密文落盘位置（应用私有 SharedPreferences，历史值不可改）。 */
         private const val PREFS = "lakex-local-notes-secure"
     }
 
-    private val box = SecretBox(ALIAS, PREFS)
+    private val box = SecretBox(PREFS)
 
     @PluginMethod
     fun set(call: PluginCall) {

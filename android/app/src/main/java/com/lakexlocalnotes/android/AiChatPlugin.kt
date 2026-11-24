@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 原生 AI 通道（261023 P0）。对应桌面 electron/ai/aiClient.ts 的角色，但只做文本流式对话。
  *
  * 红线：
- *  · **API Key 只在原生**：加密存 Android Keystore（SecretBox）后落私有 SharedPreferences；
+ *  · **API Key 只在原生**：自管理加密（SecretBox：私有密钥文件 + AES-GCM）后落私有 SharedPreferences；
  *    JS 侧永远拿不到明文（getSettings 只回尾号）；
  *  · 网络请求在原生后台线程发起，WebView 不参与；
  *  · 流式：SSE 逐块 `notifyListeners("ai:delta")`，结束 `ai:done`，失败 `ai:error`；
@@ -33,7 +33,6 @@ class AiChatPlugin : Plugin() {
     companion object {
         private const val PREFS = "lakex-local-notes-ai"
         private const val SETTINGS_KEY = "settings"
-        private const val ALIAS = "lakex-local-notes.ai.v1"
         private const val DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
         private const val DEFAULT_MODEL = "deepseek-chat"
         private const val DEFAULT_TEMPERATURE = 0.7
@@ -41,7 +40,7 @@ class AiChatPlugin : Plugin() {
         private const val READ_TIMEOUT_MS = 60_000
     }
 
-    private val box = SecretBox(ALIAS, PREFS)
+    private val box = SecretBox(PREFS)
     private val inFlight = ConcurrentHashMap<String, HttpURLConnection>()
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
 

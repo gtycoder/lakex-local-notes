@@ -265,7 +265,7 @@ export async function pushQuickNoteWithV3(
     fullSync?: (onProgress?: (p: SyncProgress) => void) => Promise<SyncResult>;
   } = {},
 ): Promise<QuickNotePushOutcome> {
-  // 注入了 remote（高优先路径的缓存实例）时不再读/解密 settings：省一次主库读 + safeStorage 解密。
+  // 注入了 remote（高优先路径的缓存实例）时不再读/解密 settings：省一次主库读 + 密文解密。
   const settings = deps.remote ? null : store.getS3Settings();
   if (!deps.remote && !settings) throw new Error("请先保存 S3 配置");
   // Batch3-A：降级时先给「小记库不可用 + 出口」的可读错误，避免落到下面泛化的「未就绪」。

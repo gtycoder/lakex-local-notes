@@ -1528,16 +1528,14 @@ describe("S3 配置（本机加密落盘 enc:v2，261201 裁决）", () => {
     expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
   });
 
-  it("v1（safeStorage）旧密文读得到；下次保存自动换 v2（惰性迁移）", async () => {
+  it("enc:v1（旧钥匙串）存量按未配置读出（261204 裁决：不写迁移代码，重填即转 v2）", async () => {
     const { safeStorage } = await import("electron");
     const v1 = "enc:v1:" + safeStorage.encryptString("sk-legacy").toString("base64");
     const legacyRow = JSON.stringify({ ...settings, secretAccessKey: v1 });
     store.importS3SettingsRow(legacyRow);
-    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-legacy"); // v1 可解
-    store.saveS3Settings(store.getS3Settings()!);
+    expect(store.getS3Settings()?.secretAccessKey).toBe(""); // 未配置口径，绝不回显
     const raw = rawDbValue("SELECT value FROM settings WHERE key='s3_settings'");
-    expect(raw ?? "").toContain("enc:v2:");       // 保存后即 v2
-    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-legacy");
+    expect(raw ?? "").toContain("enc:v1:");       // 读路径不改写存量行（零迁移代码）
   });
 });
 

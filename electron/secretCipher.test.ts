@@ -42,17 +42,11 @@ describe("createLocalSecretCipher（本机加密 enc:v2，261201 裁决）", () 
     expect(c2.decrypt(out)).toBe("sk-secret"); // 同 userData ⇒ 同钥匙 ⇒ 可解
   });
 
-  it("v1（safeStorage）旧密文可解；再次保存即换 v2（惰性迁移）", () => {
-    const c = createLocalSecretCipher(freshDir());
-    const legacy = "enc:v1:" + Buffer.from("enc:sk-legacy").toString("base64"); // 桩的 encryptString 产物
-    expect(c.decrypt(legacy)).toBe("sk-legacy");
-    expect(c.encrypt(c.decrypt(legacy)).startsWith("enc:v2:")).toBe(true);
-  });
-
-  it("v1 且 safeStorage 不可用 ⇒ 空串（未配置口径，绝不回显密文）", () => {
-    state.available = false;
+  it("enc:v1（旧钥匙串）密文一律按未配置读出 —— 零钥匙串访问、不写迁移代码（261204 裁决，重填即转 v2）", () => {
     const c = createLocalSecretCipher(freshDir());
     const legacy = "enc:v1:" + Buffer.from("enc:sk-legacy").toString("base64");
+    expect(c.decrypt(legacy)).toBe(""); // 旧实现会走 safeStorage 解出「sk-legacy」——已退役
+    state.available = false; // 即便桩模拟钥匙串不可用，行为也一致（代码里已无 safeStorage 引用）
     expect(c.decrypt(legacy)).toBe("");
   });
 

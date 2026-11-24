@@ -774,7 +774,7 @@ if (!app.requestSingleInstanceLock()) {
     startFileReconciler();
     restartFileScanReconciler = startFileReconciler;
     // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
-    // 原样写回新库再删除——secretAccessKey 保持 enc:v1: 密文（绝不明文落盘），同机 safeStorage 可解。
+    // 原样写回新库再删除——secretAccessKey 保持密文形态（绝不明文落盘）；enc:v1: 旧钥匙串存量按未配置读出（261204），用户重填即转 v2。
     try {
       const seed = readAndRemoveS3RestoreSeed(workspaceRoot());
       if (seed && typeof seed === "string" && !store.getS3Settings()) {

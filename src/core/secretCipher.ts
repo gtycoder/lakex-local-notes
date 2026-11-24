@@ -1,20 +1,12 @@
 /**
  * 密钥加解密注入点（lake-core，V5 Phase 2）。
- * 桌面默认实现 = 本机加密（AES-256-GCM + machine.key，见 electron/secretCipher.ts；261201 裁决，
- * 原 Electron safeStorage/Keychain 只剩 enc:v1: 旧密文的读路径迁移）；纯逻辑/测试环境可用明文回退
+ * 桌面默认实现 = 本机加密（AES-256-GCM + machine.key，见 electron/secretCipher.ts；261201 裁决、
+ * 261204 收尾：safeStorage/系统钥匙串已全退役、零引用）；纯逻辑/测试环境可用明文回退
  * 实现（createPlaintextSecretCipher）。
- * 存储格式约定：`enc:v2:` = 本机加密（nonce|tag|ct），`enc:v1:` = 旧 safeStorage 密文（只读迁移）；
+ * 存储格式约定：`enc:v2:` = 本机加密（nonce|tag|ct）；`enc:v1:` = 旧钥匙串存量，
+ * **一律按未配置读出**（261204 裁决：不为历史数据写代码，用户重填即转 v2，零钥匙串访问）；
  * 非 enc: 前缀视为旧明文，decrypt 不再放行、返回空串提示重配（S2）。
  */
-
-/** 存储格式前缀（单一来源）：enc:v2: = 本机加密（自管理 machine.key）；enc:v1: = 旧 safeStorage（系统钥匙串，只读迁移）。 */
-export const SECRET_PREFIX_V1 = "enc:v1:";
-export const SECRET_PREFIX_V2 = "enc:v2:";
-
-/** 旧格式（系统钥匙串 safeStorage）密文判定：仅迁移清扫使用（261204 钥匙串退役）。 */
-export function isLegacySecretPayload(payload: string): boolean {
-  return payload.startsWith(SECRET_PREFIX_V1);
-}
 
 export interface SecretCipher {
   /** 加密后落盘值；加密不可用时允许明文回退（实现负责告警）。 */

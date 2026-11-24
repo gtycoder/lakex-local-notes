@@ -2,7 +2,6 @@ package com.lakexlocalnotes.android
 
 import android.util.Base64
 import java.io.File
-import java.security.KeyStore
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -17,14 +16,12 @@ import javax.crypto.spec.SecretKeySpec
  *   · 密文（base64(iv):base64(ciphertext)，AES-256-GCM）落**应用私有 SharedPreferences**；
  *   · 明文不落盘；密钥文件损坏 ⇒ **抛错拒写**（宁可拒绝保存，不静默换钥丢密文，与桌面同口径）。
  *
- * 261204 一次性迁移：首次使用（密钥文件不存在）时若旧 AndroidKeyStore 别名还在 ⇒ 用旧密钥解出
- * prefs 里的存量密文、换写新密钥密文，然后**删除 Keystore 别名**（退役）。迁移后本类永不再碰 Keystore；
- * 解不开的旧键按既有失败语义清掉（让用户重填，绝不返回错误密钥去签名）。
+ * 261204 裁决（AGENTS §3#7 不为历史数据写代码）：旧 Android Keystore 存量**不迁移、不解密** ——
+ * 解密失败即清键让用户重填（既有失败语义），代码零 Keystore 引用。
  *
- * ALIAS/PREFS 两个历史值**不可改**：prefs 名决定密文位置与密钥文件名，改了等于换密钥库。
- *（ALIAS 现仅用于迁移期定位旧 Keystore 别名。）
+ * PREFS 历史值**不可改**：决定密文位置与密钥文件名，改了等于换密钥库（已保存密钥全部解不开）。
  */
-internal class SecretBox(private val alias: String, private val prefsName: String) {
+internal class SecretBox(private val prefsName: String) {
     companion object {
         private const val TRANSFORM = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
@@ -36,21 +33,6 @@ internal class SecretBox(private val alias: String, private val prefsName: Strin
 
     /** 自管理密钥文件（应用私有 filesDir；文件名随 prefs 独立 ⇒ 两个 SecretBox 互不影响）。 */
     private fun keyFile(context: android.content.Context): File = File(context.filesDir, "$prefsName.key")
-
-    /** 261204 一次性迁移：旧 Android Keystore → 自管理密钥文件；完成后删除别名（退役）。 */
-    private fun migrateFromKeystoreIfNeeded(context: android.content.Context) {
-        val file = keyFile(context)
-        if (file.exists()) return
-        val ks = try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } } catch (e: Exception) { return }
-        val oldKey: SecretKey = try { (ks.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey } catch (e: Exception) { null } ?: return
-        val newKey = loadOrCreateKey(context)
-        for ((k, v) in prefs(context).all.toMap()) {
-            val packed = v as? String ?: continue
-            val plain = tryDecrypt(oldKey, packed) ?: continue
-            prefs(context).edit().putString(k, encryptWith(newKey, plain)).apply()
-        }
-        try { ks.deleteEntry(alias) } catch (e: Exception) { /* 残留无害：别名不再被读 */ }
-    }
 
     /** 读/建自管理密钥；损坏 ⇒ 抛错拒写（与桌面 machine.key 同语义）。 */
     private fun loadOrCreateKey(context: android.content.Context): SecretKeySpec {
@@ -72,14 +54,9 @@ internal class SecretBox(private val alias: String, private val prefsName: Strin
             tmp.setWritable(false, false)
             tmp.setReadable(true, true)
             tmp.setWritable(true, true)
-        } catch (e: Exception) { /* 权限尽力（Windows/部分文件系统无 POSIX 位） */ }
+        } catch (e: Exception) { /* 权限尽力（部分文件系统无 POSIX 位） */ }
         if (!tmp.renameTo(file)) file.writeText(Base64.encodeToString(raw, Base64.NO_WRAP))
         return SecretKeySpec(raw, "AES")
-    }
-
-    private fun secretKey(context: android.content.Context): SecretKeySpec {
-        migrateFromKeystoreIfNeeded(context)
-        return loadOrCreateKey(context)
     }
 
     private fun encryptWith(key: SecretKey, value: String): String {
@@ -103,15 +80,15 @@ internal class SecretBox(private val alias: String, private val prefsName: Strin
     }
 
     fun put(context: android.content.Context, key: String, value: String) {
-        val packed = encryptWith(secretKey(context), value)
+        val packed = encryptWith(loadOrCreateKey(context), value)
         prefs(context).edit().putString(key, packed).apply()
     }
 
     fun get(context: android.content.Context, key: String): String? {
         val packed = prefs(context).getString(key, null) ?: return null
-        val plain = tryDecrypt(secretKey(context), packed)
+        val plain = tryDecrypt(loadOrCreateKey(context), packed)
         if (plain == null) {
-            // 解密失败（密钥文件丢失/更换）⇒ 清掉该键并返回空（让用户重填；绝不返回错误密钥去签名）。
+            // 解密失败（含旧 Keystore 存量：不迁移、不解密）⇒ 清掉该键并返回空（让用户重填；绝不返回错误密钥去签名）。
             prefs(context).edit().remove(key).apply()
         }
         return plain

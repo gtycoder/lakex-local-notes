@@ -143,7 +143,7 @@
 | 日志 | 上面两个目录下的 `logs/lakex-local-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
 
-- **密钥一律自管理（261204 用户裁决：不进系统钥匙串/Keystore）**：桌面 = `machine.key`+SecretCipher（`enc:v2:`；`enc:v1:` 旧 safeStorage 密文只在迁移清扫解一次即换写，全员迁移后删该分支）；移动 = SecretBox 应用私有密钥文件 + AES-GCM 密文落私有 SharedPreferences（存量 Keystore 密文一次性迁移后退役）。两端都**不落 WebView 存储**；`localStorageSecretStore` 只是 web/vitest 后端。
+- **密钥一律自管理（261204 用户裁决：不进系统钥匙串/Keystore）**：桌面 = `machine.key`+SecretCipher（`enc:v2:`）；移动 = SecretBox 应用私有密钥文件 + AES-GCM 密文落私有 SharedPreferences。`enc:v1:` 旧钥匙串/Keystore 存量**按未配置读出、不写迁移代码**（§3#7，重填即转 v2，零钥匙串访问）。两端都**不落 WebView 存储**；`localStorageSecretStore` 只是 web/vitest 后端。
 
 ## 6. 关键命令
 

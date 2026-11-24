@@ -1,5 +1,5 @@
 import type { DbLike } from "./dbLike.js";
-import { isLegacySecretPayload, SECRET_PREFIX_V1, type SecretCipher } from "../src/core/secretCipher.js";
+import type { SecretCipher } from "../src/core/secretCipher.js";
 import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, FileScanSettings, FileReconcileState } from "./storeTypes.js";
 import { FILE_RECONCILE_DEFAULTS, normalizeFileScanIntervalHours } from "./fileMetadataReconcile.js";
 import {
@@ -37,50 +37,7 @@ export class SettingsRepository {
     return this.secretCipher.decrypt(value);
   }
 
-  /**
-   * 261204：**系统钥匙串退役一次性迁移** —— enc:v1:（safeStorage/macOS Keychain 旧密文）就地换写
-   * enc:v2:（本机 machine.key 自管理加密）。启动时与 A2 恢复 seed 回填后各扫一次；存量全 v2 时
-   * 零读零写、**不再碰系统钥匙串**（261201 裁决收尾：decrypt 的 v1 分支只服务本迁移，全员迁移后
-   * 后续版本可整体删除）。幂等；v1 解不开（换机/钥匙丢失）保持原样（读路径按未配置口径），绝不落明文。
-   */
-  migrateLegacySecrets(): { migrated: number } {
-    let migrated = 0;
-    try {
-      const s3Row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
-      if (s3Row && s3Row.value.includes(SECRET_PREFIX_V1)) {
-        const parsed = JSON.parse(s3Row.value) as S3Settings;
-        if (typeof parsed.secretAccessKey === "string" && isLegacySecretPayload(parsed.secretAccessKey)) {
-          const plain = this.decryptSecret(parsed.secretAccessKey);
-          if (plain) {
-            parsed.secretAccessKey = this.encryptSecret(plain);
-            this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(parsed));
-            migrated += 1;
-          }
-        }
-      }
-    } catch { /* 行损坏：保持原样（读路径本就按未配置口径） */ }
-    try {
-      const aiRow = this.db.prepare("SELECT value FROM settings WHERE key='ai_settings'").get() as { value: string } | undefined;
-      if (aiRow && aiRow.value.includes(SECRET_PREFIX_V1)) {
-        const parsed = JSON.parse(aiRow.value) as { providers?: Record<string, { apiKey?: string } | undefined> };
-        let touched = false;
-        for (const provider of Object.values(parsed.providers ?? {})) {
-          if (typeof provider?.apiKey === "string" && isLegacySecretPayload(provider.apiKey)) {
-            const plain = this.decryptSecret(provider.apiKey);
-            if (plain) { provider.apiKey = this.encryptSecret(plain); touched = true; }
-          }
-        }
-        if (touched) {
-          this.db.prepare("INSERT INTO settings(key,value) VALUES('ai_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(parsed));
-          migrated += 1;
-        }
-      }
-    } catch { /* 同上 */ }
-    return { migrated };
-  }
-
   getS3Settings(): S3Settings | null {
-    this.sweepLegacyOnce();
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
     if (!row) return null;
     try {
@@ -93,24 +50,15 @@ export class SettingsRepository {
     }
   }
 
-  /** A2 恢复 seed：导出 settings 表原始行（secretAccessKey 为 enc:v1: 密文，绝不解密成明文）。无配置 → null。 */
+  /** A2 恢复 seed：导出 settings 表原始行（secretAccessKey 为密文，绝不解密成明文）。无配置 → null。 */
   exportS3SettingsRow(): string | null {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
     return row?.value ?? null;
   }
 
-  /** A2 恢复 seed：把密文行原样写回（不经 saveS3Settings，避免二次加密）。回填后立即做钥匙串退役迁移。 */
+  /** A2 恢复 seed：把密文行原样写回（不经 saveS3Settings，避免二次加密）。 */
   importS3SettingsRow(value: string): void {
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(value);
-    try { this.migrateLegacySecrets(); } catch { /* 下次启动再试 */ }
-  }
-
-  /** 每进程一次的惰性清扫（getter 首读触发）：把存量 enc:v1 就地换写 v2，之后本进程永不再碰钥匙串。 */
-  private legacySwept = false;
-  private sweepLegacyOnce(): void {
-    if (this.legacySwept) return;
-    this.legacySwept = true;
-    try { this.migrateLegacySecrets(); } catch { /* 迁移失败不阻断读路径（按未配置口径） */ }
   }
 
   saveS3Settings(settings: S3Settings): void {
@@ -126,7 +74,6 @@ export class SettingsRepository {
    * 红线：ai_settings 是**独立的 settings key**，不参与 S3/同步/任何导出路径（A2 seed 只读 s3_settings）。
    */
   getAiSettings(): AiSettings {
-    this.sweepLegacyOnce();
     const row = this.db.prepare("SELECT value FROM settings WHERE key='ai_settings'").get() as { value: string } | undefined;
     if (!row) return defaultAiSettings();
     try {

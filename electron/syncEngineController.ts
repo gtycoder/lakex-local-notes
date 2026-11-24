@@ -90,7 +90,7 @@ export async function pushQuickNoteViaEngine(
   deps: { settings?: S3Settings } = {},
 ): Promise<QuickNotePushOutcome> {
   return serializedQuickPush(async () => {
-    // IPC 侧已读过设置（含 safeStorage 解密）：直接复用，快路径不再二次读。
+    // IPC 侧已读过设置（含密文解密）：直接复用，快路径不再二次读。
     const settings = deps.settings ?? store.getS3Settings();
     if (!settings) throw new Error("请先保存 S3 配置");
     const remote = pushRemoteFor(settings);

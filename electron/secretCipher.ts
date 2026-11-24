@@ -10,12 +10,11 @@
  * - **machine.key 在 userData 根、不在 workspace** ⇒ 不进整库备份 / 便携包 / 历史快照（只进不出）；
  *   换机/恢复后旧密文解不开 ⇒ 「视为未配置」口径（settingsRepository 既有语义），重新填写即可，
  *   跨机迁移密钥走 S3 配置导出（LLN1 迁移码，另一层加密，语义不变）。
- * - 读路径兼容 `enc:v1:`（safeStorage 旧密文）：能解就解，**下次保存自动换 v2**（惰性迁移）；
- *   解不开（safeStorage 不可用/换机）返回 ""（未配置）。写路径一律 v2。
+ * - `enc:v1:`（safeStorage 旧密文）**一律按未配置读出**（261204 裁决：不为历史数据写代码，
+ *   用户重填即可；不再 import safeStorage、零钥匙串访问）。写路径一律 v2。
  * - fail-closed 口径变化（261201）：旧「safeStorage 不可用拒保存」→ 新「本地加密恒可用；
  *   钥匙文件不可写才拒绝保存」——任何情况下都不落明文。
  */
-import { safeStorage } from "electron";
 import { Buffer } from "node:buffer";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -27,17 +26,6 @@ const V2_PREFIX = "enc:v2:";
 const KEY_BYTES = 32;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
-
-/** 老格式（safeStorage / macOS Keychain）解密：**只服务一次性迁移清扫**（261204 钥匙串退役：settingsRepository.migrateLegacySecrets 解一次即换写 v2；全员迁移后本分支可整体删除）。不可用/失败一律 ""（未配置口径）。 */
-function legacyDecrypt(payload: string): string {
-  try {
-    if (!safeStorage.isEncryptionAvailable()) return "";
-    return safeStorage.decryptString(Buffer.from(payload, "base64"));
-  } catch (error) {
-    console.warn("[store] 旧格式（v1）密文解密失败，按未配置处理:", error);
-    return "";
-  }
-}
 
 /** 读取或首次生成 machine.key。损坏（长度不符）⇒ 抛错拒用（宁可拒绝保存，不静默换钥丢密文）。 */
 function ensureKeyFile(keyPath: string): Buffer {
@@ -84,7 +72,12 @@ export function createLocalSecretCipher(userDataDir: string): SecretCipher {
           decipher.setAuthTag(blob.subarray(NONCE_BYTES, NONCE_BYTES + TAG_BYTES));
           return Buffer.concat([decipher.update(blob.subarray(NONCE_BYTES + TAG_BYTES)), decipher.final()]).toString("utf8");
         }
-        if (value.startsWith(V1_PREFIX)) return legacyDecrypt(value.slice(V1_PREFIX.length));
+        if (value.startsWith(V1_PREFIX)) {
+          // 261204 裁决（AGENTS §3#7 不为历史数据写代码）：旧钥匙串（safeStorage）密文**不迁移、不解密**，
+          // 按未配置处理 —— 用户重填即转 v2。零钥匙串访问。
+          console.warn("[store] 发现旧钥匙串格式密文（enc:v1:），按未配置处理，请重新填写");
+          return "";
+        }
         // S2：旧明文格式不再放行——返回空串提示重配（既有口径不变）。
         console.warn("[store] S3 Secret 为非当前加密格式（旧明文），请重新配置");
         return "";
@@ -96,4 +89,4 @@ export function createLocalSecretCipher(userDataDir: string): SecretCipher {
   };
 }
 
-// 旧工厂名已随 261201 裁决移除（safeStorage 只剩 v1 读路径）；调用方一律 createLocalSecretCipher(userDataDir)。
+// safeStorage/系统钥匙串已全退役（261204）：本模块零 electron 依赖；调用方一律 createLocalSecretCipher(userDataDir)。
