@@ -410,16 +410,22 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       // 261112 task-55（N1）：core 对「远端 trashed / 本地 keepLocalTrash」条目一律传 parentId=回收站容器
       // （notebook-trash —— 那是**桌面侧**的物理父）。移动端回收站 = 「trashed_at + 原父」模型，容器 id 在本机
       // folders 里不存在 ⇒ 绝不能把它写进普通父列（恢复会找不到原父；后续发布还可能把容器当普通 parent 带出去）。
-      // 归一：原父取 deletedFromParentId；缺失时传 null 让 COALESCE 保留现有父（不覆盖）。
-      const parentId = (note.trashedAt || note.parentId === TRASH_NOTEBOOK_ID)
-        ? (note.deletedFromParentId ?? null)
+      // 归一：原父取 deletedFromParentId；缺失时走 COALESCE 保留现有原父（不覆盖）。
+      // 261124 B8-P2-5（审计②P2-5）：**parent 三态** —— undefined=未声明走 COALESCE 保留、
+      // null=显式根层直写、string=直写。旧实现一律 COALESCE ⇒ 位置合并赢家是「根层（null）」时
+      // 变更被丢（行与 state/发布面永久分歧、metaDiffers 每轮重写）；且 undefined 直接进 SQL 会
+      // 绑定崩溃（sql.js 不认 undefined）。trashed 形态的「dfp 缺失」仍是保留语义（不覆盖原父）。
+      const isTrashedShape = !!(note.trashedAt || note.parentId === TRASH_NOTEBOOK_ID);
+      const effectiveParent: string | null | undefined = isTrashedShape
+        ? (note.deletedFromParentId ?? undefined)
         : note.parentId;
+      const parentCol = effectiveParent === undefined ? "COALESCE(?, parent_id)" : "?";
       await write(
-        "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, is_dirty=0, text_cache=NULL WHERE id=?",
-        [title, parentId, note.updatedAt, note.contentHash, note.id],
+        "UPDATE notes SET title=?, parent_id=" + parentCol + ", updated_at=?, content_hash=?, is_dirty=0, text_cache=NULL WHERE id=?",
+        [title, effectiveParent ?? null, note.updatedAt, note.contentHash, note.id],
       );
       const snap = snapshot.get(note.id);
-      if (snap) { snap.title = title; if (parentId !== null) snap.parent_id = parentId; snap.updated_at = note.updatedAt; snap.content_hash = note.contentHash; }
+      if (snap) { snap.title = title; if (effectiveParent !== undefined) snap.parent_id = effectiveParent; snap.updated_at = note.updatedAt; snap.content_hash = note.contentHash; }
     },
     async applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void> {
       const snap = snapshot.get(note.id);
@@ -437,12 +443,17 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
             [note.title, note.sortOrder, note.updatedAt, note.icon ?? null, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.id],
           );
         } else {
-          // 活跃行：标题/父级/排序/更新时间（parent 缺省保留）+ 图标/锁两组（与旧实现同序，减少无谓 UPDATE）。
-          const titleChanged = !snap || snap.title !== note.title || (snap.parent_id ?? null) !== (note.parentId ?? null);
-          if (titleChanged) {
+          // 活跃行：标题/父级/排序/更新时间（parent 三态同 applyStagedBodyNote）+ 图标/锁两组。
+          // 261124 B8-P2-6（审计②P2-6）：**仅 updated_at 变也要落库** —— 旧实现写库条件只有
+          // title/meta 两个维度，纯时间戳漂移（远端改了又改回/tags-only 更新）一条 SQL 都不发 ⇒
+          // metaDiffers 永真、每轮重放 apply-remote（桌面无条件写 updated_at，两端分叉）。
+          const timeChanged = !snap || snap.updated_at !== note.updatedAt;
+          const rowChanged = !snap || snap.title !== note.title || (snap.parent_id ?? null) !== (note.parentId ?? null) || timeChanged;
+          const parentCol = note.parentId === undefined ? "COALESCE(?, parent_id)" : "?";
+          if (rowChanged) {
             await write(
-              "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?",
-              [note.title, note.parentId, note.sortOrder, note.updatedAt, note.id],
+              "UPDATE notes SET title=?, parent_id=" + parentCol + ", sort_order=?, updated_at=? WHERE id=?",
+              [note.title, note.parentId ?? null, note.sortOrder, note.updatedAt, note.id],
             );
           }
           const metaChanged = !snap
@@ -456,7 +467,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       }
       if (snap) {
         // 位置字段只对活跃行做快照同步（回收站行的父/生命周期由专门的写路径维护）。
-        if (!note.trashedAt) { snap.title = note.title; if (note.parentId !== null) snap.parent_id = note.parentId; snap.updated_at = note.updatedAt; }
+        if (!note.trashedAt) { snap.title = note.title; if (note.parentId !== undefined) snap.parent_id = note.parentId; snap.updated_at = note.updatedAt; }
         else { snap.title = note.title; snap.updated_at = note.updatedAt; }
         snap.sort_order = note.sortOrder;
         snap.icon = note.icon ?? null; snap.is_locked = note.isEditLocked ? 1 : 0;

@@ -53,6 +53,47 @@ function stateFor(ids: string[]): DeviceState {
   };
 }
 
+describe("B8-P2-5/P2-6：apply 元数据的 parent 三态与 updated_at 对齐（261124 审计②）", () => {
+  const baseNote = {
+    id: "n1", title: "N1", parentId: "old-parent", sortOrder: 0, updatedAt: "2026-11-20T00:00:00.000Z",
+    contentHash: "0000000000000000000000000000000000000000000000000000000000000000",
+    isConflict: false, isEditLocked: false, editLockedAt: null, icon: null, trashedAt: null, deletedFromParentId: null, kind: "doc" as const,
+  };
+  const rowOf = async (db: Awaited<ReturnType<typeof freshStore>>["db"], id: string) =>
+    await db.prepare("SELECT parent_id, updated_at FROM notes WHERE id=?").get(id) as { parent_id: string | null; updated_at: string };
+
+  it("P2-5：parentId 显式 null（根层赢家）必须直写，不能 COALESCE 保留旧父", async () => {
+    const { db } = await freshStore();
+    try {
+      const port = createMobilePlatformPort(db);
+      await port.importRemoteNote(baseNote, new TextEncoder().encode("body"));
+      await port.applyRemoteNoteMeta({ ...baseNote, parentId: null, updatedAt: "2026-11-21T00:00:00.000Z" });
+      expect((await rowOf(db, "n1")).parent_id).toBeNull(); // 旧实现 COALESCE ⇒ 仍 "old-parent"，行/发布面永久分歧
+    } finally { await db.close(); }
+  });
+
+  it("P2-5 对照：parentId 未声明（undefined）⇒ 保留现有父（三态中间档不回归）", async () => {
+    const { db } = await freshStore();
+    try {
+      const port = createMobilePlatformPort(db);
+      await port.importRemoteNote(baseNote, new TextEncoder().encode("body"));
+      const { parentId: _drop, ...noParent } = baseNote;
+      await port.applyRemoteNoteMeta(noParent as never);
+      expect((await rowOf(db, "n1")).parent_id).toBe("old-parent");
+    } finally { await db.close(); }
+  });
+
+  it("P2-6：仅 updated_at 变也必须落库（否则 metaDiffers 永真、每轮重放 apply-remote）", async () => {
+    const { db } = await freshStore();
+    try {
+      const port = createMobilePlatformPort(db);
+      await port.importRemoteNote(baseNote, new TextEncoder().encode("body"));
+      await port.applyRemoteNoteMeta({ ...baseNote, updatedAt: "2026-11-22T00:00:00.000Z" });
+      expect((await rowOf(db, "n1")).updated_at).toBe("2026-11-22T00:00:00.000Z"); // 旧实现两个条件皆假 ⇒ 一条 SQL 都不发
+    } finally { await db.close(); }
+  });
+});
+
 describe("A4：dfp 跨端往返（261124 审计②P1-2）", () => {
   it("deleteNote 写原父 dfp + restoreTrashItem 回原父并清 dfp（恢复不换家）", async () => {
     const { db } = await freshStore();
