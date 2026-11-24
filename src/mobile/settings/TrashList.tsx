@@ -1,6 +1,7 @@
 /** 移动端「总回收站」列表（设置→回收站）。
  * 小记回收站并入总回收站：合并展示笔记/文件夹回收站（listTrashTree）与小记回收站（listQuickNoteTrash），
- * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；笔记行点击可预览。
+ * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；**笔记行与小记行都可点击预览**（261124 用户点单：
+ * 小记与文档走同一个只读预览页 TrashPreviewPage；文件夹仍不可预览）。
  * 261026：「云端已删除（仅本地）」= 远端 v3 已彻底删除、本机仅保留这份回收站副本（不参与上传）；
  * 恢复并重新上传成功后标记消失。 */
 import { useCallback, useEffect, useState } from "react";
@@ -27,8 +28,9 @@ export interface TrashListProps {
   title?: string;
   /** 数据发生变化（恢复/删除）后刷新外部（如首页/工作区列表）。 */
   onChanged: () => Promise<void>;
-  /** 点击笔记行 → 只读预览（回收站资源惰性下载补偿）。文件夹/小记不可预览。 */
-  onPreview: (noteId: string) => void;
+  /** 点击行 → 只读预览（文档先做回收站资源惰性下载补偿；小记读本机保留的正文）。
+   *  kind 只区分 note / quick（文件夹不可预览，不会调到这里）。 */
+  onPreview: (id: string, kind: "note" | "quick") => void;
 }
 
 const IconFor = (k: TrashRow["kind"]) => (k === "folder" ? FolderOpen : k === "quick" ? Feather : File);
@@ -92,14 +94,14 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
       {rows.length === 0 && <div className="mobile-trash-empty">{title ? title : "回收站"}为空</div>}
       {rows.map((row) => {
         const Icon = IconFor(row.kind);
-        const clickable = row.kind === "note";
+        const clickable = row.kind !== "folder";
         return (
           <div
             key={row.key}
             className="mobile-doc-row"
-            onClick={() => { if (clickable) onPreview(row.id); }}
+            onClick={() => { if (clickable) onPreview(row.id, row.kind === "quick" ? "quick" : "note"); }}
             style={clickable ? { cursor: "pointer" } : undefined}
-            title={clickable ? "点击预览内容" : row.kind === "quick" ? "小记" : undefined}
+            title={clickable ? "点击预览内容" : undefined}
           >
             <Icon size={18} />
             <span className="mobile-trash-text">

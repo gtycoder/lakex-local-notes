@@ -68,6 +68,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [pinMsg, setPinMsg] = useState("");
   useEffect(() => { void probePinShortcut().then(setPinState); }, []);
   const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
+  /** 预览条目类型（261124：小记与文档同一预览页）。与 previewNoteId 成对写入，只在 id 非空时读。 */
+  const [previewKind, setPreviewKind] = useState<"note" | "quick">("note");
   const [listKey, setListKey] = useState(0);
   const {
     settings: s3,
@@ -764,7 +766,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "about" && <AboutSettingsSection appInfo={appInfo} diag={diag} onOpenBackup={() => setView("backup")} />}
 
           {view === "trash" && (
-            <TrashList key={listKey} title="回收站" onChanged={onRefresh} onPreview={(noteId) => setPreviewNoteId(noteId)} />
+            <TrashList key={listKey} title="回收站" onChanged={onRefresh} onPreview={(id, kind) => { setPreviewNoteId(id); setPreviewKind(kind); }} />
           )}
         </div>
       ) : (
@@ -850,6 +852,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           <Suspense fallback={<DelayedLoading><EmptyState>正在加载预览…</EmptyState></DelayedLoading>}>
             <TrashPreviewPage
               noteId={previewNoteId}
+              itemKind={previewKind}
               onBack={() => setPreviewNoteId(null)}
               onRestored={() => { setPreviewNoteId(null); setListKey((k) => k + 1); void onRefresh(); }}
             />
