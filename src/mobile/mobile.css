@@ -107,7 +107,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   background: linear-gradient(180deg, color-mix(in srgb, var(--mb-canvas-1) 55%, transparent), transparent);
 }
 /* 滚动后居中的当前页小标题（16/600）。默认不占位；DOM 由顶栏接线补，未接线时不显示。 */
-.mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* min-width:0（261124 实测）：flex 子项默认 min-width:auto ⇒ nowrap 长标题不肯收缩，把右侧动作钮（回收站预览「恢复」）推出屏外（实测 562 视口下标题撑到 1883px、恢复钮 x=1955）。 */
+.mobile-topbar-title { flex: 1; min-width: 0; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
 /* 顶栏左侧等宽空槽（261014）：仍供非首页顶栏（启动失败/坏库页等）使用；
    首页已改三组栅格（见下），不再依赖空槽凑居中。 */
@@ -583,7 +584,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
  * MobileApp/SettingsDrawer 收起时序配合，不在本次改动范围）。 */
 @keyframes mobile-preview-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 .mobile-settings-preview { position: fixed; inset: 0; z-index: var(--mobile-z-settings-preview); background: var(--lake-bg-window, var(--lake-bg-window)); display: flex; animation: mobile-preview-in var(--mobile-duration-panel) var(--mobile-ease-out); }
-.mobile-settings-preview .mobile-document { flex: 1 1 auto; }
+/* min-width:0（261124 实测）：flex 子项默认 min-width:auto ⇒ 顶栏长标题（回收站小记预览用 previewText 当标题）把整页撑到 1883px，右侧「恢复」被推出屏外（视口 562）。 */
+.mobile-settings-preview .mobile-document { flex: 1 1 auto; min-width: 0; }
 .mobile-trash-list { padding-top: 4px; }
 .mobile-trash-empty { padding: 40px 24px; text-align: center; color: var(--lake-text-2, var(--lake-text-3)); font-size: var(--lake-font-size-tiny); }
 
