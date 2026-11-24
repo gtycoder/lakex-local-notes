@@ -717,7 +717,7 @@ export class S3v3SyncEngine {
       savePending: async (pending) => { state.pending = pending; } });
     const remote = await readRemoteIndexes(pointer, ports);
     const out = await pullRound({
-      state: { lake: state.lake, quickNotes: state.quickNotes, folders: state.folders, remotePurged: state.remotePurged ?? [] },
+      state: { lake: state.lake, quickNotes: state.quickNotes, folders: state.folders, remotePurged: state.remotePurged ?? [], quickDeletes: state.quickDeletes ?? [] },
       remote,
       now: () => this.iso(),
       deferAssets: opts.deferAssets === true,
@@ -731,6 +731,7 @@ export class S3v3SyncEngine {
       lake: out.state.lake,
       quickNotes: out.state.quickNotes,
       folders: out.state.folders,
+      quickDeletes: out.state.quickDeletes,
       intents: state.intents,
       pending: state.pending,
       remotePurged: out.state.remotePurged,

@@ -376,7 +376,7 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(applied.trashedAt).toBe("T5");
   });
 
-  it("quick 缺失三态（C-3 第 4 处漂移）：purge / baseline 内→软删打标 / 从未同步→物理删（无 discard 端口则回落软删）", async () => {
+  it("quick 缺失三态（C-3 第 4 处漂移）：purge / baseline 内→软删打标 / 从未同步→软删（261124 A1 绝不物删，discardQuickNote 不再被清扫调用）", async () => {
     const files = memoryFiles();
     const platform = memoryPlatform({
       folders: [], notes: [],
@@ -403,7 +403,8 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     await meta.saveState(state);
     expect(platform.calls).toContain("purgeQuickNote:qp");
     expect(platform.calls).toContain("deleteQuickNote:qc"); // baseline 内 ⇒ 软删
-    expect(platform.calls).toContain("discardQuickNote:qn"); // 从未同步 + 有 discard 端口 ⇒ 物理删
+    expect(platform.calls).toContain("deleteQuickNote:qn"); // 261124 A1：从未同步也走软删（进小记回收站可恢复；旧物删违「绝不物删」红线）
+    expect(platform.calls).not.toContain("discardQuickNote:qn");
     expect(platform.calls).toContain("markQuickNotesCloudDeleted:qc"); // 只有软删的进打标集合
   });
 });

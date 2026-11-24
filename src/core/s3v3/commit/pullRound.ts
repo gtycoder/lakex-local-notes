@@ -22,6 +22,12 @@ export interface PullRoundState {
   quickNotes: QuickNotesIndex;
   folders: LakeIndex["folders"];
   remotePurged: string[];
+  /**
+   * 261124 A1：本地独有小记的**软删通道**（saveQuickNotes 清扫按它走 deleteQuickNote 进小记回收站，
+   * 绝不走 discardQuickNote 物理删 —— 行+正文+图片）。与文档侧 trashedLocal 同语义：曾同步过的
+   * 由清扫按基线补「云端已删除·仅本地」标。输入侧透传既有条目（重建 state 不丢账）。
+   */
+  quickDeletes: string[];
 }
 
 export interface PullRoundResult {
@@ -70,9 +76,13 @@ export async function pullRound(
     purged.add(n.id);
     trashed += 1;
   }
+  const quickSoftDeletes = [...(input.state.quickDeletes ?? [])];
   for (const q of input.state.quickNotes.items) {
     if (remoteQuickIds.has(q.id) || purged.has(q.id)) continue;
     purged.add(q.id);
+    // 261124 A1：本地独有小记 → 软删通道（进小记回收站可恢复）。旧实现只记 remotePurged 不留条目，
+    // state 重建后清扫把「不在 baseline」的行走 discardQuickNote = 物理删除（违「绝不物删」红线）。
+    if (!quickSoftDeletes.includes(q.id)) quickSoftDeletes.push(q.id);
     trashed += 1;
   }
   if (trashed > 0) warnings.push({ code: "remote_incomplete", space: "lake", detail: "已把 " + trashed + " 个「本机有、云上没有」的条目移入回收站（保留正文/附件/历史，未上传）" });
@@ -125,6 +135,7 @@ export async function pullRound(
     quickNotes: remote.quickNotes,
     folders: remote.lake.folders,
     remotePurged: [...purged].toSorted(),
+    quickDeletes: quickSoftDeletes,
   };
   return { state, apply, assets, warnings, trashed, archived };
 }
