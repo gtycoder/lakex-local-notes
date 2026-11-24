@@ -687,11 +687,18 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         } else {
           // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
           const contentChanged = staged || (content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash);
-          if (contentChanged && content === null) {
+          // 261124 ②P3-11（审计②）：I2「未变才应用」在正文落库面补齐 —— staged 远端正文只在
+          // 「行自快照未变」时覆盖；同步窗口内用户又编辑的行跳过本轮正文应用（元数据照常），留下一轮
+          // 三方合并。旧实现的「未变才应用」判据是死代码（content!==null 蕴含 staged ⇒ 第二析取项恒
+          // 不可达）⇒ 窗口内编辑被远端正文直接覆盖。判据与 P1-2 生命周期守卫同源（previous 快照）。
+          const prevForContent = previous?.lake.notes.find((entry) => entry.id === n.id);
+          const localEditedSinceSnapshot = !!prevForContent && !!cur.updatedAt && cur.updatedAt !== prevForContent.updatedAt;
+          const applyBody = contentChanged && !localEditedSinceSnapshot;
+          if (applyBody && content === null) {
             // 移动端 staged（正文是 staging 文件，不读回 JS）：行只更新元数据/远端 hash，正文由钩子搬。
             if (!p.applyStagedBodyNote) throw new Error("staged 正文需要 applyStagedBodyNote 端口");
             await p.applyStagedBodyNote(toNoteWrite(n, resolvedParentId));
-          } else if (contentChanged) {
+          } else if (applyBody) {
             // 派生缓存（text_cache + FTS）必须和同步写入的正文同一次落库（doc 由 core 派生；非 doc 平台按 kind 派生）。
             const kind = normalizeNoteKind(n.kind);
             const caches = kind === "doc" ? searchTextForKind("doc", content!) : null;

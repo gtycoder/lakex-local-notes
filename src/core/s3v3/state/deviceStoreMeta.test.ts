@@ -398,6 +398,57 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(platform.calls).toContain("applyNotesCloudDeleted:f1");
   });
 
+  it("②P3-11：同步窗口内用户又编辑的行，staged 远端正文不得覆盖（I2「未变才应用」）", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("旧正文") });
+    const platform = memoryPlatform({ notes: [
+      // 行已被用户在窗口内编辑：updatedAt 前进到 T2（快照是 T0）
+      { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T2", contentHash: H("local"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null },
+    ] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map([["n1", new TextEncoder().encode("远端正文")]]),
+    });
+    const entry = { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T1", contentHash: H("remote") };
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [entry], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    const previous: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: [{ ...entry, updatedAt: "T0", contentHash: H("local") }], folders: [] } };
+    await meta.saveState(state, previous);
+    // 旧实现：contentChanged 的「未变才应用」判据是死代码（content!==null 蕴含 staged）⇒ 窗口内编辑被远端正文直盖
+    expect(platform.calls).not.toContain("applyStagedBodyNote:n1");
+    expect(platform.calls).not.toContain("saveNote:n1");
+  });
+
+  it("②P3-11 对照：行自快照未变 ⇒ staged 远端正文正常落地", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("旧正文") });
+    const platform = memoryPlatform({ notes: [
+      { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T1", contentHash: H("local"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null },
+    ] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map([["n1", new TextEncoder().encode("远端正文")]]),
+    });
+    const entry = { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T1", contentHash: H("remote") };
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [entry], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    const previous: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: [{ ...entry, updatedAt: "T1", contentHash: H("local") }], folders: [] } };
+    await meta.saveState(state, previous);
+    expect(platform.calls.some((c) => c === "applyStagedBodyNote:n1" || c === "saveNote:n1" || c === "saveSyncedNote:n1")).toBe(true);
+  });
+
   it("P3-14：坏数据 parent 指向小记 id 不得放行为合法父（hasDocNote 纯文档判定）", async () => {
     const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body") });
     const platform = memoryPlatform({
