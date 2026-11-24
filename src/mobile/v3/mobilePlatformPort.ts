@@ -9,7 +9,6 @@ import type {
 } from "../../core/s3v3/state/platformPort.js";
 import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
 import { trashSubtree } from "../data/trashSubtree.js";
-import { removeNoteFromIndex } from "../data/searchIndex.js";
 import {
   deleteNoteBodies, deleteQuickNoteBody, moveStagedBodyFiles as moveStagedBodyFilesFs, readNoteBody, readQuickNoteBody,
   writeNoteBodiesBatch, writeNoteBody, writeQuickNoteBody,
@@ -564,8 +563,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       // deleteTreeNode 同义；旧实现硬删 DELETE FROM folders ⇒ 名称/图标/层级不可恢复、子文档
       // parent 悬空 ⇒ 下一轮 resolveRemoteParent 改写到「未分类」= P0 同型）。trashSubtree 覆盖
       // folder+note 子树（含 dfp 边）且单事务、trashed_at IS NULL 幂等守卫。
-      const noteIds = await trashSubtree(db, nodeId);
-      for (const nid of noteIds) await removeNoteFromIndex(db, nid); // 回收站行不进搜索（与 trashNote 同口径）
+      await trashSubtree(db, nodeId); // 含子树 notes 搜索清理（同事务）
     },
 
     // ===== 小记写 =====

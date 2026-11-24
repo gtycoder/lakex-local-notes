@@ -345,9 +345,8 @@ export async function trashNote(d: MobileDb, id: string): Promise<string[]> {
   // 261114：文档下可能还有子文档/子分组（note 也可作父节点）⇒ **必须整棵子树一起软删**（与桌面级联同口径）。
   // 旧实现只标根：子文档会变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
   // 细节（bump updated_at、记删除前父、防环上限）统一在 trashSubtree 里，避免多处实现漂移。
-  const trashedNoteIds = await trashSubtree(d, id);
+  const trashedNoteIds = await trashSubtree(d, id); // 含搜索索引清理（同事务，261124 B8-④P2-4）
   if (trashedNoteIds.length === 0) await removeNoteFromIndex(d, id);
-  else for (const noteId of trashedNoteIds) await removeNoteFromIndex(d, noteId);
   return trashedNoteIds;
 }
 

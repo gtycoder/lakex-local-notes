@@ -275,7 +275,9 @@ export async function restoreTreeItem(
       const parentId = resolved.parentId;
       if (fid === id) rootLanding = { parentTitle: await restoreLandingTitle(d, parentId), fellBack: resolved.fellBack };
       statements.push({
-        statement: "UPDATE folders SET parent_id=?, trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
+        // 261124 B8-⑥（审计④）：与 notes 分支同口径清 deleted_from_parent_id + cloud_deleted ——
+        // 旧实现只清 trashed_at ⇒ dfp 残留（metaDiffers 永真每轮重写）+「云端已删除」徽标残留。
+        statement: "UPDATE folders SET parent_id=?, trashed_at=NULL, updated_at=?, is_dirty=1, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?",
         values: [parentId, now, fid],
       });
     }

@@ -10,6 +10,7 @@
  *  - ② deleted_from_parent_id + trashed_at 边（被同步扁平化成回收站容器后的原始父链）。
  */
 import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
+import { hasSearchIndex } from "./searchIndex.js";
 
 export interface ParentedNode {
   id: string;
@@ -102,6 +103,15 @@ export async function trashSubtree(d: MobileDb, rootId: string, now = new Date()
       statement: "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id), updated_at=? WHERE id=? AND trashed_at IS NULL",
       values: [now, now, nid],
     });
+  }
+  // 261124 B8-④P2-4（审计④）：**整个动作一个事务**（AGENTS §3#9 多表写必须事务）——搜索索引清理
+  // 与软删同批提交（旧实现 trashSubtree 一个事务、索引清理靠调用方逐条补删各自成事务 ⇒ 崩溃窗口
+  // 留下「回收站行还在搜索里」）。hasSearchIndex 守卫保留（FTS5 可缺省的环境跳过清理语句）。
+  if (await hasSearchIndex(d)) {
+    for (const nid of Array.from(subtree.noteIds)) {
+      statements.push({ statement: "DELETE FROM notes_fts WHERE rowid IN (SELECT fts_rowid FROM search_index WHERE note_id=?)", values: [nid] });
+      statements.push({ statement: "DELETE FROM search_index WHERE note_id=?", values: [nid] });
+    }
   }
   await executeBatchInTransaction(d, statements);
   return Array.from(subtree.noteIds);

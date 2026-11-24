@@ -24,6 +24,37 @@ vi.mock("../native/assetFs", () => ({
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
 import { listTrashTree, purgeTreeItem, restoreTreeItem, trashTreeItem } from "./trashRepository.js";
+import { trashSubtree } from "./trashSubtree.js";
+import { indexNote } from "./searchIndex.js";
+import Database from "better-sqlite3";
+import { notesFtsDDL } from "../../core/search/schema.js";
+import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
+
+/** better-sqlite3 异步适配器（sql.js 无 FTS5 ⇒ 索引语义用例走生产同款 FTS5；同 searchIndex.test.ts）。 */
+function adapt(raw: Database.Database): MobileDb {
+  return {
+    prepare(sql: string): MobileDbStatement {
+      const stmt = raw.prepare(sql);
+      return {
+        get: async (...p: unknown[]) => stmt.get(...(p as never[])) as Record<string, unknown> | undefined,
+        all: async (...p: unknown[]) => stmt.all(...(p as never[])) as Record<string, unknown>[],
+        run: async (...p: unknown[]) => {
+          const r = stmt.run(...(p as never[]));
+          return { changes: r.changes, lastInsertRowid: r.lastInsertRowid };
+        },
+      };
+    },
+    transaction: (async (fn: () => Promise<unknown>) => {
+      raw.exec("BEGIN");
+      try { const r = await fn(); raw.exec("COMMIT"); return r; }
+      catch (error) { raw.exec("ROLLBACK"); throw error; }
+    }) as MobileDb["transaction"],
+    pragma: async (source: string) => raw.pragma(source),
+    exec: async (sql: string) => { raw.exec(sql); },
+    databaseSizeBytes: async () => 0,
+    close: async () => { raw.close(); },
+  };
+}
 import { trashNote } from "./noteRepository.js";
 import { readNoteBody, writeNoteBody } from "./noteBodies.js";
 
@@ -39,6 +70,25 @@ async function insertFolder(db: SqlJsAsyncDb, id: string, kind: "notebook" | "gr
   await db.prepare("INSERT INTO folders(id,title,parent_id,sort_order,node_type,updated_at) VALUES(?,?,?,?,?,?)")
     .run(id, id, parentId, 0, kind, T);
 }
+
+describe("B8-④P2-4：trashSubtree 同事务清搜索索引（261124 审计④）", () => {
+  it("软删子树后索引行/FTS 一并清掉（旧实现靠调用方逐条补删，中间崩溃留下「回收站行还在搜」）", async () => {
+    const raw = new Database(":memory:");
+    try {
+      const db = adapt(raw);
+      await applyMobileSchema(db);
+      raw.exec(notesFtsDDL()); // FTS5 虚表（sql.js 无 FTS5，故本用例用 better-sqlite3 适配器）
+      await insertFolder(db as unknown as SqlJsAsyncDb, "nb1", "notebook", null);
+      await insertNote(db as unknown as SqlJsAsyncDb, "n1", "nb1");
+      await indexNote(db, "n1");
+      const before = await db.prepare("SELECT COUNT(*) AS c FROM search_index WHERE note_id='n1'").get() as { c: number };
+      expect(before.c, "夹具自证：索引行必须先存在（防假绿）").toBe(1);
+      await trashSubtree(db, "nb1");
+      const rows = await db.prepare("SELECT COUNT(*) AS c FROM search_index WHERE note_id='n1'").get() as { c: number };
+      expect(rows.c).toBe(0); // 旧实现 trashSubtree 只软删、索引清理在 trashNote 循环里（非同事务）
+    } finally { raw.close(); }
+  });
+});
 
 async function insertNote(db: SqlJsAsyncDb, id: string, parentId: string | null): Promise<void> {
   await db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at) VALUES(?,?,?,?,?)")

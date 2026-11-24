@@ -13,7 +13,7 @@ function hashText(text: string): string {
 }
 
 /** FTS5 虚拟表是否存在（测试环境 sql.js 无 FTS5 → 搜索/索引整体降级为 no-op）。 */
-async function hasSearchIndex(d: MobileDb): Promise<boolean> {
+export async function hasSearchIndex(d: MobileDb): Promise<boolean> {
   const row = await d.prepare("SELECT 1 AS one FROM sqlite_master WHERE type='table' AND name='notes_fts'").get();
   return !!row;
 }

@@ -24,6 +24,26 @@ async function seedTrashedNote(db: SqlJsAsyncDb, id: string, deletedFromParentId
   await db.prepare("UPDATE notes SET trashed_at=?, deleted_from_parent_id=?, parent_id='trash-container' WHERE id=?").run(NOW, deletedFromParentId, id);
 }
 
+describe("B8-⑥：恢复 folder 清 dfp/徽标（261124 审计④）", () => {
+  it("恢复 folder ⇒ deleted_from_parent_id 与 cloud_deleted 一并清掉（旧实现不清）", async () => {
+    const db = await freshDb();
+    try {
+      await insertFolder(db, "nb1", "notebook");
+      // 远端学到的 folder 删除形态：trashed + dfp=原父 + 「云端已删除」标
+      await db.prepare(
+        "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty,cloud_deleted) VALUES ('g1','g1',NULL,0,'group',NULL,?,?,?,1,1)",
+      ).run(NOW, NOW, "nb1");
+      await restoreTreeItem(db, "g1", "folder", async () => undefined);
+      const row = await db.prepare("SELECT trashed_at, deleted_from_parent_id, cloud_deleted FROM folders WHERE id='g1'").get() as
+        { trashed_at: string | null; deleted_from_parent_id: string | null; cloud_deleted: number };
+      expect(row.trashed_at).toBeNull();
+      // 旧实现只清 trashed_at ⇒ dfp 残留（metaDiffers 永真每轮重写）+ 徽标残留（恢复后仍显示「云端已删除」）
+      expect(row.deleted_from_parent_id).toBeNull();
+      expect(row.cloud_deleted).toBe(0);
+    } finally { await db.close(); }
+  });
+});
+
 describe("回收站恢复：原父缺失回落兜底笔记本（261027）", () => {
   let db: SqlJsAsyncDb;
   beforeEach(async () => { db = await freshDb(); });
