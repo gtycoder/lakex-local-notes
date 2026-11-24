@@ -77,6 +77,20 @@ export function subscribeImagePreview(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * 图片预览长按动作槽（261124 用户点单「点图片预览之后长按触发菜单」）。
+ * 动作由**端**注册（移动端注册「保存到手机」）；没有注册动作的端（桌面）不渲染菜单、不启动长按，
+ * 既有单击关闭/双击编辑语义完全不变。共享层只做槽位与渲染，保存实现留在移动层（不反向依赖）。
+ */
+export interface PreviewAction {
+  id: string;
+  label: string;
+  run: (image: PreviewImage) => void | Promise<void>;
+}
+let previewActions: PreviewAction[] | null = null;
+export function setPreviewActions(actions: PreviewAction[] | null): void { previewActions = actions; }
+export function getPreviewActions(): PreviewAction[] { return previewActions ?? []; }
+
 /** 预览用的图片身份键：本地资产只比**磁盘名**（正文里没带访问令牌、DOM 里带了），其余比去 query/hash 的原串。 */
 export function previewImageKey(src: string): string {
   const ref = parseLocalAssetUrl(src);

@@ -17,7 +17,7 @@ export interface SaveFileResult {
 }
 
 interface OpenFileApi {
-  saveAs(options: { path: string; name?: string; mime?: string; toDownloads?: boolean }): Promise<{ ok?: boolean; name?: string; dir?: string; bytes?: number }>;
+  saveAs(options: { path?: string; localKey?: string; name?: string; mime?: string; toDownloads?: boolean }): Promise<{ ok?: boolean; name?: string; dir?: string; bytes?: number }>;
 }
 
 const OpenFile = registerPlugin<OpenFileApi>("OpenFile");
@@ -31,9 +31,11 @@ export function isOpenFileNativeAvailable(): boolean {
   }
 }
 
-/** 把 App 私有目录里的文件保存到用户可见位置（便携包用 toDownloads=true）。 */
+/** 把 App 私有目录里的文件保存到用户可见位置（便携包用 toDownloads=true；图片保存用 localKey + toDownloads=false = 进相册）。 */
 export async function saveFileToUserVisible(options: {
-  path: string;
+  path?: string;
+  /** 资产相对 key（note-assets/<id>/<file> / quick-notes/assets/<id>/<file>）：原生按 App 资产根解析直读。 */
+  localKey?: string;
   name: string;
   mime: string;
   toDownloads: boolean;

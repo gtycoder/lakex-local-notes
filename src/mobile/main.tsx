@@ -6,6 +6,7 @@ import { loadSettings, subscribeSettings } from "../lib/settings";
 import { clearPersistedNotebookTabs } from "./notebook/tabSessionCleanup";
 import { installSafeAreaInsets } from "./native/safeAreaInsets";
 import { installFormFactor } from "./pad/formFactor";
+import { installImagePreviewSave } from "./native/previewSave";
 import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, quickNoteShortcutMode, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
@@ -52,6 +53,8 @@ installSafeAreaInsets();
 // 261102：平板形态判据（按**窗口宽**分 compact/medium/expanded，写 html[data-form-factor]）。
 // 原生 smallestScreenWidthDp 只作提示（分屏/多任务下窗口宽才是真相，见 pad/formFactor.ts）。
 installFormFactor();
+// 图片预览长按「保存到手机」（261124 用户点单）：注册进共享 Lightbox 的长按动作槽。
+installImagePreviewSave();
 
 // M3：移动端深色模式——与桌面同语义：settings.theme 为权威（light=daylight / dark=midnight）。
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失

@@ -101,11 +101,17 @@ class OpenFilePlugin : Plugin() {
     @PluginMethod
     fun saveAs(call: PluginCall) {
         val path = call.getString("path")
-        if (path.isNullOrEmpty()) {
-            call.reject("path required")
-            return
+        val localKey = call.getString("localKey")
+        // 261124「保存到手机」：图片等资产按 localKey（note-assets/<id>/<file> 或 quick-notes/assets/<id>/<file>）
+        // 直接解析到 App 私有资产根 —— 前端只传 key、原生按路径直读（字节不过 WebView 桥）。
+        val src: File = when {
+            !localKey.isNullOrEmpty() -> resolveLocalAssetFile(context.filesDir, localKey)
+            !path.isNullOrEmpty() -> File(path)
+            else -> {
+                call.reject("path or localKey required")
+                return
+            }
         }
-        val src = File(path)
         if (!isUnderAppSandbox(src)) {
             call.reject("path outside app sandbox")
             return

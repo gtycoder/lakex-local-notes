@@ -17,6 +17,23 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* 长按动作菜单（261124 用户点单「长按图片浮窗菜单」）：小浮出菜单 + 独立遮罩（只关菜单）。 */
+.image-lightbox__menu-scrim { position: fixed; inset: 0; z-index: 2; }
+.image-lightbox__menu {
+  position: fixed; z-index: 3; min-width: 160px; padding: 4px;
+  background: var(--lake-bg-panel); border-radius: var(--lake-radius-md);
+  box-shadow: var(--lake-shadow-popover);
+  animation: image-lightbox-menu-in .12s ease;
+}
+.image-lightbox__menu-item {
+  display: block; width: 100%; padding: 10px 14px; text-align: left;
+  background: none; border: 0; cursor: pointer;
+  color: var(--lake-text-1); font-size: var(--lake-font-size-base);
+}
+.image-lightbox__menu-item:active { background: var(--lake-bg-block); }
+.image-lightbox__menu-item--cancel { color: var(--lake-text-3); border-top: .5px solid var(--lake-border-1); }
+@keyframes image-lightbox-menu-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
 .image-lightbox__stage {
   position: absolute;
   inset: 0;

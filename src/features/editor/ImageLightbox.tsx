@@ -14,7 +14,8 @@ import { lockPageScroll } from "../../lib/pageScrollLock";
 import { dismissImmersivePreview } from "../../lib/immersivePreview";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, X } from "lucide-react";
-import { closeImagePreview, navigateImagePreview, subscribeImagePreview, type ImagePreviewState } from "./imagePreview";
+import { closeImagePreview, getPreviewActions, navigateImagePreview, subscribeImagePreview, type ImagePreviewState } from "./imagePreview";
+import { createLongPressTimer } from "../../lib/longPressTimer";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 8;
@@ -28,6 +29,9 @@ export function ImageLightbox() {
   const wheelLockRef = useRef(false);
   /** 已预加载完成的原图（按画廊索引记录）：就绪后替换档位图，切换图片/关闭即失效。 */
   const [originalReady, setOriginalReady] = useState<{ index: number; src: string } | null>(null);
+  /** 长按动作菜单（261124 用户点单）：仅在有注册动作的端（移动）出现；锚点 = 按下点。 */
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => subscribeImagePreview((s) => {
     setState(s);
@@ -73,6 +77,40 @@ export function ImageLightbox() {
   useEffect(() => {
     if (!state) return;
     return lockPageScroll();
+  }, [state]);
+
+  // 长按出动作菜单（261124 用户点单「点图片预览之后长按触发菜单」）：按住 450ms（计时核心 = lib/longPressTimer，
+  // 全仓唯一实现；移动阈值 10px 判给滚动/拖拽）。触发后**吞掉随后的 click**（否则误触发点图重置缩放/背景关闭）。
+  // 无注册动作的端（桌面）不启动，既有交互完全不变。
+  useEffect(() => {
+    if (!state || getPreviewActions().length === 0) return;
+    const el = stageRef.current;
+    if (!el) return;
+    setMenu(null);
+    const timer = createLongPressTimer({
+      ms: 450,
+      moveCancelPx: 10,
+      onFire: (point) => setMenu({ x: point.clientX, y: point.clientY }),
+      feedback: () => { try { navigator.vibrate?.(12); } catch { /* 不支持则静默 */ } },
+    });
+    const onTouchStart = (e: TouchEvent) => { const t = e.touches[0]; if (t) timer.start({ clientX: t.clientX, clientY: t.clientY }, e.target); };
+    const onTouchMove = (e: TouchEvent) => { const t = e.touches[0]; if (t) timer.move({ clientX: t.clientX, clientY: t.clientY }); };
+    const onTouchEnd = () => timer.end();
+    const onTouchCancel = () => timer.cancel();
+    const onClickCapture = (e: MouseEvent) => { if (timer.consumeClickSuppression()) { e.stopPropagation(); e.preventDefault(); } };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchCancel);
+    el.addEventListener("click", onClickCapture, true);
+    return () => {
+      timer.dispose();
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchCancel);
+      el.removeEventListener("click", onClickCapture, true);
+    };
   }, [state]);
 
   if (!state) return null;
@@ -135,7 +173,7 @@ export function ImageLightbox() {
         closeImagePreview();
       }}
       onWheel={onWheel}>
-      <div className="image-lightbox__stage" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+      <div ref={stageRef} className="image-lightbox__stage" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
         <img src={shownSrc} alt="" draggable={false} style={imgStyle}
           onClick={() => { if (scale > 1) resetView(); }} />
       </div>
@@ -150,6 +188,24 @@ export function ImageLightbox() {
         <span className="image-lightbox__divider" />
         <button className="image-lightbox__btn image-lightbox__close" onClick={closeImagePreview} aria-label="关闭"><X size={20} /></button>
       </div>
+      {menu && getPreviewActions().length > 0 && (
+        <>
+          {/* 菜单遮罩：只关菜单、不吃预览的背景关闭（stopPropagation）。 */}
+          <div className="image-lightbox__menu-scrim" onClick={(e) => { e.stopPropagation(); setMenu(null); }} />
+          <div
+            className="image-lightbox__menu"
+            role="menu"
+            aria-label="图片操作"
+            style={{ left: Math.max(8, Math.min(menu.x - 80, window.innerWidth - 176)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 176)) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {getPreviewActions().map((action) => (
+              <button key={action.id} className="image-lightbox__menu-item" role="menuitem" onClick={() => { setMenu(null); void action.run(image); }}>{action.label}</button>
+            ))}
+            <button className="image-lightbox__menu-item image-lightbox__menu-item--cancel" role="menuitem" onClick={() => setMenu(null)}>取消</button>
+          </div>
+        </>
+      )}
     </div>,
     document.body,
   );
