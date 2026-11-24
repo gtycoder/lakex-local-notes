@@ -111,8 +111,11 @@ export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promis
   // 261113（P2 #10）：**发布成功后**才执行 user-purge 对象删除（applyPlan 已按 apply 选项跳过这一段）。
   // 发布失败/重试时对象与索引保持一致，不会出现「索引仍引用已删对象」；删除失败降级为 warning，下轮由
   // 删除意图重试（intent 仍在）。retry 分支在上面已提前返回，这里只处理 published/unchanged/skipped。
+  // 261124 P3-10（审计③发现 10）：**unchanged/skipped 轮也要执行** —— purge 条目早已被索引排除时，
+  // 发布内容与 base 逐字节相同 ⇒ unchanged ⇒ 旧实现只认 published ⇒ 对象清理无限推迟（且意图随后被
+  // settleUnpublished 结算，连重试计划都不再生成）。unchanged 即索引已是终态，先发布后清理不冲突。
   let purgeDeleted = 0;
-  if (commit.status === "published" && plan.deletes.length > 0) {
+  if (plan.deletes.length > 0) {
     try {
       for (const d of plan.deletes) {
         for (const prefix of d.prefixes ?? []) purgeDeleted += await ports.deleteRemotePrefix(prefix);

@@ -92,18 +92,23 @@ describe("v3 深度清理保护（parity F3/F4）", () => {
     expect(remote.objects.has("objects/no-age-" + "e".repeat(64) + ".lake")).toBe(true);
   });
 
-  it("retentionDays=0（手动显式清理）：窗口内未引用也删，但显式 keep 仍保留", async () => {
+  it("retentionDays=0（手动显式清理）：锁 TTL 外未引用删；锁 TTL 内新鲜对象保留（P3-11）；显式 keep 仍保留", async () => {
     const remote = new MtimeRemote();
     const a = await device("b");
     await addDoc(a, "n1", "x", { "a.png": "PNG-A" });
     await engine(remote, a, "A").sync({ onEmptyCloud: "upload" });
-    const recent = Date.now() - 1000;
-    remote.add("assets/orphan-recent/r.png", "recent", recent);
-    remote.add("assets/n1/history-only.png", "hist", recent);
+    const past = Date.now() - 5 * 60_000; // 锁 TTL（2min）之外
+    remote.add("assets/orphan-recent/r.png", "recent", past);
+    remote.add("assets/n1/history-only.png", "hist", past);
+    // 261124 P3-11：他端「已上传未切 pointer」的窗口对象（age < 锁 TTL）必须保留 ——
+    // keep 集先于列举计算，这类对象不在 keep；旧实现 retentionDays=0 = 立即全删会删掉它。
+    remote.add("assets/orphan-fresh/f.png", "fresh", Date.now() - 1000);
     const result = await engine(remote, a, "A").deepCleanup({ retentionDays: 0, extraKeep: ["assets/n1/history-only.png"] });
     expect(result.deleted).toContain("assets/orphan-recent/r.png");
     expect(result.deleted).not.toContain("assets/n1/history-only.png");
+    expect(result.deleted).not.toContain("assets/orphan-fresh/f.png");
     expect(remote.objects.has("assets/orphan-recent/r.png")).toBe(false);
     expect(remote.objects.has("assets/n1/history-only.png")).toBe(true);
+    expect(remote.objects.has("assets/orphan-fresh/f.png")).toBe(true);
   });
 });

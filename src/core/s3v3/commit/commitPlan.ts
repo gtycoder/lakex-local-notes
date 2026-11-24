@@ -147,7 +147,11 @@ export async function commitPlan(input: CommitInput, ports: CommitPorts, opts: C
     // 读回确认（无 CAS：只能靠"写完再读"，被别人覆盖就必须放弃）。
     const check = await readPointer();
     if (check === "corrupt") return { status: "retry", reason: "pointer-corrupt" };
-    if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) {
+    // 261124 P3-6（审计③发现 6）：读回还要比**身份字段**（epoch/createdAt/deviceId）——只比
+    // generation+双 commit 时，首传并发（索引逐字节相同 ⇒ 同 commit、各写各的 epoch）会双双
+    // 「published」并分叉 epoch，先写端下轮 epoch-mismatch 卡 action-required。
+    if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit
+      || check.epoch !== pointer.epoch || check.createdAt !== pointer.createdAt || check.deviceId !== pointer.deviceId) {
       return { status: "retry", reason: "readback-mismatch" };
     }
     return { status: "published", pointer: check, generation, lakeCommit, quickNotesCommit: quickCommit, wroteLake, wroteQuick };

@@ -79,6 +79,23 @@ describe("E2-3 runSyncRound（四相编排）", () => {
     expect(firstDelete).toBeGreaterThan(pointerPut);
   });
 
+  it("P3-10：unchanged 轮也要执行 plan.deletes（索引已无条目 ⇒ 对象清理不能无限推迟）", async () => {
+    // 261124 审计③发现 10：首轮发布成功但对象删除失败后，后续重试轮的发布内容与 base 逐字节
+    // 相同 ⇒ unchanged ⇒ 旧实现只在 published 轮执行 deletes ⇒ 对象永久残留、意图还被结算掉。
+    const base = world([]); // 索引里 a 已缺席（上轮发布已排除、对象删除失败的重试轮）
+    const remote = world([doc("a", "v1")]); // 远端索引仍有 a（他端晚写回/重发形态）⇒ local-purge-wins
+    const { ports, pointer } = await seeded(base);
+    ports.remote.set(lakeBodyKey("a", H("v1")), enc("v1")); // 云端残留对象
+    const local = world([]); // 本地已彻底删除（行已删，只剩 purge 意图/墓碑）
+    const out = await runSyncRound({
+      local, base, remote, basePointer: pointer, deviceId: "me",
+      state: { restorePending: [], purgeIntents: ["a"], folderPurgeIntents: [] },
+    }, ports);
+    expect(out.commit.status).toBe("unchanged");
+    expect(out.deleted).toBeGreaterThan(0); // 旧实现：published 之外不执行 ⇒ 永久残留
+    expect(ports.remote.has(lakeBodyKey("a", H("v1")))).toBe(false);
+  });
+
   it("本地更新 ⇒ 发布新一代：正文上传、索引更新、意图与待删队列保持干净", async () => {
     const base = world([doc("a", "v1")]);
     const { ports, pointer } = await seeded(base);

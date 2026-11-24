@@ -62,7 +62,7 @@ const DECL_CACHE = new Map<string, AssetDeclaration>();
 /** 错误类型与分类上收到 `s3v3/protocol/syncErrors`（整轮引擎与独立单条推送管线共用同一份）。 */
 export { S3v3SyncError, classifyS3v3Error, type S3v3ErrorClass } from "./s3v3/protocol/syncErrors.js";
 import { S3v3SyncError } from "./s3v3/protocol/syncErrors.js";
-import { LOCK_DEADLINE_MS, LOCK_KEY } from "./s3v3/protocol/publishLock.js";
+import { LOCK_DEADLINE_MS, LOCK_KEY, LOCK_TTL_MS } from "./s3v3/protocol/publishLock.js";
 class PublishRetry extends Error {}
 
 export interface S3v3SyncOptions {
@@ -990,7 +990,10 @@ export class S3v3SyncEngine {
 
     const nowMs = (opts.now ?? this.now)().getTime();
     const retentionDays = opts.retentionDays ?? 7;
-    const cutoff = retentionDays > 0 ? nowMs - retentionDays * 86_400_000 : Number.POSITIVE_INFINITY;
+    // 261124 P3-11（审计③发现 11）：**新鲜度下限 = 发布锁 TTL** —— keep 集先于列举计算，他端在窗口里
+    // 「已上传未切 pointer」的对象不在 keep；retentionDays<=0（手动显式清理）旧实现 = 立即全删 ⇒
+    // 会删掉这类对象（对方随后发布 pointer ⇒ 索引引用的正文已丢）。窗口取两者较大：锁 TTL 内一律保留。
+    const cutoff = nowMs - Math.max(retentionDays > 0 ? retentionDays * 86_400_000 : 0, LOCK_TTL_MS);
     const toDelete: string[] = [];
     let skippedRecent = 0;
     let ageUnknown = 0;

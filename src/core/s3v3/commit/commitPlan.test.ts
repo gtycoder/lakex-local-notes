@@ -164,6 +164,23 @@ describe("E2-2b commitPlan：并发防护（无 CAS 的三道闸）", () => {
     expect(out).toEqual({ status: "retry", reason: "readback-mismatch" });
   });
 
+  it("P3-6：首传并发同 commit 不同 epoch ⇒ 读回必须判 readback-mismatch（不得双 published 分叉 epoch）", async () => {
+    // 261124 审计③发现 6：读回只比 generation+双 commit ⇒ 两台导入同一便携包的设备同时首传、
+    // 索引逐字节相同（同 commit）时双双 published、各存各的 epoch ⇒ 先写端下轮 epoch-mismatch 卡死。
+    const ports = new FakeCommitRemote();
+    const baseLake = lakeWorld(["a"]);
+    const nextLake = lakeWorld(["a", "b"]);
+    const quick = quickWorld();
+    ports.setPointer(pointerOf(baseLake, quick));
+    const twinCommitLake = nextLake; // 逐字节相同的发布内容 ⇒ 同 commit
+    ports.onPointerPut = async () => {
+      const ours = pointerOf(twinCommitLake, quick, 2);
+      ports.setPointer({ ...ours, epoch: "22222222-2222-4222-8222-222222222222", createdAt: "2026-11-24T00:00:00.000Z", deviceId: "twin" });
+    };
+    const out = await commitPlan({ plan: planWith(nextLake, quick), next: { lake: nextLake, quickNotes: quick }, base: pointerOf(baseLake, quick), deviceId: "me" }, ports, fastOpts);
+    expect(out).toEqual({ status: "retry", reason: "readback-mismatch" });
+  });
+
   it("过期锁可被接管（TTL 失效 ≠ 死锁）", async () => {
     const ports = new FakeCommitRemote();
     const baseLake = lakeWorld(["a"]);
