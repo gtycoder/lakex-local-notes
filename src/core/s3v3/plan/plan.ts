@@ -89,6 +89,23 @@ function addRead(reads: ReadOp[], space: Space, id: string, remoteAssetsHash: st
 }
 
 /** 纯函数：本轮所有决定（不含 IO）。 */
+/**
+ * 261124 A6（审计①P1-1）：**元数据 LWW 与锁/位置正交**（SYNC-PROTOCOL §9.2「元数据内容一致时按
+ * updatedAt 后写胜」+ §9.8 三者互不阻塞）。只对 kind "none"（内容一致）生效：title/sortOrder/icon
+ * 取 updatedAt 更晚的一侧；icon 仅在胜者显式给出时覆盖（undefined = 未投影，不清除）。
+ * 旧实现 picked/meta 整取 p.remote ⇒「本地改名 × 他端加锁」时改名在发布与落库双双回滚。
+ */
+function withMetaLww<T extends { title: string; sortOrder: number; icon?: string | null }>(
+  entry: T,
+  local: { title: string; sortOrder: number; icon?: string | null; updatedAt: string } | null | undefined,
+  remote: { updatedAt: string } | null | undefined,
+  kind: string,
+): T {
+  if (kind !== "none" || !local || !remote) return entry;
+  if (!(local.updatedAt > remote.updatedAt)) return entry;
+  return { ...entry, title: local.title, sortOrder: local.sortOrder, ...(local.icon !== undefined ? { icon: local.icon } : {}) };
+}
+
 export function planSync(input: PlanInput): SyncPlan {
   const reads: ReadOp[] = [];
   const writes: WriteOp[] = [];
@@ -241,6 +258,9 @@ export function planSync(input: PlanInput): SyncPlan {
       let meta = lockLocalWins && lockMerge.state
         ? { ...baseMeta, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt }
         : baseMeta;
+      // 261124 A6：内容一致时元数据 LWW（本地改名 × 他端加锁 ⇒ 落库不得回滚本地新标题）。
+      // 可疑篇不动（P1-4：只信远端版本）。
+      if (!suspiciousBodyIds.has(p.id)) meta = withMetaLww(meta, l, r, p.kind);
       // 首次相遇「以本地为准」：远端独有 → 本地回收站（在位置/锁合成之后改写，回收站语义最终生效）。
       // 261124：原父取值顺序 = wire 已带的 deletedFromParentId → parent —— 位置合并可能已把 parentId 改写成
       // null（远端 trash 形态 wire parent=null），再拿它当原父会把真原父覆盖成 null ⇒ 回收站恢复永远回不了原位。
@@ -455,6 +475,9 @@ export function planSync(input: PlanInput): SyncPlan {
             picked = { ...picked, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt } as typeof picked;
           }
         }
+        // 261124 A6：**发布条目元数据同样按 LWW 合成**（与位置/锁/标签同层正交）——旧实现整取
+        // p.remote ⇒「本地改名 × 他端加锁」时发布标题被远端旧名覆盖（脏标题上云）。可疑篇不动。
+        if (!suspiciousBodyIds.has(p.id)) picked = withMetaLww(picked, p.local, p.remote, p.kind) as typeof picked;
         // 261105 P1 复核（Review-A P1-1/P1-2）：标签字段按**关系 LWW 胜者单独合成**，与内容判定解耦。
         // 否则「远端标签更新 + 本地内容要发布」这一轮会用本地旧标签覆盖远端（published 分支还会丢弃 plan.writes）。
         const localTags = p.local?.tagIds;
