@@ -6,7 +6,7 @@ import { NoteContentRepository } from "./noteContentRepository.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 import type { DbLike } from "./dbLike.js";
 
-type NoteRow = { title: string; trashed_at: string | null; is_purged?: number | null };
+type NoteRow = { title: string; trashed_at: string | null; is_purged?: number | null; parent_id?: string | null };
 
 /** 最小 DbLike mock：prepare 返回 run()（计入 calls）/ get()；transaction(fn) 直接执行。 */
 function makeDb(row: NoteRow = { title: "旧标题", trashed_at: null, is_purged: 0 }) {
@@ -70,6 +70,15 @@ describe("NoteContentRepository.save (W-7 文件写与 DB 事务分离)", () => 
     expect(fs.readFileSync(notePath, "utf8")).toBe("<p>旧内容</p>");
     expect(base.atomicWrite).not.toHaveBeenCalled();
     expect(runCalls.length).toBe(0);
+  });
+
+  it("B8-④P2-3：parent=回收站但 trashed_at 空的行同样拒写（判据与 isGoneNote 对齐）", () => {
+    // 261124 审计④P2-3：拒写判据只有 trashed_at/is_purged，而 isGoneNote 还看 parent===回收站 ⇒
+    // 「parent=trash 但 trashed_at 空」的行（importRemoteFolder 等路径产出）能被普通保存改写。
+    const { db } = makeDb({ title: "旧标题", trashed_at: null, is_purged: 0, parent_id: "notebook-trash" });
+    const { base } = deps({ db });
+    const repo = new NoteContentRepository(base);
+    expect(() => repo.save("n1", "新标题", "<p>新内容</p>")).toThrow(/回收站|恢复/);
   });
 
   it("审计 F04：is_purged 的保留副本同样拒绝（不兼职恢复）", () => {

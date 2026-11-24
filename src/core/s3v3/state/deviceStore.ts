@@ -301,7 +301,11 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       notes.push({
         id: n.id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, contentHash,
         ...(n.kind && n.kind !== "doc" ? { kind: normalizeNoteKind(n.kind) } : {}),
-        ...(n.icon !== null && n.icon !== undefined ? { icon: n.icon } : {}),
+        // 261124 B8-P2-9（审计②P2-9）：icon **显式清除**必须能传播 —— 投影保留 icon: null
+        //（旧实现把 null 丢成「字段缺失」⇒ 发布面无 icon 字段、收端按「未声明」保留本地图标 ⇒
+        // A 清除图标后 B 永远保留旧图标，B 回发后 A 图标复活）。收端三态语义不变：undefined=
+        // 未声明保留（旧清单健壮性）、null=显式清除；发布随 baseItem 携带该字段。
+        icon: n.icon ?? null,
         isLocked: !!n.isEditLocked, lockedAt: n.editLockedAt ?? null, isConflict: !!n.isConflict,
         ...(n.trashedAt ? { trashedAt: n.trashedAt } : {}),
         ...(n.deletedFromParentId !== null && n.deletedFromParentId !== undefined ? { deletedFromParentId: n.deletedFromParentId } : {}),

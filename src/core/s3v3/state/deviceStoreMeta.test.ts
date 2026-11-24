@@ -397,6 +397,29 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(platform.calls).toContain("applyNotesCloudDeleted:f1");
   });
 
+  it("B8-P2-9：icon 显式清除要能传播（投影保留 icon: null，不丢成「字段缺失」）", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body"), "bodies/n2.lake": new TextEncoder().encode("body2") });
+    const platform = memoryPlatform({ notes: [
+      { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: "", kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null },
+      { id: "n2", title: "N2", parentId: null, sortOrder: 1, updatedAt: "T0", contentHash: "", kind: "doc", icon: "x", isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null },
+    ] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state = await meta.loadState();
+    const cleared = state.lake.notes.find((n) => n.id === "n1") as { icon?: string | null };
+    // 旧实现把 null 丢成「字段缺失」⇒ 发布面无 icon 字段、收端按「未声明」保留本地图标 ⇒
+    // A 清除图标后 B 永远保留旧图标，B 回发后 A 图标复活（§「icon 三态」断裂）。
+    expect("icon" in cleared).toBe(true);
+    expect(cleared.icon).toBeNull();
+    expect((state.lake.notes.find((n) => n.id === "n2") as { icon?: string | null }).icon).toBe("x");
+  });
+
   it("B3①：本轮物化的新行清扫要看得见（download-to-trash 物化即软删，不留在活跃列表）", async () => {
     // 261124 审计②P1-3：清扫遍历 saveQuickNotes 开头的过期快照 ⇒ 同一轮里刚物化的行扫不到，
     // quickDeletes 分支永不命中 ⇒「首相遇下载落小记回收站」失效，远端小记永久留在活跃列表。
