@@ -19,8 +19,7 @@ describe("mapMobileToDesktop（手机快照行 → 桌面两库行）", () => {
     expect(out.skipped).toBe(1);
   });
 
-  it("note → tree_nodes(新树 id) + notes 两行；doc_kind 非法回退 doc；is_purged 只留墓碑", () => {
-    let seq = 0;
+  it("note → tree_nodes(tree id == note id，261124 A9 不变量) + notes 两行；doc_kind 非法回退 doc；is_purged 只留墓碑", () => {
     const out = mapMobileToDesktop({
       folders: [],
       notes: [
@@ -29,15 +28,38 @@ describe("mapMobileToDesktop（手机快照行 → 桌面两库行）", () => {
         { id: "n3", title: "已 purge", parent_id: null, sort_order: 0, updated_at: TS, doc_kind: "doc", is_purged: 1, deleted_at: TS },
       ],
       deletedNotes: [], quickNotes: [], quickNoteDeleted: [], tags: [], tagLinks: [], tagLinkVersions: [],
-    }, { newTreeId: () => "tree-" + (++seq) });
+    });
     expect(out.treeNodes).toHaveLength(2);
-    expect(out.treeNodes[0]).toMatchObject({ id: "tree-1", node_type: "note", note_file_id: "n1", title: "文档", trashed_at: TS, deleted_from_parent_id: "nb0" });
+    expect(out.treeNodes[0]).toMatchObject({ id: "n1", node_type: "note", note_file_id: "n1", title: "文档", trashed_at: TS, deleted_from_parent_id: "nb0" });
     expect(out.notes).toHaveLength(2);
     expect(out.notes[0]).toMatchObject({ id: "n1", kind: "ink", is_locked: 1, trashed_at: TS });
     expect(out.notes[1]).toMatchObject({ id: "n2", kind: "doc" });
     expect(out.tombstones).toEqual([
       { id: "n3", title: "已 purge", parent_id: null, sort_order: 0, updated_at: TS, deleted_at: TS, node_type: "note", purged_at: TS },
     ]);
+  });
+
+  it("A9：文档做父的子文档不断链（tree id == note id ⇒ 子级 parent/dfp 原地解析；261124 审计⑤P2-1）", () => {
+    const out = mapMobileToDesktop({
+      folders: [{ id: "nb1", title: "笔记本", parent_id: null, sort_order: 0, node_type: "notebook", space: null, icon: null, updated_at: TS }],
+      notes: [
+        { id: "p1", title: "父文档", parent_id: "nb1", sort_order: 0, updated_at: TS },
+        { id: "c1", title: "子文档", parent_id: "p1", sort_order: 1, updated_at: TS },
+        { id: "c2", title: "被删子文档", parent_id: "p1", sort_order: 2, updated_at: TS, trashed_at: TS, deleted_from_parent_id: "p1" },
+      ],
+      deletedNotes: [], quickNotes: [], quickNoteDeleted: [], tags: [], tagLinks: [], tagLinkVersions: [],
+    });
+    const p1 = out.treeNodes.find((t) => t.note_file_id === "p1")!;
+    const c1 = out.treeNodes.find((t) => t.note_file_id === "c1")!;
+    const c2 = out.treeNodes.find((t) => t.note_file_id === "c2")!;
+    // 树 id == 笔记 id（与 store.createNote / remoteImportRepository 同不变量）
+    expect(p1.id).toBe("p1");
+    // 子文档 parent 指向父的树 id（不换 id ⇒ 原地解析，级联 CTE 不断链）
+    expect(c1.parent_id).toBe("p1");
+    expect(c2.deleted_from_parent_id).toBe("p1");
+    // notes 行同口径（业务 id 空间与树 id 空间重合）
+    expect(out.notes.find((n) => n.id === "c1")!.parent_id).toBe("p1");
+    expect(out.notes.find((n) => n.id === "c2")!.deleted_from_parent_id).toBe("p1");
   });
 
   it("手机 deleted_notes 墓碑 1:1（folder 墓碑保 node_type）", () => {

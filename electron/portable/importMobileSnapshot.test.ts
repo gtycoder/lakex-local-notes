@@ -126,7 +126,7 @@ describe("importMobileSnapshot（手机快照包 → 桌面，反向映射）", 
       expect(tree.some((r) => r.id === "nb-d" && r.space === "diary")).toBe(true);
       const noteNode = tree.find((r) => r.note_file_id === "n1")!;
       expect(noteNode.node_type).toBe("note");
-      expect(noteNode.id).not.toBe("n1"); // 树 id 重新生成
+      expect(noteNode.id).toBe("n1"); // 261124 A9：tree id == note id 不变量（旧「重新生成」= 文档父断链根因）
       expect(tree.some((r) => r.id === "welcome-note")).toBe(false);
       expect(tree.some((r) => r.id === "notebook-personal")).toBe(false);
       expect((main.prepare("SELECT COUNT(*) AS n FROM notes").get() as { n: number }).n).toBe(1);

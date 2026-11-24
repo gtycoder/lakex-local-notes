@@ -13,7 +13,6 @@
  *    （删除 = 缺席 + 账本，与桌面删除语义一致）；活跃行写 quick_notes。
  *  - 标签域（tags/tag_links/tag_link_versions）1:1（关系去重同正向）。
  */
-import { randomUUID } from "node:crypto";
 import { normalizeFolderSpace } from "../../src/core/diary.js";
 import { NOTE_KINDS, type NoteKind } from "../../src/core/noteKind.js";
 import { asText, asTextOr, asInt, asBoolInt, type RawRow } from "../../src/core/portable/portableRows.js";
@@ -139,13 +138,10 @@ export interface MapMobileToDesktopInput {
 export interface MapMobileToDesktopOptions {
   /** 桌面 tree_nodes.workspace_id（Store 固定 "default"）。 */
   workspaceId?: string;
-  /** note 节点的新树 id 生成器（测试可注入确定值）。 */
-  newTreeId?: () => string;
 }
 
 export function mapMobileToDesktop(input: MapMobileToDesktopInput, options: MapMobileToDesktopOptions = {}): MappedDesktopFromMobile {
   const workspaceId = options.workspaceId ?? "default";
-  const newTreeId = options.newTreeId ?? (() => randomUUID());
   const treeNodes: DesktopTreeNodeRow[] = [];
   const notes: DesktopNoteRow[] = [];
   const tombstones: DesktopTombstoneRow[] = [];
@@ -221,7 +217,12 @@ export function mapMobileToDesktop(input: MapMobileToDesktopInput, options: MapM
     }
     const kindRaw = asTextOr(row.doc_kind, "doc");
     const kind: NoteKind = (NOTE_KINDS as readonly string[]).includes(kindRaw) ? (kindRaw as NoteKind) : "doc";
-    const treeId = newTreeId();
+    // 261124 A9（审计⑤P2-1）：**tree id == note id 不变量**（与 store.createNote / remoteImportRepository
+    // 的 tree_nodes INSERT 同口径）。旧实现换新树 uuid ⇒ 手机「文档下多级子文档」导入后 parent_id/dfp
+    // （业务 id 空间）指向旧 note id ⇒ 树链接断、删父漏级联（级联 CTE 按树 id 走）；用户再拖动一次还会把
+    // 树 uuid 发布成 parentId ⇒ 他端回落兜底本 + 脏 parent 每轮上云（P0 复发通道）。目标库是全新两库
+    // （importMobileSnapshot 建库），id 无碰撞面。
+    const treeId = id;
     treeNodes.push({
       id: treeId,
       workspace_id: workspaceId,
