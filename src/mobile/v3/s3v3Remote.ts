@@ -118,7 +118,14 @@ export function createS3v3RemoteWithClient(client: S3ClientLike, bucket: string,
       const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3");
       for (let i = 0; i < keys.length; i += 1000) {
         const chunk = keys.slice(i, i + 1000);
-        await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: chunk.map((k) => ({ Key: full(k) })), Quiet: true } }));
+        const res = await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: chunk.map((k) => ({ Key: full(k) })), Quiet: true } })) as
+          { Errors?: Array<{ Key?: string; Message?: string }> };
+        // 261124 ③P3-9（审计③发现 9）：**必须检查 Errors**（Quiet:true 只静默成功项）—— 旧实现吞掉
+        // 失败 ⇒ 删除静默、purge 计数/意图按「已删」结算（与桌面「逐键 DELETE 失败抛出」语义分叉；
+        // 「彻底删除 = 零痕迹」AGENTS §3#15 靠它兜底）。
+        if (res.Errors && res.Errors.length > 0) {
+          throw new Error("DeleteObjects 部分失败: " + res.Errors.map((e) => (e.Key ?? "?") + " " + (e.Message ?? "")).join("; "));
+        }
       }
     },
     async deleteByPrefix(p: string) {
