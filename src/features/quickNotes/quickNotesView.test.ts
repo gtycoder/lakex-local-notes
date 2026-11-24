@@ -51,6 +51,27 @@ describe("小记版式切换（列表 / 小记）", () => {
     expect(WORKSPACE_SRC).toContain("formatListTime(new Date(item.updatedAt || item.createdAt), new Date(), true)");
     expect(WORKSPACE_SRC).not.toMatch(/padStart\(2/);
   });
+
+  /**
+   * 261124 数据丢失（隔离实例实测）：版式切换 = composer 换位置重挂，重挂种子 = draft.body（初值）。
+   * 不回写镜像 ⇒ 输入内容切回来凭空消失，且再点保存会把**磁盘内容覆盖成旧版**
+   * （A 保存成功 → 输入 B → 切版式 → 回来保存 ⇒ A、B 双双从磁盘消失）。
+   * 钉三件事：① 切换前先 flush（编辑器还活着）；② flush 只回写 text/body 镜像、不碰 baseline
+   * （dirty 与「没改动不写库」语义不动）；③ create/editing 两份草稿都覆盖。
+   */
+  it("版式切换 = 先回写镜像 + 自动保存 + 收起编辑（261124 用户点单「切换触发自动保存」）", () => {
+    expect(WORKSPACE_SRC).toMatch(/async function switchView\(next: QuickNotesView\)/);
+    // ① flush → ② 保存闸（空/无改动不写库、有改动自动保存）→ ③ 成功才收起编辑 → ④ 才切版式
+    expect(WORKSPACE_SRC).toMatch(/flushEditorMirrors\(\);\s*const ok = await saveBeforeSwitch\(\);\s*if \(ok\) \{ setEditingId\(null\); setEditingDraft\(null\); \}/);
+    expect(WORKSPACE_SRC).toMatch(/\}\s*setViewMode\(next\);/);
+    // 列表内切换（行 / 类型 / 标签 / 时间筛选 / 搜索）同口径：无条件过保存闸
+    expect(WORKSPACE_SRC).toMatch(/if \(!\(await saveBeforeSwitch\(\)\)\) return; \/\/ 一律过保存闸/);
+    // 离开小记页同样过闸（不再用 dirty 预判，正文级改动不漏）
+    expect(WORKSPACE_SRC).toMatch(/return saveBeforeSwitch\(\);/);
+    expect(WORKSPACE_SRC).toMatch(/const patch: Partial<DraftState> = \{ body, \.\.\.\(text\.trim\(\) \? \{ text \} : \{\}\) \}/);
+    expect(WORKSPACE_SRC).toMatch(/setEditingDraft\(\(current\) => \(current && current.id === draftId \? \{ \.\.\.current, \.\.\.patch \} : current\)\)/);
+    expect(WORKSPACE_SRC).toMatch(/setCreateDraft\(\(current\) => \(current.id === draftId \? \{ \.\.\.current, \.\.\.patch \} : current\)\)/);
+  });
 });
 
 describe("小记标签与筛选缺陷回归（261024）", () => {
@@ -228,7 +249,10 @@ describe("小记标签（独立标签表，随 Manifest 同步）", () => {
 
   it("切换标签筛选前先保存并退出正在编辑的小记，避免筛掉卡片时丢未保存内容", () => {
     expect(WORKSPACE_SRC).toMatch(/async function changeTagFilter\(next: QuickNoteTagFilter\)/);
-    expect(WORKSPACE_SRC).toMatch(/if \(dirty && !\(await saveBeforeSwitch\(\)\)\) return;/);
+    // 261124 用户点单「列表内切换也要自动保存」：闸从 dirty 预判改成**无条件过闸**
+    // （空/无改动 saveBeforeSwitch 自己放行不写库；有改动自动保存；失败才中止切换）。
+    expect(WORKSPACE_SRC).toMatch(/if \(!\(await saveBeforeSwitch\(\)\)\) return; \/\/ 一律过保存闸/);
+    expect(WORKSPACE_SRC).not.toMatch(/if \(dirty && !\(await saveBeforeSwitch\(\)\)\)/);
     expect(WORKSPACE_SRC).toMatch(/setEditingId\(null\);\s*setEditingDraft\(null\);/);
   });
 });
@@ -289,6 +313,28 @@ describe("列表视图三件套（261021，对齐语雀 list view）", () => {
     expect(WORKSPACE_SRC).toMatch(/event\.key === "Enter"[^}]*setSearchQuery\(searchInput\.trim\(\)\)/);
     expect(WORKSPACE_SRC).toMatch(/event\.key === "Escape"[^}]*closeSearch\(\)/);
     expect(WORKSPACE_SRC).toContain("quick-notes-index-search__clear");
+  });
+
+  /**
+   * 261124 用户报「小记列表点新建小记没有反应」：按钮其实执行了清空编辑态，但「默认选中第一条」
+   * （260919）的 effect 依赖 activeIsEditing 变化立刻重开同一条 ⇒ 视觉零变化（隔离实例复现：
+   * 点击后 focused 行数仍为 1、右栏仍是原正文、无任何异常）。
+   * 钉三件事：① 按钮走 handleNewNote（记保持态）；② effect 尊重保持态、离开列表视图/空间撤销；
+   * ③ startNewDraft 回传「是否真的切过去」（保存被中止 ⇒ 不设保持态，用户还在编辑里）。
+   */
+  it("新建小记：切到新建草稿后挡住「默认选中第一条」（261124「点了没反应」根因）", () => {
+    expect(WORKSPACE_SRC).toMatch(/onClick=\{\(\) => void handleNewNote\(\)\}/);
+    expect(WORKSPACE_SRC).toMatch(/const switched = await startNewDraft\(\)/);
+    expect(WORKSPACE_SRC).toMatch(/if \(switched \|\| !editingDraft\) autoSelectHoldRef\.current = true/);
+    expect(WORKSPACE_SRC).toMatch(/if \(!visible \|\| viewMode !== "list"\) \{ autoSelectHoldRef\.current = false; return; \}/);
+    expect(WORKSPACE_SRC).toMatch(/if \(autoSelectHoldRef\.current\) return;/);
+    expect(read("./useQuickNoteDraftSave.ts")).toMatch(/async function startNewDraft\(\): Promise<boolean>/);
+    expect(read("./useQuickNoteDraftSave.ts")).toMatch(/if \(!\(await saveBeforeSwitch\(\)\)\) return false/);
+    // 竞态（首跑实测）：冷启动「默认选中」的 ensureDetail 晚到会抢回新建草稿 ⇒ 意图代际守卫：
+    // startNewDraft 递增、startEditing await 后对不上就作废（后到意图赢）。
+    expect(read("./useQuickNoteDraftSave.ts")).toMatch(/const intent = \+\+editIntentRef\.current/);
+    expect(read("./useQuickNoteDraftSave.ts")).toMatch(/if \(intent !== editIntentRef\.current\) return;/);
+    expect(read("./useQuickNoteDraftSave.ts")).toMatch(/editIntentRef\.current\+\+; \/\/ 新意图：在途的 startEditing/);
   });
 });
 describe("小记搜索入口（261021）", () => {

@@ -144,7 +144,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const {
     createDraft, setCreateDraft, editingId, setEditingId, editingDraft, setEditingDraft,
     saving, setSaving, syncing, dirty,
-    saveDraft, saveDraftAndSync, saveBeforeSwitch, cancelDraft, startEditing, startNewDraft,
+    saveDraft, saveDraftAndSync, saveBeforeSwitch, cancelDraft, startEditing, startNewDraft, flushEditorMirrors,
     togglePreviewTask, copyNoteText, handleEditorReady, quickNoteUploader,
   } = draft;
   const activeIsEditing = editingDraft !== null;
@@ -187,8 +187,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       await revealNote(id);
     },
     async confirmLeave() {
-      // 离开小记页同样"默认保存"（用户 260919）：没改动时不写库；保存失败则留在原地。
-      if (!dirty) return true;
+      // 离开小记页同样"默认保存"（用户 260919）：空草稿/没改动它自己会放行（不写库）；保存失败则留在原地。
+      // 261124 起不再用 dirty 预判：dirty 只看文本镜像，正文级改动（只改格式）会被漏掉 ⇒ 一律过闸。
       return saveBeforeSwitch();
     },
   }));
@@ -197,7 +197,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     .filter((node) => node.nodeType === "notebook")
     .sort((a, b) => a.sortOrder - b.sortOrder), [notebookNodes]);
 
-  function switchView(next: QuickNotesView) {
+  async function switchView(next: QuickNotesView) {
+    if (next !== viewMode) {
+      // 版式切换 = **先自动保存再切**（261124 用户点单；同日隔离实例实测的两条红线）：
+      // ① flush：把还活着的编辑器实时正文回写镜像 —— 切换会把 composer 换位置重挂，重挂种子 =
+      //    draft.body 初值，不回写就把用户正打的字喂给旧正文（实测：切回来内容消失、再点保存把
+      //    磁盘内容覆盖成旧版，A、B 双双丢失）；保存失败 / 另一份 create 草稿也靠这层镜像兜住。
+      // ② saveBeforeSwitch：空草稿放行、无改动不写库、有改动自动保存；失败不拦切换（留在编辑里
+      //    可重试，正文在镜像里丢不了）。
+      flushEditorMirrors();
+      const ok = await saveBeforeSwitch();
+      if (ok) { setEditingId(null); setEditingDraft(null); } // 保存成功（或无需保存）⇒ 收起编辑，落在已保存状态
+    }
     setViewMode(next);
     // 版式切换时收起所有浮层（列表视图的标签下拉/页头筛选/排序）
     tagMenu.close();
@@ -289,12 +300,27 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
 
   const clearReveal = useCallback(() => setRevealNoteId(null), []);
   /**
+   * 「新建小记」保持态（261124 用户报「点新建没反应」）：列表页有「默认选中第一条」（260919），
+   * 点新建 = 清空编辑态 ⇒ 该 effect 立刻把同一条（或第一条）又打开 ⇒ 视觉零变化。
+   * 修法 = 显式切到新建草稿后置位、挡住默认选中；离开列表视图/空间时撤销（回来仍恢复 260919 行为）。
+   * 保存没过被中止时不置位（用户还在编辑里，先处理保存）—— 由 startNewDraft 的返回值区分。
+   */
+  const autoSelectHoldRef = useRef(false);
+  const handleNewNote = async () => {
+    const switched = await startNewDraft();
+    // 本来就在新建草稿（没有可切的）同样算明确的「我要新建」：默认选中不得把它抢回去。
+    if (switched || !editingDraft) autoSelectHoldRef.current = true;
+  };
+  /**
    * 列表页默认选中第一条（用户 260919）：进列表视图 / 首次加载时，若没有正在编辑的小记，
    * 自动打开第一条（没有小记时保持空态）。这样进来就是"左边列表 + 右边内容"，不会是一张空白编辑器。
    */
   useEffect(() => {
+    // 离开列表视图/空间 ⇒ 撤销「保持新建」（下次进入恢复默认选中）。
+    if (!visible || viewMode !== "list") { autoSelectHoldRef.current = false; return; }
     // 隐藏时不预选（keep-alive 视图里建草稿没有意义，还要避免在不可见状态下触发"切换前保存"）
-    if (!visible || viewMode !== "list" || loading || activeIsEditing) return;
+    if (loading || activeIsEditing) return;
+    if (autoSelectHoldRef.current) return;
     const first = visibleItems[0];
     if (!first) return;
     void startEditing(first);
@@ -304,7 +330,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 类型筛选：与标签筛选同一套「切筛选前先收住正在编辑的小记」口径，避免筛掉卡片时丢未保存正文。 */
   async function changeTypeFilter(next: QuickNoteTypeFilter): Promise<void> {
     if (editingDraft) {
-      if (dirty && !(await saveBeforeSwitch())) return;
+      if (!(await saveBeforeSwitch())) return; // 一律过保存闸：空/无改动不写库，有改动自动保存（261124 用户点单）
       setEditingId(null);
       setEditingDraft(null);
     }
@@ -316,7 +342,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 打开列表搜索：先按同一口径收住正在编辑的小记，避免搜索把未保存卡片筛掉。 */
   async function openSearch(): Promise<void> {
     if (editingDraft) {
-      if (dirty && !(await saveBeforeSwitch())) return;
+      if (!(await saveBeforeSwitch())) return; // 一律过保存闸：空/无改动不写库，有改动自动保存（261124 用户点单）
       setEditingId(null);
       setEditingDraft(null);
     }
@@ -341,7 +367,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 切标签筛选前先收住正在编辑的小记：筛掉的卡片会卸载，不能把未保存正文一起带走。 */
   async function changeTagFilter(next: QuickNoteTagFilter): Promise<void> {
     if (editingDraft) {
-      if (dirty && !(await saveBeforeSwitch())) return;
+      if (!(await saveBeforeSwitch())) return; // 一律过保存闸：空/无改动不写库，有改动自动保存（261124 用户点单）
       setEditingId(null);
       setEditingDraft(null);
     }
@@ -354,7 +380,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 高级筛选一次应用（时间 / 类型 / 标签包含排除）；与其它筛选切换同一套"先收住编辑态"口径。 */
   async function applyFilterState(next: QuickNoteFilterState): Promise<void> {
     if (editingDraft) {
-      if (dirty && !(await saveBeforeSwitch())) return;
+      if (!(await saveBeforeSwitch())) return; // 一律过保存闸：空/无改动不写库，有改动自动保存（261124 用户点单）
       setEditingId(null);
       setEditingDraft(null);
     }
@@ -441,18 +467,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         <button
           className={"ln-segment__item quick-notes-view-segment" + (viewMode === "list" ? " is-active" : "")}
           aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
-          onClick={() => switchView("list")}
+          onClick={() => void switchView("list")}
         ><LayoutList size={14} /></button>
         <button
           className={"ln-segment__item quick-notes-view-segment" + (viewMode === "note" ? " is-active" : "")}
           aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
-          onClick={() => switchView("note")}
+          onClick={() => void switchView("note")}
         ><StickyNote size={14} /></button>
       </div>
     </div>
   );
   const newNoteButton = (
-    <button className="ln-iconbtn quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void startNewDraft()}>
+    <button className="ln-iconbtn quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void handleNewNote()}>
       <span className="quick-notes-new__icon"><Feather size={14} /><Plus size={9} /></span>
     </button>
   );

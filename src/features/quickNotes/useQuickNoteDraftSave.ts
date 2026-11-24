@@ -35,7 +35,9 @@ export interface QuickNoteDraftSaveApi {
   saveBeforeSwitch(): Promise<boolean>;
   cancelDraft(draft: DraftState): Promise<void>;
   startEditing(item: QuickNoteListSummary): Promise<void>;
-  startNewDraft(): Promise<void>;
+  startNewDraft(): Promise<boolean>;
+  /** 切版式等纯展示动作前：把活着的编辑器实时正文回写草稿镜像（不碰 baseline）。 */
+  flushEditorMirrors(): void;
   togglePreviewTask(noteId: string, checkboxIndex: number, checked: boolean): Promise<void>;
   copyNoteText(item: QuickNoteListSummary): Promise<void>;
   handleEditorReady(draftId: string, api: QuickNoteEditorApi | null): void;
@@ -64,6 +66,8 @@ export function useQuickNoteDraftSave({ list, viewMode, tagDirectory, confirm, s
   const pendingUploadsRef = useRef(0);
   /** 最近一次上传收尾时间：用于区分"内核刚回填 url 的几十毫秒窗口"和"上次会话留下的死卡"。 */
   const lastUploadSettledAtRef = useRef(0);
+  /** 打开/新建的**意图代际**：每次意图递增；await 之后代际变了 = 中途有了新意图 ⇒ 放弃本次（后到者赢）。 */
+  const editIntentRef = useRef(0);
   /** 最新草稿快照（保存时点击在前、上传落地在后，需要读到更新后的那份）。 */
   const draftsRef = useRef<{ create: DraftState; editing: DraftState | null }>({ create: createDraft, editing: editingDraft });
   /**
@@ -302,21 +306,57 @@ export function useQuickNoteDraftSave({ list, viewMode, tagDirectory, confirm, s
 
   async function startEditing(item: QuickNoteListSummary) {
     if (editingId === item.id) return;
-    // 切换默认保存（用户 260919）：有改动先把当前草稿存下来（没改动时 saveDraft 直接跳过、不写库），
-    // 只有保存失败才中止切换，避免"以为存了其实没存"。
-    if (dirty && !(await saveBeforeSwitch())) return;
+    // 意图代际：冷启动时「默认选中第一条」的 ensureDetail 可能很慢 —— 用户期间点了「新建小记」，
+    // 晚到的结果会把刚切过去的新建草稿抢回去（261124 首跑实测：focus 清了又回来）。
+    const intent = ++editIntentRef.current;
+    // 切换默认保存（用户 260919；261124 用户点单扩到"无条件过闸"）：一律走保存闸 ——
+    // 空草稿放行、无改动 saveDraft 直接跳过不写库、有改动自动保存；只有保存失败才中止切换，
+    // 避免"以为存了其实没存"。（dirty 预判已去掉：它只看文本镜像，正文级改动会被漏掉。）
+    if (!(await saveBeforeSwitch())) return;
     // DT-05：列表只有 summary，编辑前按 id 取回正文/资源。
     const document = await list.ensureDetail(item.id);
     if (!document) { setError("读取小记失败：这条小记可能已不存在"); return; }
+    if (intent !== editIntentRef.current) return; // 中途有了新意图（新建/另一次打开）：这次作废
     setEditingId(item.id); setEditingDraft(draftOf(document));
   }
 
-  /** 列表版式的「新建小记」：切回新建草稿（当前未保存内容先确认）。 */
-  async function startNewDraft() {
-    if (!editingDraft) return;
-    if (dirty && !(await saveBeforeSwitch())) return;
+  /**
+   * 列表版式的「新建小记」：切回新建草稿（当前未保存内容先确认）。
+   * 返回**是否真的切过去了**（false = 本来就在新建草稿 / 保存没过被中止）—— 调用方据此决定要不要
+   * 挡住「默认选中第一条」：261124 用户报「点新建没反应」，根因就是清空后该 effect 立刻把同一条
+   * 又抢回来（清空→重开 = 视觉零变化）。保存被中止时不设挡（用户还在编辑里，得先处理保存）。
+   */
+  /**
+   * 把还活着的编辑器里的**实时正文**回写进各自草稿的镜像（text/body，**不碰 baseline**）。
+   *
+   * 为什么必须有（261124 真实数据丢失实测）：版式切换是「纯展示偏好」，但列表↔小记两个版式的
+   * composer 在不同位置 ⇒ 切换 = 卸载重挂，重挂种子 = draft.body（初值）。镜像不回写就等于
+   * 「把用户正打的字喂给旧正文」：切回来内容凭空消失，再点保存会把**磁盘上的内容覆盖成旧版**
+   * （实测：A 保存成功 → 输入 B → 切版式 → 回来保存 ⇒ A、B 双双从磁盘消失）。
+   * 只回写镜像、不动 baseline ⇒ dirty 判定与「没改动不写库」语义完全不变。
+   */
+  function flushEditorMirrors(): void {
+    for (const [draftId, api] of draftEditorsRef.current) {
+      let body = ""; let text = "";
+      try { body = api.getBody(); text = api.getText(); } catch { continue; }
+      if (!body) continue; // 读失败兜底：宁可不回写，也不能把镜像清空（空正文对内核而言也非空串）
+      const patch: Partial<DraftState> = { body, ...(text.trim() ? { text } : {}) };
+      if (draftsRef.current.editing?.id === draftId) {
+        setEditingDraft((current) => (current && current.id === draftId ? { ...current, ...patch } : current));
+      } else if (draftsRef.current.create.id === draftId) {
+        setCreateDraft((current) => (current.id === draftId ? { ...current, ...patch } : current));
+      }
+    }
+  }
+
+  async function startNewDraft(): Promise<boolean> {
+    if (!editingDraft) return false;
+    // 与其它切换同口径（261124）：一律过保存闸（空/无改动不写库），失败才不切。
+    if (!(await saveBeforeSwitch())) return false;
+    editIntentRef.current++; // 新意图：在途的 startEditing（晚到的 ensureDetail）一律作废
     setEditingId(null);
     setEditingDraft(null);
+    return true;
   }
 
   /**
@@ -434,7 +474,7 @@ export function useQuickNoteDraftSave({ list, viewMode, tagDirectory, confirm, s
   return {
     createDraft, setCreateDraft, editingId, setEditingId, editingDraft, setEditingDraft,
     saving, setSaving, syncing, dirty,
-    saveDraft, saveDraftAndSync, saveBeforeSwitch, cancelDraft, startEditing, startNewDraft,
+    saveDraft, saveDraftAndSync, saveBeforeSwitch, cancelDraft, startEditing, startNewDraft, flushEditorMirrors,
     togglePreviewTask, copyNoteText, handleEditorReady, quickNoteUploader,
   };
 }
