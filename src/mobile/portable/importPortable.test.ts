@@ -67,7 +67,16 @@ vi.mock("../bridge/context", () => ({
     executeSet: async (set: Array<{ statement: string; values: unknown[] }>) => { state.batches.push(...set); },
     prepare: (sql: string) => ({
       all: async () => liveRows[/FROM (\w+)/.exec(sql)?.[1] ?? ""] ?? [],
-      get: async () => undefined,
+      // 261124 写后计数复核：按主键去重真计数（INSERT 收敛于主键 = 合法；DELETE 在写前，只数 INSERT 即最终值）。
+      get: async () => {
+        const m = /SELECT COUNT\(\*\) AS n FROM (\w+)/.exec(sql);
+        if (!m) return undefined;
+        const ids = new Set<string>();
+        for (const s of state.batches) {
+          if (s.statement.startsWith("INSERT") && s.statement.includes("INTO " + m[1] + " ")) ids.add(String(s.values[0]));
+        }
+        return { n: ids.size };
+      },
       run: async () => ({ changes: 0, lastInsertRowid: 0 }),
     }),
   }),

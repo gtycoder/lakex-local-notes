@@ -512,6 +512,23 @@ async function runPortableImportInner(
     await writeInBatches(db, tombstoneStatements(treeData.tombstones), onProgress);
     await writeInBatches(db, quickStatements(quickData), onProgress);
 
+    // 261124 数据事故回归：**写后计数复核**——映射产出必须逐表落库，缺行即整包失败（保留回滚副本、绝不静默丢文档）。
+    // 事故形态：真机导入间歇性丢行（4 篇子文档整批消失、重试又正常），而摘要报的是**映射计数** ⇒ 用户以为成功。
+    // 期望值按**去重后主键**算（同 id 多行按 SQLite 主键收敛是合法的）。
+    onProgress?.({ phase: "write-rows", detail: "复核导入行数…" });
+    const verifyCount = async (table: string, expected: number): Promise<void> => {
+      const row = await db.prepare("SELECT COUNT(*) AS n FROM " + table).get() as { n: number } | undefined;
+      const actual = Number(row?.n ?? -1);
+      if (actual !== expected) throw new Error(`导入校验失败：${table} 应写 ${expected} 行、实际 ${actual} 行（已中止并保留回滚副本，请重试导入）`);
+    };
+    const uniq = (ids: string[]): number => new Set(ids).size;
+    await verifyCount("notes", uniq(treeData.notes.map((n) => n.id)));
+    await verifyCount("folders", uniq(treeData.folders.map((f) => f.id)));
+    await verifyCount("deleted_notes", uniq(treeData.tombstones.map((t) => t.id)));
+    await verifyCount("quick_notes", uniq(quickData.quickNotes.map((q) => q.id)));
+    await verifyCount("quick_note_deleted", uniq(quickData.quickNoteDeleted.map((q) => q.id)));
+    await verifyCount("tags", uniq(quickData.tags.map((t) => t.id)));
+
     onProgress?.({ phase: "baseline", detail: "写入已同步基线…" });
     await ensureV3StateTable(db);
     // 261123（PORTABLE-TRANSFER §3.1）：纯离线包合成「合并底稿」基线（导出时刻快照当三方合并 base），
@@ -534,10 +551,11 @@ async function runPortableImportInner(
 
     const result: PortableImportResult = {
       counts: {
-        notes: treeData.notes.length,
-        folders: treeData.folders.length,
-        quickNotes: quickData.quickNotes.length,
-        tags: quickData.tags.length,
+        // 计数以**写后复核**为准（uniq 主键口径），不再报映射产出数。
+        notes: uniq(treeData.notes.map((n) => n.id)),
+        folders: uniq(treeData.folders.map((f) => f.id)),
+        quickNotes: uniq(quickData.quickNotes.map((q) => q.id)),
+        tags: uniq(quickData.tags.map((t) => t.id)),
         assets: copied.files ?? 0,
         bytes: copied.bytes ?? 0,
       },

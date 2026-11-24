@@ -27,6 +27,30 @@ export function targetKeyOf(s: SyncTargetSettings | null | undefined): string | 
   return [s.endpoint.trim().toLowerCase(), s.region.trim(), s.bucket.trim(), s.prefix.trim().replace(/^\/+|\/+$/g, "")].join("\u0000");
 }
 
+/**
+ * 云端目标「数据身份」比较：**忽略 region**（261124 数据事故复盘）。region 只是 S3 签名作用域，
+ * 七牛等兼容层不严格校验（cn-north-1 / cn-east-1 都能读写），并不改变 endpoint+bucket+prefix 指向的
+ * 同一份数据。两端 region 填得不一致（移动端表单默认 cn-north-1、桌面历史值 cn-east-1）曾把同一个桶
+ * 判成两个目标 ⇒ 误触发首次相遇的破坏性改写。比较按字段进行（\u0000 分隔，端点小写、前缀去首尾 /），
+ * 兼容旧四段式存储键；缺段的键只比较可得段。相同返回 true。
+ */
+export function sameSyncTargetKey(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (!a || !b) return false;
+  const parts = (k: string) => k.split("\u0000").map((x) => x.trim());
+  const pa = parts(a);
+  const pb = parts(b);
+  // 四段式 [endpoint, region, bucket, prefix]；三段式无 region。endpoint 小写归一、prefix 去首尾 /（与 targetKeyOf 同口径）。
+  const norm = (v: string | undefined, kind: "ep" | "rest") => {
+    if (v === undefined) return v;
+    const t = v.trim();
+    return kind === "ep" ? t.toLowerCase() : kind === "rest" ? t.replace(/^\/+|\/+$/g, "") : t;
+  };
+  const pick = (p: string[]) => (p.length >= 4 ? [norm(p[0], "ep"), norm(p[2], "rest"), norm(p[3], "rest")] : [norm(p[0], "ep"), norm(p[1], "rest"), norm(p[2], "rest")]);
+  const [ae, ab, ap] = pick(pa);
+  const [be, bb, bp] = pick(pb);
+  return ae === be && ab === bb && ap === bp;
+}
+
 /** 功能一：配置探测三态。marker = meta/pointer.json（本产品库标记）。 */
 export type CloudProbeKind = "empty" | "ours" | "foreign";
 
@@ -69,6 +93,9 @@ export type EncounterItemAction = ItemAction | "download-to-trash";
 export interface EncounterItemContext {
   localPresent: boolean;
   remotePresent: boolean;
+  /** 基线是否认识该条目（共享历史）。**基线已知条目绝不走破坏性改写**（261124 数据事故：导入丢行 + 配置指纹不一致 +
+   *  「以本地为准」把基线里明明存在的文档当「云端多出」发布成已删 ⇒ 他端整批进回收站）。 */
+  basePresent: boolean;
 }
 
 /**
@@ -87,7 +114,8 @@ export function applyEncounterAction(mode: FirstEncounterMode, action: ItemActio
     return action;
   }
   if (mode === "local-wins") {
-    if (action === "download") return ctx.localPresent ? "upload" : "download-to-trash"; // 双方都在=本机胜；远端独有=进回收站
+    // 双方都在=本机胜；远端独有且**基线也不认识**=真·云端多出→进回收站；基线认识=共享历史缺失副本→普通下载补回（绝不误删）。
+    if (action === "download") return ctx.localPresent ? "upload" : (ctx.basePresent ? "download" : "download-to-trash");
     if (action === "remote-wins-keep-history") return "upload";
     if (action === "remote-purged-move-to-trash") return "upload";     // 云端的删除被「本地为准」覆盖
     return action;                                                    // local-purge-wins = 本机显式删除，照常传播

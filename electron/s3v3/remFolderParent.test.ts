@@ -4,7 +4,7 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import { indexHashOf, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "../../src/core/s3v3/protocol/s3v3Index.js";
+import { serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "../../src/core/s3v3/protocol/s3v3Index.js";
 import { lakeBodyKey } from "../../src/core/s3v3/protocol/s3v3Keys.js";
 import { Store } from "../store.js";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";

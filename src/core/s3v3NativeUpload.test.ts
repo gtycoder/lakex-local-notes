@@ -110,7 +110,7 @@ describe("原生资产上传（261027 Phase1）：声明用原生 hash，上传�
     const device = new NativeDevice();
     // 空设备加入（对齐原意图：mock 默认自带 1 条小记会把场景染成「本地非空的首次相遇」⇒ 走合并轮；
     // 本例要验的是空设备全量重拉的原生 getToFile 资产下载，261123 路由门控后需显式清空）。
-    device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] }, quickNotes: { ...(device.state as { quickNotes?: object }).quickNotes, items: [] } } as typeof device.state;
+    device.state = { ...device.state, lake: { v: 3, space: "lake", notes: [], folders: [] }, quickNotes: { ...device.state.quickNotes, items: [] } };
     const quickBody = "quick-body";
     const quickHash = H(quickBody);
     const decl = { filename: "b.png", size: ASSET_BODY.length, hash: ASSET_HASH };

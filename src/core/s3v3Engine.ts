@@ -30,6 +30,7 @@ import { buildBootstrapBaseline, isBootstrapBaseline, rebaseBootstrapBaseline } 
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { selectConflictEvents, type SyncConflictEvent } from "./syncConflictLog.js";
+import { sameSyncTargetKey } from "./firstEncounter.js";
 import { runQuickPush } from "./s3v3/quickPush/pipeline.js";
 import type { QuickPushResult } from "./s3v3/quickPush/types.js";
 import { runTransferPipeline } from "./s3v3Transfer.js";
@@ -376,7 +377,9 @@ export class S3v3SyncEngine {
     // 没有共同历史（无基线 / 仅 bootstrap 底稿 / 基线属于别的云端目标）且云端与本地都非空时，
     // 「云端缺席」分不清「被删了」还是「没传上去」⇒ 不猜：要求用户先选合并方式（弹窗五选一）。
     // 选定任一选项该轮即建立共同基线（此后永不再问）；换桶/换前缀（targetKey 变）= 新的首次相遇。
-    const staleTarget = !!(rawBaseline && rawBaseline.targetKey && opts.targetKey && rawBaseline.targetKey !== opts.targetKey);
+    // 261124：目标身份比较**忽略 region**（sameSyncTargetKey）——region 只是签名作用域，不改变数据身份；
+  // 两端 region 填得不一致（移动表单默认 cn-north-1 vs 桌面历史 cn-east-1）不得再误触发首次相遇。
+  const staleTarget = !!(rawBaseline && rawBaseline.targetKey && opts.targetKey && !sameSyncTargetKey(rawBaseline.targetKey, opts.targetKey));
     const noRelationship = !rawBaseline || bootstrap || staleTarget;
     const localNonEmpty = state.lake.notes.length > 0 || state.quickNotes.items.length > 0 || state.folders.length > 0;
     const encounter = noRelationship ? opts.firstEncounter?.mode : undefined;

@@ -48,9 +48,10 @@ describe("云端首次相遇：询问触发（功能二）", () => {
 });
 
 describe("四选项对文档决策的映射", () => {
-  const ctxBoth = { localPresent: true, remotePresent: true };
-  const ctxLocalOnly = { localPresent: true, remotePresent: false };
-  const ctxRemoteOnly = { localPresent: false, remotePresent: true };
+  const ctxBoth = { localPresent: true, remotePresent: true, basePresent: true };
+  const ctxLocalOnly = { localPresent: true, remotePresent: false, basePresent: false };
+  const ctxRemoteOnly = { localPresent: false, remotePresent: true, basePresent: false }; // 真·云端多出（基线也不认识）
+  const ctxRemoteOnlyKnown = { localPresent: false, remotePresent: true, basePresent: true }; // 基线认识 = 共享历史缺副本
 
   it("smart：原判定不动（有基线判真删、无基线不删）", () => {
     expect(applyEncounterAction("smart", "remote-purged-move-to-trash", ctxBoth)).toBe("remote-purged-move-to-trash");
@@ -72,6 +73,14 @@ describe("四选项对文档决策的映射", () => {
     expect(applyEncounterAction("local-wins", "local-purge-wins", ctxRemoteOnly)).toBe("local-purge-wins"); // 本机显式删除照常传播
   });
 
+  it("基线已知条目绝不走破坏性改写（261124 事故回归：缺副本 = 普通下载补回，绝不发布成已删）", () => {
+    expect(applyEncounterAction("local-wins", "download", ctxRemoteOnlyKnown)).toBe("download");
+    expect(applyEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download-to-trash"); // 真·云端多出才进回收站
+    expect(applyEncounterAction("cloud-wins", "download", ctxRemoteOnlyKnown)).toBe("download");
+    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnlyKnown)).toBe("download");
+    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download"); // 小记侧本就安全兜底
+  });
+
   it("cloud-wins：本地独有 → 云端已删回收站；冲突远端胜；显式删除意图让位于云端", () => {
     expect(applyEncounterAction("cloud-wins", "upload", ctxLocalOnly)).toBe("remote-purged-move-to-trash");
     expect(applyEncounterAction("cloud-wins", "upload", ctxBoth)).toBe("remote-wins-keep-history");
@@ -82,9 +91,15 @@ describe("四选项对文档决策的映射", () => {
 });
 
 describe("四选项对小记决策的映射（绝不物删）", () => {
-  const ctxBoth = { localPresent: true, remotePresent: true };
-  const ctxLocalOnly = { localPresent: true, remotePresent: false };
-  const ctxRemoteOnly = { localPresent: false, remotePresent: true };
+  const ctxBoth = { localPresent: true, remotePresent: true, basePresent: true };
+  const ctxLocalOnly = { localPresent: true, remotePresent: false, basePresent: false };
+  const ctxRemoteOnly = { localPresent: false, remotePresent: true, basePresent: false }; // 真·云端多出（基线也不认识）
+  const ctxRemoteOnlyKnown = { localPresent: false, remotePresent: true, basePresent: true }; // 基线认识 = 共享历史缺副本
+
+  it("小记基线已知条目同口径（261124 回归）：download 永远是安全下载", () => {
+    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnlyKnown)).toBe("download");
+    expect(applyQuickEncounterAction("local-wins", "download", ctxRemoteOnly)).toBe("download");
+  });
 
   it("additive：双向都不删（云端缺席重传 / 本机删除推迟 / 冲突本机胜）", () => {
     expect(applyQuickEncounterAction("additive", "local-delete", ctxBoth)).toBe("upload");

@@ -171,7 +171,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     });
     // 首次相遇改写层（SYNC-PROTOCOL §21）：undefined = 既有语义；四选项对缺席/冲突判定的映射见 firstEncounter.ts。
     const action: ItemAction | "download-to-trash" = ctx.encounter
-      ? applyEncounterAction(ctx.encounter, rawAction, { localPresent: !!l, remotePresent: !!r })
+      ? applyEncounterAction(ctx.encounter, rawAction, { localPresent: !!l, remotePresent: !!r, basePresent: !!b })
       : rawAction;
     switch (action) {
       case "upload":
@@ -405,7 +405,7 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
   // 首次相遇改写层（SYNC-PROTOCOL §21）：小记版映射（download-to-trash = 下载内容 + 落小记回收站 + 发布缺席）。
   if (encounter) {
     for (const it of items) {
-      const mapped = applyQuickEncounterAction(encounter, it.kind as EncounterQuickAction, { localPresent: !!it.local, remotePresent: !!it.remote });
+      const mapped = applyQuickEncounterAction(encounter, it.kind as EncounterQuickAction, { localPresent: !!it.local, remotePresent: !!it.remote, basePresent: b.has(it.id) });
       if (mapped === it.kind) continue;
       if (mapped === "download-to-trash") {
         it.kind = "download";
