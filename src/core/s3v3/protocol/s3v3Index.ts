@@ -309,7 +309,10 @@ export function validateLakeIndex(raw: unknown): LakeIndex {
     }
   }
   for (const f of idx.folders) {
+    // 261124 P3-4（审计③发现 4）：只查不加 = 两条 folder 同 id 通过校验（§5.4「键内唯一」），
+    // 下游 Map-by-id 静默去重 ⇒ 索引条目无声丢失。补 ids.add 收口。
     if (!isSafeId(f.id) || ids.has(f.id)) throw new Error("目录 id 非法/重复: " + String(f.id));
+    ids.add(f.id);
     if (typeof f.title !== "string" || typeof f.updatedAt !== "string") throw new Error("目录 title/updatedAt 非法");
     if (f.nodeType !== "notebook" && f.nodeType !== "group") throw new Error("目录 nodeType 非法");
   }
@@ -337,6 +340,16 @@ export function validateQuickNotesIndex(raw: unknown): QuickNotesIndex {
     if (!isHash(it.contentHash) || typeof it.createdAt !== "string" || typeof it.updatedAt !== "string") throw new Error("小记条目字段非法: " + it.id);
     if (it.assetsHash !== undefined && !isHash(it.assetsHash)) throw new Error("小记 assetsHash 非法: " + it.id);
     if (it.tagIds !== undefined && (!Array.isArray(it.tagIds) || it.tagIds.some((t) => typeof t !== "string"))) throw new Error("小记 tagIds 非法");
+    // 261124 P3-5（审计③发现 5）：quick 硬化对齐 lake —— 去重 + 每篇上限 + tagsUpdatedAt 必须可解析
+    //（坏时间串会按字典序永久压制该条的小记标签 LWW；重复/超限 tagIds 撑大索引、破坏集合比较）。
+    if (it.tagIds !== undefined) {
+      if (new Set(it.tagIds).size !== it.tagIds.length) throw new Error("小记 tagIds 重复: " + it.id);
+      if (it.tagIds.length > S3V3_MAX_TAGS_PER_NOTE) throw new Error("小记 tagIds 过多: " + it.id);
+    }
+    if (it.tagsUpdatedAt !== undefined) {
+      if (typeof it.tagsUpdatedAt !== "string") throw new Error("小记 tagsUpdatedAt 非法: " + it.id);
+      if (it.tagsUpdatedAt !== "" && !Number.isFinite(Date.parse(it.tagsUpdatedAt))) throw new Error("小记 tagsUpdatedAt 非时间: " + it.id);
+    }
   }
   const purged = idx.purged as string[] | undefined;
   if (purged !== undefined && (!Array.isArray(purged) || purged.some((id) => typeof id !== "string"))) throw new Error("小记 purged 列表非法");
