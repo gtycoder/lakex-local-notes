@@ -125,7 +125,9 @@ export class SyncReconciliation {
       // 回收站条目：同步 trashed_at + deleted_from_parent_id；移出回收站（恢复传播）时清空。
       // 261124 A4（审计②P1-2）：trashed 且 wire 未带 dfp ⇒ **保留行上已有值**（COALESCE）——
       // 旧实现无条件覆盖 null ⇒ 移动端（曾不写 dfp）传来的条目把桌面行的原父冲掉，恢复换家/purge 漏删。
-      const inTrash = note.parentId === this.ctx.trashNotebookId;
+      // 261124 ②P3-10：inTrash 判据补 trashedAt 在场（keepLocalTrash 的级联子文档 parent=原父、
+      // trashedAt 有值 —— 只看 parent 会把它们当活跃行清掉 trashed_at = 隐式恢复）。
+      const inTrash = note.parentId === this.ctx.trashNotebookId || note.trashedAt != null;
       const trashedAt = inTrash ? (note.trashedAt ?? new Date().toISOString()) : null;
       const deletedFrom = inTrash ? (note.deletedFromParentId ?? null) : null;
       const deletedFromCol = inTrash ? "COALESCE(?, deleted_from_parent_id)" : "?";

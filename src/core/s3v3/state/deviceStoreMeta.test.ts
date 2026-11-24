@@ -78,7 +78,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async markBodyRecoveryPending(ids) { calls.push("markBodyRecoveryPending:" + ids.join(",")); },
     async clearBodyRecoveryPending() { calls.push("clearBodyRecoveryPending"); },
     async importRemoteFolder(f) { calls.push("importRemoteFolder:" + f.id); },
-    async applyRemoteFolderMeta(f) { calls.push("applyRemoteFolderMeta:" + f.id); },
+    async applyRemoteFolderMeta(f) { calls.push("applyRemoteFolderMeta:" + f.id); importedNotes.set(f.id, f as never); },
     async deleteTreeNode(id) { calls.push("deleteTreeNode:" + id); },
     async listMissingQuickNoteIds() { return []; },
     async purgeOrphanQuickNote(id) { calls.push("purgeOrphanQuickNote:" + id); },
@@ -396,6 +396,63 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     await meta.saveState(state);
     // 旧实现 hasNote(f1)=false ⇒ 目录 id 被滤掉 ⇒ 下轮徽标被投影清掉（目录「云端已删除」失明）
     expect(platform.calls).toContain("applyNotesCloudDeleted:f1");
+  });
+
+  it("②P3-10：keepLocalTrash 的 meta 不得把级联子文档扁平成回收站根（parent 保原父）", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body") });
+    // 级联软删子文档形状：parent=原父、trashed、dfp=原父（只有根才挂回收站容器）
+    const platform = memoryPlatform({ notes: [
+      { id: "n1", title: "N1", parentId: "orig-parent", sortOrder: 0, updatedAt: "T0", contentHash: H("local"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: "T9", deletedFromParentId: "orig-parent" },
+    ] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null }, // 基线无 trashed ⇒ keepLocalTrash 生效
+      stagedBodies: new Map([["n1", new TextEncoder().encode("远端正文")]]),
+    });
+    const state: DeviceState = {
+      // 远端 active（他端把该条当活跃发布）⇒ 本地回收站生命周期必须保住（恢复是唯一显式例外）
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: "orig-parent", sortOrder: 0, updatedAt: "T1", contentHash: H("remote") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    const applied = platform.importedNotes.get("n1") as { parentId: string | null; trashedAt: string | null } | undefined;
+    expect(applied).toBeTruthy();
+    expect(applied!.trashedAt).toBe("T9"); // 生命周期归本地
+    // 旧实现 metaNote.parentId 固定 TRASH ⇒ 级联子文档被扁平为回收站根（恢复回不了原位）
+    expect(applied!.parentId).toBe("orig-parent");
+  });
+
+  it("②P3-15：本地回收站目录不得被远端 active 隐式恢复（对齐文档侧裁决）", async () => {
+    const files = memoryFiles();
+    const platform = memoryPlatform({ folders: [
+      // 本地已 trashed 的目录（原父 nb-orig）
+      { id: "f1", title: "F1", parentId: "nb-orig", sortOrder: 0, updatedAt: "T0", nodeType: "group", space: null, icon: null, trashedAt: "T9", deletedFromParentId: "nb-orig" },
+    ] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      // 远端把 f1 当 active 发布（B 移动了它）⇒ 不得复活本地回收站副本
+      folders: [{ id: "f1", title: "F1-renamed", parentId: "nb-orig", sortOrder: 1, updatedAt: "T1", nodeType: "group", space: null, icon: null }],
+      intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    const applied = platform.importedNotes.get("f1") as unknown as { parentId: string | null; trashedAt: string | null } | undefined;
+    expect(applied).toBeTruthy();
+    // 旧实现无 keepLocalTrash ⇒ trashed_at 被写 null（隐式恢复，违「恢复是唯一显式例外」）
+    expect(applied!.trashedAt).toBe("T9");
+    expect(applied!.parentId).toBe("nb-orig");
   });
 
   it("②P3-11：同步窗口内用户又编辑的行，staged 远端正文不得覆盖（I2「未变才应用」）", async () => {

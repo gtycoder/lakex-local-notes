@@ -389,8 +389,10 @@ export class NoteMetadataRepository {
    */
   applyRemoteFolderMeta(folder: SyncFolder): void {
     if (folder.id === this.trashNotebookId) return;
-    const trashedAt = folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null;
-    const deletedFrom = folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null;
+    // 261124 ②P3-15/②P3-10：inTrash 判据补 trashedAt 在场（目录 keepLocalTrash 传的 parent=原父）。
+    const inTrash = folder.parentId === this.trashNotebookId || folder.trashedAt != null;
+    const trashedAt = inTrash ? (folder.trashedAt ?? null) : null;
+    const deletedFrom = inTrash ? (folder.deletedFromParentId ?? null) : null;
     const existing = this.db.prepare("SELECT id, parent_id, space, trashed_at, deleted_from_parent_id FROM tree_nodes WHERE id=?").get(folder.id) as
       { id: string; parent_id: string | null; space: string | null; trashed_at: string | null; deleted_from_parent_id: string | null } | undefined;
     if (!existing) {

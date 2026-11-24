@@ -437,7 +437,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   }
 
   /** 目录落库：先 import/更新（deleteMissing=false），再在 saveState 收尾删缺失（true）。 */
-  async function saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean, parentScope?: ReadonlySet<string>): Promise<void> {
+  async function saveFolders(
+    folders: LakeFolderEntry[],
+    deleteMissing: boolean,
+    parentScope?: ReadonlySet<string>,
+    keepTrashOpts: { restoringIds: ReadonlySet<string>; baselineTrashedFolderIds: ReadonlySet<string> } = { restoringIds: new Set(), baselineTrashedFolderIds: new Set() },
+  ): Promise<void> {
     const current = new Map((await p.listFoldersForSync()).map((f: SyncFolderRow) => [f.id, f] as const));
     for (const raw of foldersParentsFirst(folders)) {
       // P1-a 兜底（261112 真实 S3）：**notebook 只能根层**。带 parent 却标 notebook 的条目 =
@@ -464,7 +469,15 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             || (c.icon ?? null) !== (f.icon ?? null)
             || normalizeFolderSpace(c.space) !== normalizeFolderSpace(f.space)
             || c.updatedAt !== f.updatedAt;
-          if (changed) await p.applyRemoteFolderMeta({ ...folderRow(f), parentId });
+          // 261124 ②P3-15（审计②P3-15）：目录 keepLocalTrash（对齐文档侧 261112 裁决「绝不因远端
+          // active 隐式恢复」）——本地回收站目录不因远端 active 复活（恢复是唯一显式例外）：生命周期
+          // 三件套保持本地值、内容/元数据照常应用。显式恢复 = restorePending 或基线本就 trashed
+          //（他端显式恢复传播）。注：按 §9.5 目录走 LWW 也在协议内，此处取与文档侧一致的语义。
+          const keepFolderTrash = c.trashedAt != null && !f.trashedAt
+            && !keepTrashOpts.restoringIds.has(f.id) && !keepTrashOpts.baselineTrashedFolderIds.has(f.id);
+          if (changed) await p.applyRemoteFolderMeta(keepFolderTrash
+            ? { ...folderRow(f), parentId: c.parentId ?? parentId, trashedAt: c.trashedAt, deletedFromParentId: c.deletedFromParentId ?? null }
+            : { ...folderRow(f), parentId });
         }
       } catch (e) {
         throw new Error("saveFolders 失败(" + f.id + "): " + (e as Error).message, { cause: e });
@@ -753,8 +766,10 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           // P1（v3 空发布抖动根因）：本轮合并结果的元数据必须原样落库，尤其 updatedAt。
           // P0：keepLocalTrash 时把生命周期字段固定为**本地回收站值**（position 归本地、内容归远端），
           // 这样 applyRemoteNoteMeta 不会把行移出回收站（它的 inTrash 判据 = parentId === 回收站笔记本）。
+          // 261124 ②P3-10（审计②P3-10）：keepLocalTrash 的 parent 用**行自己的父**（级联软删子文档 =
+          // 原父；只有根才挂回收站容器）——旧实现固定写 TRASH ⇒ 子文档被扁平为回收站根，恢复回不了原位。
           const metaNote = keepLocalTrash
-            ? { ...toNoteWrite(n, resolvedParentId), trashedAt: cur.trashedAt ?? null, deletedFromParentId: cur.deletedFromParentId ?? null }
+            ? { ...toNoteWrite(n, cur.parentId ?? resolvedParentId), trashedAt: cur.trashedAt ?? null, deletedFromParentId: cur.deletedFromParentId ?? null }
             : toNoteWrite(n, resolvedParentId);
           const effTrashedAt = keepLocalTrash ? cur.trashedAt : (n.trashedAt ?? null);
           const effDeletedFrom = keepLocalTrash ? (cur.deletedFromParentId ?? null) : (n.deletedFromParentId ?? null);
@@ -849,7 +864,9 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if (p.pruneNoteTagLinks) {
       await p.pruneNoteTagLinks((state.quickNotes.tags ?? []).map((tag) => tag.id));
     }
-    await saveFolders(state.folders, true, parentScope);
+    // 261124 ②P3-15：目录 keepLocalTrash 输入（显式恢复集合 + 基线 trashed 集合）。
+    const baselineTrashedFolderIds = new Set((deviceBaseline?.lake.folders ?? []).filter((f) => !!f.trashedAt).map((f) => f.id));
+    await saveFolders(state.folders, true, parentScope, { restoringIds: restoringNow, baselineTrashedFolderIds });
 
     // 引擎持久化的 remotePurged → 本地展示位 cloud_deleted；只保留「本地仍有行」的 id
     //（本地主动 purge 后行已物理删除，必须从信封清掉，否则永远打标、引擎每轮空转）。
