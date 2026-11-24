@@ -146,15 +146,17 @@ export class SyncReconciliation {
       // 旧清单无 icon 字段时保留本地图标（icon=undefined 是"未声明"，null 才是"显式清除"）；
       // 否则旧客户端写出的 manifest 会把新端本地图标静默清掉（验收 #1 健壮性）。
       const treeWhere = expectedLocalUpdatedAt ? "note_file_id=? AND updated_at=?" : "note_file_id=?";
+      // 261124 A4 补漏（查漏复查）：树行的 dfp 同样走保留 COALESCE（旧实现只修了 notes 行，
+      // tree_nodes 两处仍无条件覆盖 null ⇒ 桌面行原父照样被清）。
       if (note.icon !== undefined) {
         this.ctx.db.prepare(
-          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE " + treeWhere
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=" + deletedFromCol + " WHERE " + treeWhere
         ).run(...(expectedLocalUpdatedAt
           ? [note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
           : [note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id]));
       } else {
         this.ctx.db.prepare(
-          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, trashed_at=?, deleted_from_parent_id=? WHERE " + treeWhere
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, trashed_at=?, deleted_from_parent_id=" + deletedFromCol + " WHERE " + treeWhere
         ).run(...(expectedLocalUpdatedAt
           ? [note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
           : [note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id]));

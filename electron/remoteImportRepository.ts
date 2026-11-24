@@ -131,7 +131,8 @@ export class RemoteImportRepository {
            ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
              deleted_at=NULL,is_dirty=0,is_conflict=excluded.is_conflict,icon=excluded.icon,
-             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
+             trashed_at=excluded.trashed_at,
+             deleted_from_parent_id=CASE WHEN excluded.trashed_at IS NOT NULL THEN COALESCE(excluded.deleted_from_parent_id, tree_nodes.deleted_from_parent_id) ELSE excluded.deleted_from_parent_id END`
         ).run(note.id, this.deps.workspaceId, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null, trashedAt, deletedFrom);
       });
       transaction();
