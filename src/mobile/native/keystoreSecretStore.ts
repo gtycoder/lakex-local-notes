@@ -1,8 +1,9 @@
 /**
- * 移动端 SecretStore 的 **原生 Keystore** 实现（261010；替换 WebView 存储的降级件）。
+ * 移动端 SecretStore 的 **原生自管理** 实现（261204 用户裁决：彻底退役系统凭据管理，不再用 Android Keystore）。
  *
- * 原生侧 = `android/.../SecureStorePlugin.kt`：AndroidKeyStore 生成/保管 AES-256-GCM 密钥，
- * 密文落应用私有 SharedPreferences。接口与 core 的 `SecretStore` 端口一对一。
+ * 原生侧 = `android/.../SecureStorePlugin.kt` + SecretBox.kt：随机 AES-256-GCM 密钥落**应用私有密钥文件**
+ *（与桌面 machine.key 同语义），密文落应用私有 SharedPreferences；红线保持 secret **不落 WebView 存储**。
+ * 接口与 core 的 `SecretStore` 端口一对一。
  *
  * 为什么不是 WebCrypto + localStorage（原实现）：密钥材料是固定派生的，能拿到 WebView 存储就能解开，
  * 属"混淆"而非硬件级保护；且 261009 实测 Android WebView 的 IndexedDB 不跨重启（同一类坑）。

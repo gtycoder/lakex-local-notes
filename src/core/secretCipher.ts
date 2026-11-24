@@ -7,6 +7,15 @@
  * 非 enc: 前缀视为旧明文，decrypt 不再放行、返回空串提示重配（S2）。
  */
 
+/** 存储格式前缀（单一来源）：enc:v2: = 本机加密（自管理 machine.key）；enc:v1: = 旧 safeStorage（系统钥匙串，只读迁移）。 */
+export const SECRET_PREFIX_V1 = "enc:v1:";
+export const SECRET_PREFIX_V2 = "enc:v2:";
+
+/** 旧格式（系统钥匙串 safeStorage）密文判定：仅迁移清扫使用（261204 钥匙串退役）。 */
+export function isLegacySecretPayload(payload: string): boolean {
+  return payload.startsWith(SECRET_PREFIX_V1);
+}
+
 export interface SecretCipher {
   /** 加密后落盘值；加密不可用时允许明文回退（实现负责告警）。 */
   encrypt(value: string): string;

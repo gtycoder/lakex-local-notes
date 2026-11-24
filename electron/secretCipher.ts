@@ -28,7 +28,7 @@ const KEY_BYTES = 32;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 
-/** 老格式（safeStorage / macOS Keychain）解密：仅用于读路径迁移；不可用/失败一律 ""（未配置口径）。 */
+/** 老格式（safeStorage / macOS Keychain）解密：**只服务一次性迁移清扫**（261204 钥匙串退役：settingsRepository.migrateLegacySecrets 解一次即换写 v2；全员迁移后本分支可整体删除）。不可用/失败一律 ""（未配置口径）。 */
 function legacyDecrypt(payload: string): string {
   try {
     if (!safeStorage.isEncryptionAvailable()) return "";

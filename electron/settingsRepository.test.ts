@@ -37,6 +37,72 @@ function makeRepo(rows: Map<string, string>): SettingsRepository {
 
 const S3_ROW = JSON.stringify({ endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "b", prefix: "p", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false });
 
+describe("261204 系统钥匙串退役：enc:v1 → enc:v2 一次性迁移", () => {
+  // 与生产同款格式的桩：enc:v2: = 本机 machine.key 加密；enc:v1: = 旧 safeStorage（钥匙串）。
+  const makeCipher = (failV1 = false): SecretCipher => ({
+    encrypt: (v) => "enc:v2:" + Buffer.from(v).toString("base64"),
+    decrypt: (v) => v.startsWith("enc:v2:") ? Buffer.from(v.slice("enc:v2:".length), "base64").toString()
+      : v.startsWith("enc:v1:") ? (failV1 ? "" : Buffer.from(v.slice("enc:v1:".length), "base64").toString())
+      : "",
+  });
+  const v1 = (plain: string) => "enc:v1:" + Buffer.from(plain).toString("base64");
+  function repoWith(rows: Map<string, string>, cipher: SecretCipher = makeCipher()) {
+    const db: DbLike = {
+      prepare(sql: string) {
+        const key = /key='([^']+)'/.exec(sql)?.[1] ?? "";
+        return {
+          get: () => (rows.has(key) ? { value: rows.get(key)! } : undefined),
+          all: () => [],
+          run: (...args: unknown[]) => {
+            // SQL 形如 INSERT INTO settings(key,value) VALUES('<key>',?) —— key 内联、占位符只有 value
+            const insertKey = sql.includes("VALUES('") ? sql.split("VALUES('")[1].split("',")[0] : "";
+            if (insertKey) rows.set(insertKey, String(args[0]));
+            return { changes: 1, lastInsertRowid: 1 };
+          },
+        };
+      },
+      transaction: ((fn: unknown) => fn) as DbLike["transaction"],
+      pragma: () => undefined,
+      exec: () => {},
+      close: () => {},
+    };
+    return new SettingsRepository(db, cipher);
+  }
+  const s3Row = (secret: string) => JSON.stringify({ endpoint: "e", region: "r", bucket: "b", prefix: "", accessKeyId: "ak", secretAccessKey: secret, forcePathStyle: false });
+  const aiRow = (apiKey: string) => JSON.stringify({ version: 1, activeProviderId: "openai", providers: { openai: { apiKey } } });
+
+  it("S3 + AI 的 enc:v1 一次性换写 v2；二次清扫零改动；换写后读出明文", () => {
+    const rows = new Map<string, string>([
+      ["s3_settings", s3Row(v1("sk-old"))],
+      ["ai_settings", aiRow(v1("sk-ai"))],
+    ]);
+    const repo = repoWith(rows);
+    expect(repo.migrateLegacySecrets().migrated).toBe(2);
+    expect(JSON.parse(rows.get("s3_settings")!).secretAccessKey.startsWith("enc:v2:")).toBe(true);
+    expect(JSON.parse(rows.get("ai_settings")!).providers.openai.apiKey.startsWith("enc:v2:")).toBe(true);
+    expect(repo.getS3Settings()!.secretAccessKey).toBe("sk-old");
+    expect(repo.getAiSettings().providers.openai?.apiKey).toBe("sk-ai");
+    const before = rows.get("s3_settings");
+    expect(repo.migrateLegacySecrets().migrated).toBe(0); // 幂等：零钥匙串访问
+    expect(rows.get("s3_settings")).toBe(before);
+  });
+
+  it("解不开的 v1 保持原样（换机/钥匙丢失不落明文、不损坏行）", () => {
+    const rows = new Map<string, string>([["s3_settings", s3Row(v1("sk-old"))]]);
+    const repo = repoWith(rows, makeCipher(true));
+    expect(repo.migrateLegacySecrets().migrated).toBe(0);
+    expect(rows.get("s3_settings")).toBe(s3Row(v1("sk-old"))); // 原样保留
+    expect(repo.getS3Settings()!.secretAccessKey).toBe(""); // 读路径按未配置口径
+  });
+
+  it("getter 首读触发惰性清扫（此后读路径不再出现 enc:v1）", () => {
+    const rows = new Map<string, string>([["ai_settings", aiRow(v1("sk-ai"))]]);
+    const repo = repoWith(rows);
+    expect(repo.getAiSettings().providers.openai?.apiKey).toBe("sk-ai");
+    expect(rows.get("ai_settings")!.includes("enc:v1:")).toBe(false);
+  });
+});
+
 describe("云同步默认开关 = 是否已配置 S3", () => {
   it("全新安装（没有任何 S3 配置）⇒ 默认关闭", () => {
     expect(makeRepo(new Map()).getSyncSettings().enabled).toBe(false);

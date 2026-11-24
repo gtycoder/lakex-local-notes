@@ -143,7 +143,7 @@
 | 日志 | 上面两个目录下的 `logs/lakex-local-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
 
-- **移动端 S3 密钥不落 WebView 存储**：走 Android Keystore（`android/**/SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 web/vitest 后端与历史值迁移来源。
+- **密钥一律自管理（261204 用户裁决：不进系统钥匙串/Keystore）**：桌面 = `machine.key`+SecretCipher（`enc:v2:`；`enc:v1:` 旧 safeStorage 密文只在迁移清扫解一次即换写，全员迁移后删该分支）；移动 = SecretBox 应用私有密钥文件 + AES-GCM 密文落私有 SharedPreferences（存量 Keystore 密文一次性迁移后退役）。两端都**不落 WebView 存储**；`localStorageSecretStore` 只是 web/vitest 后端。
 
 ## 6. 关键命令
 

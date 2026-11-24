@@ -7,14 +7,15 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 
 /**
- * S3 密钥等 secret 的 **Android Keystore** 存储（261010）。
+ * S3 密钥等 secret 的 **自管理** 存储（261204 用户裁决：彻底退役系统凭据管理）。
  *
  * 为什么需要：先前的实现把密文放 WebView 存储（WebCrypto AES-GCM + localStorage），
  * 密钥材料是**固定派生**的（`lakex-local-notes-mobile.secret-key.v1`）—— 拿到 WebView 存储就能解开，
  * 属于"混淆"而非硬件级保护。这里改为：
- *   · 密钥由 **AndroidKeyStore** 生成并保管（不落盘、不出安全硬件/TEE 支持范围）；
+ *   · 密钥 = 随机 32 字节，落应用私有密钥文件（SecretBox 管理，0600 尽力收紧；与桌面 machine.key 同语义）；
+ *   · **不再使用 Android Keystore / 系统钥匙串**（存量 Keystore 密文一次性迁移后退役，261204）；
  *   · 密文（`base64(iv):base64(ciphertext)`，AES-256-GCM）落 **应用私有 SharedPreferences**；
- *   · 解锁/使用由系统负责，应用不接触裸密钥。
+ *   · 解锁/使用不依赖系统凭据管理。
  *
  * 接口与 core 的 `SecretStore` 端口一对一（get/set/remove），JS 侧见 src/mobile/native/keystoreSecretStore.ts。
  * 失败语义：解密失败（换锁屏 / 恢复出厂 / 数据损坏）⇒ **清掉该键并返回空**，让用户重填 ——
@@ -46,7 +47,7 @@ class SecureStorePlugin : Plugin() {
             call.resolve()
         } catch (e: Exception) {
             // 写失败必须让调用方知道（"看起来保存成功"是最坏结果）
-            call.reject("Keystore 写入失败: " + (e.message ?: e.javaClass.simpleName))
+            call.reject("密钥写入失败: " + (e.message ?: e.javaClass.simpleName))
         }
     }
 
