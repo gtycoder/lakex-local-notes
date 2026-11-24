@@ -45,6 +45,56 @@ function markerOf(dbPath: string): string | null {
   finally { db.close(); }
 }
 
+describe("A2：回滚不得误删未参与恢复的活小记库（261124 审计⑤P1-1）", () => {
+  it("备份无小记库 + 换位中途失败 ⇒ 回滚后活小记库原样保留（不 rmSync）", () => {
+    const userDataDir = tempDir();
+    const workspace = tempDir();
+    const backupRoot = tempDir();
+    const currentMain = path.join(workspace, "metadata.sqlite3");
+    const currentQuick = path.join(workspace, "quick-notes", "metadata.sqlite3");
+    const backupMain = path.join(backupRoot, "metadata-2026-11-24.sqlite3");
+    createMainDb(currentMain, "current-main");
+    createQuickDb(currentQuick, "current-quick");
+    createMainDb(backupMain, "backup-main");
+    // 备份里**没有** quick-notes/ ⇒ restoreQuickNotes=false：活小记库从未被隔离/复制。
+    const result = restoreMainDatabaseFromBackup({
+      backupPath: backupMain,
+      currentDbPath: currentMain,
+      currentQuickNotesDbPath: currentQuick,
+      userDataDir,
+      fsOps: { copyFileSync: () => { throw new Error("磁盘满（模拟换位失败）"); } },
+    });
+    expect(result.ok).toBe(false);
+    // 旧实现回滚用 if (currentQuickNotesDbPath) 判据 ⇒ 把活小记库 rmSync 掉且无副本（真丢数据）。
+    expect(markerOf(currentQuick)).toBe("current-quick");
+    expect(markerOf(currentMain)).toBe("current-main"); // 主库回滚照常
+  });
+
+  it("对照：备份带小记库 + 换位失败 ⇒ 两库都回滚到原样（既有语义不回归）", () => {
+    const userDataDir = tempDir();
+    const workspace = tempDir();
+    const backupRoot = tempDir();
+    const currentMain = path.join(workspace, "metadata.sqlite3");
+    const currentQuick = path.join(workspace, "quick-notes", "metadata.sqlite3");
+    const backupMain = path.join(backupRoot, "metadata-2026-11-24.sqlite3");
+    const backupQuick = path.join(backupRoot, "quick-notes", "metadata.sqlite3");
+    createMainDb(currentMain, "current-main");
+    createQuickDb(currentQuick, "current-quick");
+    createMainDb(backupMain, "backup-main");
+    createQuickDb(backupQuick, "backup-quick");
+    const result = restoreMainDatabaseFromBackup({
+      backupPath: backupMain,
+      currentDbPath: currentMain,
+      currentQuickNotesDbPath: currentQuick,
+      userDataDir,
+      fsOps: { copyFileSync: () => { throw new Error("磁盘满（模拟换位失败）"); } },
+    });
+    expect(result.ok).toBe(false);
+    expect(markerOf(currentQuick)).toBe("current-quick");
+    expect(markerOf(currentMain)).toBe("current-main");
+  });
+});
+
 describe("从备份恢复小记库（标签存储统一前置）", () => {
   it("主库 + 同快照小记库一起恢复；原小记库隔离保留", () => {
     const userDataDir = tempDir();

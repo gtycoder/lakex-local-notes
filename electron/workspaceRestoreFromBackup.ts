@@ -243,7 +243,9 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
     // 3) 回滚：删掉可能写入的新库，把隔离的原库按相反顺序移回。
     for (const suffix of ["", "-wal", "-shm"]) {
       try { ops.rmSync(currentDbPath + suffix, { force: true }); } catch { /* 尽力 */ }
-      if (currentQuickNotesDbPath) { try { ops.rmSync(currentQuickNotesDbPath + suffix, { force: true }); } catch { /* 尽力 */ } }
+      // 261124 A2（审计⑤P1-1）：回滚判据必须与**隔离判据**（1b：restoreQuickNotes && currentQuickNotesDbPath）
+      // 一致 —— 备份没有小记库时活小记库从未被隔离/复制，回滚 rmSync 它 = 无副本真丢数据（还报「原库未变」）。
+      if (restoreQuickNotes && currentQuickNotesDbPath) { try { ops.rmSync(currentQuickNotesDbPath + suffix, { force: true }); } catch { /* 尽力 */ } }
     }
     let rolledBack = true;
     for (const item of moved.toReversed()) {
