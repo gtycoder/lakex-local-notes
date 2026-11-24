@@ -23,6 +23,33 @@ const rowOf = async (db: SqlJsAsyncDb, id: string) =>
     | { deleted_at: string | null; content_hash: string }
     | undefined;
 
+describe("A5：保存不清恢复标记（261124 审计④F2）", () => {
+  it("restore_pending_at 非空时保存 ⇒ 标记保留（local-wins 盾不被误清；只有 markSynced 清）", async () => {
+    const db = await freshDb();
+    try {
+      await saveQuickNote(db, "q-rp", "恢复前内容");
+      // 模拟显式恢复（restoreQuickNote 同款写法：清 deleted_at + 写 restore_pending_at）
+      await db.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=? WHERE id=?").run(T, "q-rp");
+      await saveQuickNoteContent(db, "q-rp", { text: "恢复后未同步前的编辑", body: "<p>恢复后未同步前的编辑</p>", images: [] });
+      const row = await db.prepare("SELECT restore_pending_at FROM quick_notes WHERE id=?").get("q-rp") as { restore_pending_at: string | null };
+      // 旧实现 ON CONFLICT 写 restore_pending_at=NULL ⇒ 恢复后编辑保存 = 丢掉 local-wins 唯一盾，
+      // 下一轮 quick-soft-delete/回滚把恢复变白干（桌面 savePipeline 不触碰该列，两端同语义）。
+      expect(row.restore_pending_at).toBe(T);
+    } finally { await db.close(); }
+  });
+
+  it("普通保存仍推进内容与 updated_at（不因标记保留而拒绝编辑）", async () => {
+    const db = await freshDb();
+    try {
+      await saveQuickNote(db, "q-rp2", "v1");
+      await db.prepare("UPDATE quick_notes SET restore_pending_at=? WHERE id=?").run(T, "q-rp2");
+      await saveQuickNote(db, "q-rp2", "v2");
+      const doc = await readQuickNote(db, "q-rp2");
+      expect(doc?.content.text).toBe("v2");
+    } finally { await db.close(); }
+  });
+});
+
 describe("小记不静默复活（task-55 M2）", () => {
   it("保存已进回收站的小记 ⇒ 拒绝且文案含「回收站」；行仍保持删除、正文不变", async () => {
     const db = await freshDb();

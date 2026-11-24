@@ -252,8 +252,12 @@ async function persistQuickNoteContent(
       await d.prepare(
         `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version)
          VALUES (?,?,?,?,?,?,1,0,NULL,1,?,1)
-         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
+         ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
       ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, content.images[0]?.filename ?? null);
+      // 261124 A5（审计④F2）：**保存不清 restore_pending_at** —— 它是恢复的 local-wins 唯一盾
+      //（AGENTS §3#4：标记在 markSynced 清除）。旧 ON CONFLICT 写 restore_pending_at=NULL ⇒
+      // 恢复后未同步前编辑保存即丢盾，下一轮 quick-soft-delete/回滚把恢复变白干（桌面
+      // savePipeline 不触碰该列 ⇒ 两端同语义）。
       // 活跃写入统一清删除墓碑，避免“活跃行 + 墓碑”二义性。
       await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
     });
