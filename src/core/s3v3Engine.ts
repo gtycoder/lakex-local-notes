@@ -608,6 +608,12 @@ export class S3v3SyncEngine {
     // 与既有路径一致：即使本轮没发布，也要把「当前云端代际」报给上层（否则日志/状态栏显示 gen=null）。
     report.generation = round.nextPointer.generation;
     const bodyFailed = new Set(round.apply.entries.filter((e) => e.status !== "applied").map((e) => e.space + ":" + e.id));
+    // 261124 A8：下载失败的正文进「正文恢复」队列（信封持久化 = 跨轮记忆）——下轮开头 heal 从云端拉回；
+    // 仍在队列里的条目在 plan 侧按可疑抑制（见 runRoundOnce），堵死「败者上行 → 胜者正文被 GC」的链条。
+    const bodyRecoveryAdd = [...bodyFailed].filter((k) => k.startsWith("lake:")).map((k) => k.slice("lake:".length));
+    if (bodyRecoveryAdd.length > 0) {
+      state.bodyRecoveryPending = [...new Set([...(state.bodyRecoveryPending ?? []), ...bodyRecoveryAdd])];
+    }
     const merged = mergeRoundIntoState(state, round, { bodyFailed });
     // 标记结算要用**本轮发布后的**远端视图：恢复轮自己的发布内容也必须计入（否则恢复成功的副本仍挂着"云端已删除"标）。
     const effectiveLake = round.publish?.lake ?? lastRemoteLake;
@@ -835,7 +841,13 @@ export class S3v3SyncEngine {
     }).map((n) => n.id);
     // P1-4 正文突变保护：找出「hash 变了但行没动 + 内容像坏了」的篇（正常编辑 updatedAt 前进 ⇒ 永不在候选里）。
     // 成本：正常轮候选为空 = 零 IO；只有可疑候选才读正文判内容。
-    const suspiciousBodyIds = await this.detectSuspiciousBodyChanges(state, baseById);
+    // 261124 A8：**正文恢复队列里的条目按可疑抑制**（P1-4 同一闸）——下载失败后本地旧字节在
+    // 「基线已推进」的下一轮会被判本地新编辑（上行败者 → 胜者正文被 GC）。抑制 = 不上传正文、
+    // 发布只用远端版本，等 heal 落地后自动解闸（队列清空 ⇒ 正常参与）。
+    const suspiciousBodyIds = [...new Set([
+      ...(await this.detectSuspiciousBodyChanges(state, baseById)),
+      ...(state.bodyRecoveryPending ?? []),
+    ])];
     return runSyncRound({
       local: planWorldOf(state),
       base: { lake: baseline.lake, quickNotes: baseline.quickNotes, folders: baseline.lake.folders },

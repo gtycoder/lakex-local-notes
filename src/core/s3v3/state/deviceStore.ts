@@ -364,7 +364,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       for (const id of settled) purged.add(id);
     }
 
-    const bodyRecoveryPending = await p.listBodyRecoveryPending();
+    // 261124 A8：恢复队列 = 平台队列 ∪ 信封记录（ledgerOf 的 body-recovery）——移动端平台队列是
+    // no-op，靠信封携带跨轮记忆（toPersistedState 已序列化该字段，两端同享）。
+    const bodyRecoveryPending = [...new Set([
+      ...(await p.listBodyRecoveryPending()),
+      ...(ledger?.bodyRecoveryPending ?? []),
+    ])];
     deps.markRecoverySeen?.(bodyRecoveryPending.length > 0);
 
     return {

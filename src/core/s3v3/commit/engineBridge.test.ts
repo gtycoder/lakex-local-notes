@@ -54,6 +54,57 @@ describe("E2-3 engineBridge：回合结果并回设备世界", () => {
   });
 });
 
+describe("A7/A8：失败轮不回滚本地（发布回写半通道，261124 审计③P1-1/P1-2）", () => {
+  const publishedCommit = {
+    status: "published",
+    pointer: { v: 3, epoch: "11111111-1111-4111-8111-111111111111", generation: 2, lake: { commit: "x2" }, quickNotes: { commit: "y2" }, createdAt: ISO },
+    generation: 2, lakeCommit: "x2", quickNotesCommit: "y2", wroteLake: true, wroteQuick: true,
+  } as RoundResult["commit"];
+
+  it("A7 上传失败回退条目 ⇒ 发布轮保留本地条目（改名/移动/图标/锁不被写回回滚，下轮可重试）", () => {
+    const s = state({ lake: { v: 3, space: "lake", notes: [{ ...note("a"), title: "本地新名", updatedAt: "T2" }], folders: [] } });
+    // buildPublishIndex 把上传失败条目回退成远端旧条目（线格式正确），但发布回写不得覆盖本地行。
+    const publish = {
+      lake: { v: 3 as const, space: "lake" as const, notes: [{ ...note("a"), title: "远端旧名" }], folders: [] },
+      quickNotes: { v: 3 as const, space: "quickNotes" as const, items: [{ ...quick("q"), contentHash: "q-old" }], tags: [] },
+    };
+    const base = round();
+    const r = round({
+      publish,
+      commit: publishedCommit,
+      apply: { ...base.apply, failedUploads: [{ space: "lake", id: "a" }, { space: "quickNotes", id: "q" }] },
+    });
+    const out = mergeRoundIntoState(s, r);
+    expect(out.lake.notes.find((n) => n.id === "a")!.title).toBe("本地新名");
+    expect(out.lake.notes.find((n) => n.id === "a")!.contentHash).toBe("h-a"); // 本地内容也保留
+    expect(out.quickNotes.items.find((q) => q.id === "q")!.contentHash).toBe("q-q"); // 小记同口径
+  });
+
+  it("A8 发布轮下载失败（bodyFailed）⇒ 保留本地条目（败者不被胜者空壳顶掉）", () => {
+    const s = state({ lake: { v: 3, space: "lake", notes: [{ ...note("a"), title: "本地败者", contentHash: "h-loser" }], folders: [] } });
+    const publish = {
+      lake: { v: 3 as const, space: "lake" as const, notes: [{ ...note("a"), title: "云端胜者", contentHash: "h-winner" }], folders: [] },
+      quickNotes: s.quickNotes,
+    };
+    const r = round({ publish, commit: publishedCommit });
+    const out = mergeRoundIntoState(s, r, { bodyFailed: new Set(["lake:a"]) });
+    const a = out.lake.notes.find((n) => n.id === "a")!;
+    expect(a.title).toBe("本地败者");
+    expect(a.contentHash).toBe("h-loser");
+  });
+
+  it("对照：成功条目照常取发布世界（合成语义不回归）", () => {
+    const s = state();
+    const publish = {
+      lake: { v: 3 as const, space: "lake" as const, notes: [{ ...note("a"), title: "发布后的新名" }], folders: [] },
+      quickNotes: s.quickNotes,
+    };
+    const r = round({ publish, commit: publishedCommit });
+    const out = mergeRoundIntoState(s, r);
+    expect(out.lake.notes.find((n) => n.id === "a")!.title).toBe("发布后的新名");
+  });
+});
+
 describe("E2-3 engineBridge：规划输入映射", () => {
   it("本地世界/标记逐个字段映射（漏传会导致已删条目复活或意图失效）", () => {
     const s = state({ intents: [{ noteId: "a", targetEpoch: "e", targetGeneration: 3 }] });

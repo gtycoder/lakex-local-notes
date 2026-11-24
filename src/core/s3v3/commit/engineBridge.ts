@@ -188,17 +188,35 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
     // 世界抹掉；下一轮 plan 也看不到它（planWorldOf 过滤 remotePurged）⇒ 文档永久卡在活跃树：
     // 只读、带标、不进回收站、不可恢复、也不再参与同步。
     // 修法：以发布世界为准，再把本轮 cloud-deleted 的本地副本并回去（它们已在 remotePurged，不会被再发布）。
+    //
+    // 261124 A7/A8（审计③P1-1/P1-2）：**失败条目同样保留本地**（发布回写半通道）。buildPublishIndex
+    // 已把上传失败条目回退成远端旧条目（线格式正确），但状态整份取发布世界会把本地的改名/移动/图标/锁
+    // **写回回滚**且不再重试（引擎注释「保持 local 下轮重试」此前与实现不符）；下载失败（bodyFailed）
+    // 同理不得让发布世界的条目顶掉本地（行/状态错位 ⇒ 下轮把败者当新编辑反向覆盖）。保留本地条目 ⇒
+    // 与下轮基线有差异 ⇒ 自然重试（§17「保留下轮重试意图」）。
+    const failedIds = new Set<string>();
+    for (const f of round.apply.failedUploads) failedIds.add(f.space + ":" + f.id);
+    for (const f of round.assets.failedUploads) failedIds.add(f.space + ":" + f.id);
+    for (const key of opts.bodyFailed ?? []) failedIds.add(key);
     const publishedLake = round.publish!.lake;
     let lakeNotes = publishedLake.notes;
-    if (cloudDeleted.size > 0) {
+    if (cloudDeleted.size > 0 || failedIds.size > 0) {
       const byId = new Map(lakeNotes.map((n) => [n.id, n] as const));
-      for (const n of sd.lake.notes) if (cloudDeleted.has(n.id) && !byId.has(n.id)) byId.set(n.id, n);
+      for (const n of sd.lake.notes) {
+        if ((cloudDeleted.has(n.id) && !byId.has(n.id)) || failedIds.has("lake:" + n.id)) byId.set(n.id, n);
+      }
       lakeNotes = [...byId.values()];
+    }
+    let quickItems = round.publish!.quickNotes.items;
+    if (failedIds.size > 0) {
+      const byId = new Map(quickItems.map((q) => [q.id, q] as const));
+      for (const q of sd.quickNotes.items) if (failedIds.has("quickNotes:" + q.id)) byId.set(q.id, q);
+      quickItems = [...byId.values()];
     }
     return {
       ...sd,
       lake: { ...publishedLake, notes: lakeNotes },
-      quickNotes: round.publish!.quickNotes,
+      quickNotes: { ...round.publish!.quickNotes, items: quickItems },
       folders: publishedLake.folders,
       pending: round.commit.status === "retry" ? state.pending : round.remainingPending,
       intents: round.intents.intents,
