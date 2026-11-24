@@ -12,6 +12,8 @@ import type { DeviceState } from "../../s3v3DeviceStore.js";
 import { mergeQuickNoteTags, sameQuickNoteTagDirectory } from "../../quickNoteTags.js";
 import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
 import type { PlanState, PlanWorld } from "../plan/plan.js";
+import { positionOf } from "../plan/positionMerge.js";
+import type { LakeNoteEntry } from "../protocol/index.js";
 import { settleCloudDeleted } from "../state/cloudDeleted.js";
 import type { IntentLogState } from "./intentLog.js";
 import type { RoundResult } from "./runSyncRound.js";
@@ -30,6 +32,29 @@ export function planWorldOf(state: DeviceState): PlanWorld {
 }
 
 /** 计划输入里的本地标记：删除意图 / 显式恢复 / 小记软删与墓碑。 */
+/**
+ * 261124 B5（审计③P2-3）：字段级变更判定（is_locked/locked_at/icon/title/parentId/sortOrder ——
+ * 这些不 bump updatedAt，内容级合并判据看不见它们，必须显式喂给 plan）。
+ * **parent 比较过 positionOf 投影**：基线是 wire 形态（trashed ⇒ parentId null，plan 发布投影），
+ * state 是行形态（桌面 trashed 行 parent=notebook-trash）——裸比较会让每条已发布回收站条目每轮
+ * 误判字段变更 ⇒ 零变更短路永久失效（每轮全量序列化双索引）+ restoresIds 结算输入被污染。
+ */
+export function fieldChangedIdsOf(
+  lakeNotes: readonly LakeNoteEntry[],
+  baseById: ReadonlyMap<string, LakeNoteEntry>,
+): string[] {
+  return lakeNotes.filter((n) => {
+    const b = baseById.get(n.id);
+    if (!b || b.contentHash !== n.contentHash) return false;
+    return b.isLocked !== n.isLocked
+      || (b.lockedAt ?? "") !== (n.lockedAt ?? "")
+      || b.title !== n.title
+      || (b.icon ?? "") !== (n.icon ?? "")
+      || (positionOf(b)?.parentId ?? null) !== (positionOf(n)?.parentId ?? null)
+      || b.sortOrder !== n.sortOrder;
+  }).map((n) => n.id);
+}
+
 export function planStateOf(state: DeviceState): PlanState {
   return {
     restorePending: state.restorePending ?? [],

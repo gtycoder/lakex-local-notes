@@ -22,7 +22,7 @@ import { validatePointer } from "./s3v3/protocol/s3v3Types.js";
 import { runSyncRound } from "./s3v3/commit/runSyncRound.js";
 import { initialRound } from "./s3v3/commit/initialRound.js";
 import { pullRound, readRemoteIndexes } from "./s3v3/commit/pullRound.js";
-import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
+import { fieldChangedIdsOf, finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
 import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
@@ -829,16 +829,9 @@ export class S3v3SyncEngine {
     // 字段级变更（is_locked/locked_at/icon/title/parentId/sortOrder）不 bump updatedAt，
     // 内容级合并判据看不见它们 ⇒ 用「本地 vs 基线」的字段 diff 显式喂给 plan。
     const baseById = new Map(baseline.lake.notes.map((n) => [n.id, n] as const));
-    const fieldChangedIds = state.lake.notes.filter((n) => {
-      const b = baseById.get(n.id);
-      if (!b || b.contentHash !== n.contentHash) return false;
-      return b.isLocked !== n.isLocked
-        || (b.lockedAt ?? "") !== (n.lockedAt ?? "")
-        || b.title !== n.title
-        || (b.icon ?? "") !== (n.icon ?? "")
-        || b.parentId !== n.parentId
-        || b.sortOrder !== n.sortOrder;
-    }).map((n) => n.id);
+    // 261124 B5：判定收进 engineBridge.fieldChangedIdsOf（parent 比较过 wire 投影归一 ——
+    // 旧裸比较让回收站条目每轮误判字段变更 ⇒ 零变更短路永久失效 + restoresIds 污染）。
+    const fieldChangedIds = fieldChangedIdsOf(state.lake.notes, baseById);
     // P1-4 正文突变保护：找出「hash 变了但行没动 + 内容像坏了」的篇（正常编辑 updatedAt 前进 ⇒ 永不在候选里）。
     // 成本：正常轮候选为空 = 零 IO；只有可疑候选才读正文判内容。
     // 261124 A8：**正文恢复队列里的条目按可疑抑制**（P1-4 同一闸）——下载失败后本地旧字节在
