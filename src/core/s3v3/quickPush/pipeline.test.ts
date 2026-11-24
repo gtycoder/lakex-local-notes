@@ -247,6 +247,33 @@ describe("单条推送独立管线：回退四条件（各自 full-sync + 已释
   });
 });
 
+describe("P3-7/8/12：快路径代数判定 / targetKey 盖章 / 资产名校验口径（261124 审计③）", () => {
+  it("P3-7：同代但 quickNotesCommit 分叉 ⇒ full-sync(cloud-changed)（与整轮 fork 判定同口径）", async () => {
+    const f = fixture();
+    f.device.baseline = { ...f.device.baseline, quickNotesCommit: "0".repeat(64) };
+    expect(await runQuickPush(f.deps, "q1")).toEqual({ status: "full-sync", reason: "cloud-changed" });
+    expect(f.remote.ops.some((o) => o.op === "put" && o.key === S3V3_POINTER_KEY)).toBe(false);
+  });
+
+  it("P3-8：成功推送写基线保留 targetKey 盖章（旧实现丢章 ⇒ 换桶首次相遇判定输入被清）", async () => {
+    const f = fixture();
+    f.device.baseline = { ...f.device.baseline, targetKey: "https://ep|rg|bucket|prefix" };
+    const out = await runQuickPush(f.deps, "q1");
+    expect(out.status).toBe("pushed");
+    expect(f.device.baseline.targetKey).toBe("https://ep|rg|bucket|prefix");
+  });
+
+  it("P3-12：非法资产文件名跳过并继续推送（不抛裸错；与整轮「判后跳+告警」同口径）", async () => {
+    const f = fixture();
+    const readNames: string[] = [];
+    (f.device as any).listQuickAssets = async () => ["ok.png", "我的图.png"];
+    (f.device as any).readQuickAsset = async (_id: string, name: string) => { readNames.push(name); return enc(name === "ok.png" ? "img-ok" : "img-bad"); };
+    const out = await runQuickPush(f.deps, "q1");
+    expect(out.status).toBe("pushed"); // 旧实现 assertSafeSegment 抛裸错 ⇒ 整个「保存并同步」失败
+    expect(readNames).toEqual(["ok.png"]); // 坏名在读取/构造 key 之前就被跳过
+  });
+});
+
 describe("单条推送状态读取：合并读端口（261112 task-83）", () => {
   it("设备提供合并读：只调一次，不再分别 loadBaseline/loadQuickPushState，结果与两段读一致", async () => {
     const plain = fixture();

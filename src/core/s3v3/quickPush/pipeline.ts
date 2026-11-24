@@ -42,6 +42,7 @@ import { LOCK_DEADLINE_MS, LOCK_KEY, LOCK_SETTLE_MS, LOCK_TTL_MS } from "../prot
 import { S3v3SyncError } from "../protocol/syncErrors.js";
 import { validatePointer, type S3v3Pointer } from "../protocol/s3v3Types.js";
 import type { QuickPushDeps, QuickPushDevice, QuickPushResult, QuickPushState } from "./types.js";
+import { isValidSafeSegment } from "../protocol/s3v3Keys.js";
 
 /** buildAssetDeclaration 的返回（declHash/declaration/serialized）。 */
 type BuiltDeclaration = ReturnType<typeof buildAssetDeclaration>;
@@ -182,6 +183,12 @@ async function buildAssets(
   const entries: AssetDeclaration["assets"] = [];
   const ops: UploadOp[] = [];
   for (const filename of filenames) {
+    // 261124 P3-12（审计③发现 12）：非法资产名「判后跳 + 告警」（与整轮 applyAssets 同判据）——
+    // 旧实现走 assertSafeSegment 抛裸错 ⇒「保存并同步」整个失败、无结构化告警。
+    if (!isValidSafeSegment(filename)) {
+      console.warn("[quickPush] 资产文件名非法，已跳过: " + filename);
+      continue;
+    }
     const known = remoteByName.get(filename);
     if (known) { entries.push(known); continue; }
     const stat = stats?.get(filename);
@@ -337,7 +344,11 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
   try {
     pointer = await readPointer(deps);
     if (!pointer) return { status: "full-sync", reason: "no-cloud" };
-    if (baseline.epoch !== pointer.epoch || baseline.generation !== pointer.generation || baseline.lakeCommit !== pointer.lake.commit) {
+    // 261124 P3-7（审计③发现 7）：代数判定必须**同时比 quickNotesCommit** —— 整轮对「同 generation
+    // 不同 commit」显式报 fork，快路径此前漏比 ⇒ 会以 forked 索引为底静默发布盖掉分叉（与「分叉必须
+    // 显式失败」裁决不一致）。
+    if (baseline.epoch !== pointer.epoch || baseline.generation !== pointer.generation
+      || baseline.lakeCommit !== pointer.lake.commit || baseline.quickNotesCommit !== pointer.quickNotes.commit) {
       return { status: "full-sync", reason: "cloud-changed" };
     }
     phase("push-pointer");
@@ -435,6 +446,9 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
     epoch: pointer!.epoch, generation,
     lakeCommit: pointer!.lake.commit, quickNotesCommit: commit,
     lake: baseline.lake, quickNotes: nextIndex!,
+    // 261124 P3-8（审计③发现 8）：**targetKey 盖章随写保留** —— saveBaseline 整份覆盖，不带它
+    // 就把「换桶 = 新首次相遇」的判定输入静默清掉（整轮路径有 stampTargetKey 补章，快路径漏）。
+    ...(baseline.targetKey !== undefined ? { targetKey: baseline.targetKey } : {}),
   });
   phase("push-baseline");
   await persistMarkersIfStale(deps, light as QuickPushState, id);

@@ -1021,6 +1021,10 @@ export class S3v3SyncEngine {
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法全量重拉");
     const state = (await this.device.loadState()) ?? emptyState();
     const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
-    return this.syncPullAllRound(pointer, { ...state, pending: [] }, report, {});
+    const out = await this.syncPullAllRound(pointer, { ...state, pending: [] }, report, {});
+    // 261124 P3-8（审计③发现 8）：全量重拉的 saveBaseline 同样要补 targetKey 盖章（整轮内盖章点
+    // 只覆盖 syncOnceInner，resetFromCloud 直走 syncPullAllRound 会丢章）。
+    await this.stampTargetKey();
+    return out;
   }
 }
