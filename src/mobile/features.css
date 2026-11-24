@@ -53,7 +53,8 @@
 .image-lightbox__menu-item {
   display: block; width: 100%; padding: 12px 16px; text-align: left;
   background: none; border: 0; cursor: pointer;
-  color: var(--lake-text-1); font-size: var(--lake-font-size-base);
+  /* 261124 修 ui-metrics 红：--lake-font-size-base 从未定义（未定义 var ⇒ 整条声明失效、静默继承）。14px = 与失效时的继承值同档，观感不变；与 .mb-menusheet__item 同令牌。 */
+  color: var(--lake-text-1); font-size: var(--lake-font-size-body);
 }
 .image-lightbox__menu-item:active { background: var(--lake-bg-block); }
 .image-lightbox__menu-item--cancel { color: var(--lake-text-3); border-top: .5px solid var(--lake-border-1); }
