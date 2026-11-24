@@ -327,7 +327,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     const pendingTagDeletes = (await p.listPendingTagDeletes?.()) ?? [];
     // 两端 quickDeletes 口径本就不同（桌面旧实现含 purged 行、移动不含）⇒ 由平台端口各自给，
     // core 不做 if(platform)：deletes 用 listQuickDeleted 原样、purges 用独立 listQuickPurges。
-    const quickDeletes = (await p.listQuickDeleted()).map((d) => d.id);
+    // 261124 B3②（审计②P1-3）：quickDeletes = DB ∪ 信封记录（与 restorePending 同口径取并集）——
+    // 只从 DB 重建会丢掉信封里「计划软删未收尾」的账本（intentLogState 的 quick-delete 记录），
+    // 下轮把远端小记又当活跃条目拉回（引擎注释的「下载落小记回收站」跨轮失效）。
+    const quickDeletes = [...new Set([
+      ...(await p.listQuickDeleted()).map((d) => d.id),
+      ...(ledger?.quickDeletes ?? []),
+    ])];
     const quickPurgeRows = await p.listQuickPurges();
     const quickPurges = quickPurgeRows.map((d) => d.id);
     for (const d of quickPurgeRows) quickPurgeTimes[d.id] = d.purgedAt;
@@ -552,8 +558,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     // 2) cloud-delete：云端已删除副本（cloudDeleted）或 baseline 里曾发布过 ⇒ 软删进小记回收站 + 打「仅本地」标；
     // 3) physical-delete：从未同步过（不在 baseline）且平台支持 discard ⇒ 物理删除（移动旧语义，不留墓碑）；
     //    桌面不实现 discardQuickNote ⇒ 回落 cloud-delete = 迁移前桌面行为（语义不变）。
+    // 261124 B3①（审计②P1-3）：清扫必须用**当下**的行清单 —— 上面 wanted 循环刚物化的新行
+    // （首相遇「下载落小记回收站」条目）不在开头的 current 过期快照里 ⇒ quickDeletes 分支永不
+    // 命中 ⇒ 物化即软删失效、远端小记永久留在活跃列表（engineBridge「先物化再清扫」预期落空）。
+    const sweepRows = await p.listQuickNotesForSync();
     const remoteDeletedQuickIds: string[] = [];
-    for (const cur of current.values()) {
+    for (const cur of sweepRows) {
       if (cur.deletedAt) continue; // 已在 quick 回收站（移动 cloudDeleted 副本）：保持原状
       // 本轮计划显式软删（quick-soft-delete / 首次相遇「下载落回收站」，经 quickDeletes 账本到此）：
       // 一律进小记回收站（可恢复），**绝不走 discardQuickNote 物理删**（SYNC-PROTOCOL §21「绝不物删」红线）。

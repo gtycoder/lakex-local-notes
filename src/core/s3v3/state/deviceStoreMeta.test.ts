@@ -376,6 +376,59 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(applied.trashedAt).toBe("T5");
   });
 
+  it("B3①：本轮物化的新行清扫要看得见（download-to-trash 物化即软删，不留在活跃列表）", async () => {
+    // 261124 审计②P1-3：清扫遍历 saveQuickNotes 开头的过期快照 ⇒ 同一轮里刚物化的行扫不到，
+    // quickDeletes 分支永不命中 ⇒「首相遇下载落小记回收站」失效，远端小记永久留在活跃列表。
+    const quickRows: Array<Record<string, unknown>> = [];
+    const fixture = memoryPlatform({ quickNotes: quickRows }, true);
+    const port: typeof fixture.port = {
+      ...fixture.port,
+      async importRemoteQuickNote(item) {
+        await (fixture.port as unknown as { importRemoteQuickNote: (i: unknown) => Promise<void> }).importRemoteQuickNote(item);
+        // 模拟真实端口：物化 = 行出现在 listQuickNotesForSync 的结果里（同一数组引用）。
+        quickRows.push({ id: (item as { id: string }).id, createdAt: "T0", updatedAt: "T0", contentHash: (item as { contentHash: string }).contentHash, isConflict: 0, deletedAt: null });
+      },
+    };
+    const files = memoryFiles({ "quick/q1.qnote": new TextEncoder().encode("qb") });
+    const meta = createDeviceStoreMeta({
+      platform: port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: "0000000000000000000000000000000000000000000000000000000000000000", isConflict: false }], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickDeletes: ["q1"], quickPurges: [], quickPurgeTimes: {},
+    };
+    await meta.saveState(state);
+    expect(fixture.calls).toContain("importRemoteQuickNote:q1"); // 先物化
+    expect(fixture.calls).toContain("deleteQuickNote:q1"); // 再软删（清扫必须看得见新行）
+  });
+
+  it("B3②：quickDeletes 信封记录要回读（跨轮账本不丢，与 restorePending 同口径取并集）", async () => {
+    const files = memoryFiles();
+    const platform = memoryPlatform();
+    const envelope = {
+      version: 3,
+      records: [{ kind: "quick-delete", id: "qX" }] as unknown[],
+      assets: { lake: {}, quickNotes: {} },
+    };
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => envelope, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state = await meta.loadState();
+    // 旧实现只从 DB 重建（listQuickDeleted）⇒ 信封里的计划软删丢失 ⇒ 下轮又把远端小记当活跃
+    expect(state.quickDeletes ?? []).toContain("qX");
+  });
+
   it("A3：正文不可读的行不得被收敛删除（瞬时 IO/缺正文 ⇒ 进正文恢复队列，不进回收站）", async () => {
     // 桌面 listNotesSyncMeta 恒空 content_hash ⇒ loadState 靠文件现算；stat/read 失败丢行 ⇒
     // 收敛循环把「行还在、正文暂不可读」当「不该在」连子树拖进回收站（deleteNote=deleteTreeNode 级联）。
