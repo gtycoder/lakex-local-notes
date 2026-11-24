@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261124 · P0「同步丢子文档」复现与双端修复 + v1.6.0 发版**：
+  - **P0 现象**（正式 APK 稳定复现）：迁入（便携包）后一发生 S3 同步，**父级是文档**的子文档就从笔记本消失（03-收集 21→18、09-交易 31→30；录屏 ↓1 上传 0）。**空桶真 S3 双设备复现**（`src/mobile/v3/childDocs.s3.integration.test.ts`，用用户指定前缀 `lakex-notes-dev3`，测完自动清空）：同设备空桶首传当轮 `child-doc` 的 `parent_id` 就被改写；第二台首拉父子双双落 `notebook-uncategorized`。
+  - **根因**（探针定位）：① `resolveRemoteParent`（共享编排 `core/s3v3/state/deviceStore.ts`）只查目录不认「文档当父」⇒ 每轮 saveState 的 apply 把子文档 parent 改写到兜底本（`metaDiffers` 拿改写后 parent 做 diff ⇒ **每轮必写**、手动移回也再被改、下轮还会把脏 parent 发布上云）；② 移动端 `importRemoteNote` 在 beginWriteBatch（executeSet）窗口落库，同批新行 SELECT 不可见 ⇒ 父子同批首拉双双落兜底本。**修复**：解析链 = 目录 → 文档（hasNote）→ **本轮世界作用域**（现有行 ∪ 待写行）→ 兜底本；saveState 先建 parentScope 再落库；真缺失父仍走 C5 兜底（语义不变）。修复前复现测试 2/2 红、修复后 2/2 绿；同步核心护栏 83 例全过。
+  - **用户数据口径**：中招子文档**未被删除**、只是被挪走 —— 搜索标题即可找到，拖回原位后不会再丢（修复随 v1.6.0 发布；正式 APK 需升级）。
+  - **v1.6.0 发版**（1.6.x 号，用户点单）：版本 bump（Android versionCode 派生 11600）+ 发布说明 = 回收站小记预览（两端）+ 小记列表三修 + 3 个真问题修复 + **本 P0**；stylesnap 基线重烤（42 态，归因：261120 二级新建菜单 +19、设置文案/回收站面板 DOM、其余为采集时序族 —— 三实例对拍 final==r4、after 孤例；settings-about 在 FLAKY_ASYNC 名单内）；tag `v1.6.0` 双推（Gitee+GitHub，tag 触发 Release workflow）。
+  - **测试基建坑（登记）**：SqlJs 内存库在 vitest 里共用 BodyStore 根 ⇒ MobileDeviceStore 基线文件（`sync-v3/baseline.json.gz.b64`）串库（A 的基线被 B 读走）——多设备测试必须 `setBaselineFileForDbForTest` 注册独立基线路径（复现测试已内建）。
+  - **顺带修复（同日用户点单）**：移动「恢复后小记消失」（restore_pending 被当可见性过滤）+ 移动预览层长标题把「恢复」挤出屏（两层 flex min-width:auto）+ ui-metrics 未定义令牌红（--lake-font-size-base → body）。
+  - **门禁**：tsc 双 0；全量 vitest **7088 passed / 1 failed = 已知 flaky perf.integration（单跑 PASS）**；ui-metrics 0；check:core 185/0；check:mobileui 过；check:bundle+arch PASS；stylesnap 32 严格态 0 差异（重烤后自检）；diff-check 0。
 - **261124 · 回收站小记预览（两端）+ 小记列表三修 + 两处门禁红清零（6 代码提交，未发版）**：
   - **回收站小记预览（用户点单「要和文档一样的预览方式」）**：桌面 `TrashPanel` 小记页签并入文档同一个 SplitPane（小记行包 `.trash-tree-node` + `trash-row-text`，task-89/105 行规则原样复用、不写第二套），右列复用 `NoteDocPreview(policyKey="trash")`；数据面新增只读口 `readTrashQuickNote`（墓碑 + 软删保留的 `.qnote`，零状态变化、缺文件明确失败）+ 新通道 `read_quick_note_trash`（register/preload/WEB_METHODS/native 四面，**196→197**，parity 已更新）。移动 `TrashList` 小记行可点（kind note/quick）→ 同一个 `TrashPreviewPage`（`itemKind="quick"`：读本机 .qnote、不做资源补拉、恢复走 restoreQuickNote、读不到给占位不挂空 viewer）。
   - **顺带修两个真问题**：① ui-metrics 红 = `--lake-font-size-base` 未定义 ×2（image-lightbox / mobile features.css，5393cefe 引入、HEAD 即红）→ `--lake-font-size-body`（与失效时继承值同档，观感不变）；② 移动预览层两层 flex `min-width:auto` 连锁：长标题把预览页撑到 2027px、「恢复」x=1955 出屏（562 视口实测）→ `.mobile-topbar-title` 与 `.mobile-settings-preview .mobile-document` 各补 `min-width:0`（mobile.css 1496→1498）。
@@ -703,6 +711,8 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261124 · v1.6.0（P0 同步丢子文档修复 + 回收站小记预览 + 小记列表三修；tag v1.6.0 触发 Release）**：全量 vitest **7088 passed / 1 flaky（perf.integration 单跑 PASS）**；tsc 双 0；ui-metrics 0；check:core 185/0；check:bundle+arch PASS；stylesnap 重烤后 32 严格态 0 差异（10 态 UNSTABLE/FLAKY_ASYNC 跳过）；diff-check 0。**真桶复现测试**（`src/mobile/v3/childDocs.s3.integration.test.ts`，前缀 lakex-notes-dev3 每次测后清空）2/2 绿。提交链：60f4d583/7c3792c5/df82cbe0/569b5970/f5d94eb0/0eb526c3/da57e588/8dc1fa32/efb30d4c/872a38a1/82c6da74 + 发版 tag。mobile-snap 门禁仍受阻（lake_gate 数据非固定夹具，§3 等裁决）。
+
 **261124 · 回收站小记预览 + 小记列表三修批（未发版；6 提交：60f4d583 / 7c3792c5 / df82cbe0 / 569b5970 / f5d94eb0 / 0eb526c3）**：全量 vitest **7089 passed / 0 failed（真退出码）**；tsc 双 0；ui-metrics 0（未定义令牌清零）；check:core 185/0；check:mobileui 过；check:bundle+arch PASS；diff-check 0；IPC 通道 **196→197**。设备：lake_mobile（5554）装 4 版 debug 包并设备级点收（回收站小记预览/恢复/恢复后可见）；lake_gate（5556）**数据已非固定夹具 ⇒ mobile-snap 未重烤**（§3 待裁决）。桌面弹窗/移动预览层的 stylesnap/mobile-snap 状态未覆盖本批改动面（trash/lightbox 不在态清单）。
 
 **261124 · 基线（数据事故复盘批 + 三需求，v1.5.10 发布中）**：e25c85a9 五修复 + 4acec2a2/5393cefe 三需求 + c92cda44 契约；全量 7073 passed。
@@ -930,7 +940,6 @@
 - **P3×4 现状钉住**（portable 对抗测试注释内有细节）：counts 不对照 / 条目名 UTF-8 字节数 / mapDesktopTree 去重 / 穿越名静默跳过 warning。it3 抖动观察项（疑测试基建：saveV3State 默认基线路径 + testSetup BodyStore 重置；断言已埋自诊断）。
 - **小记「图片」内核内置工具项吞卡边界**（LAKEX-CONTRACT §5.63）：无我方可拦入口，需探索内核配置层；桌面媒体链接 insertGuard 接线 + insertBlockedNotifier 桌面宿主提示接线（通道已留）。
 - **guide 同步清单（设置文案批）**：guide/12 备份与恢复、S3 配置页/第三方说明、AI 助手、空间开关、附件上限、更新中心的长说明句已变短——正文逐字引用需换新句（截图按惯例「以界面为准」）。
-- **设置屏快照指纹**：文案变化可能致设置屏快照红，发版前全量快照按「文案批」归因重烤（本批纯文案无几何改动）。
 - settings 待确认 3 条（低风险已删）：思考强度「默认 high」、浏览器端行为差异说明、自动备份 6h 节奏说明；移动 save() 只回写 endpoint/region 两字段的小统一（settings-copy 观察项）。
 - **AGENTS §7#19 复核**：lake_sync（emulator-5558）上 `adb shell input tap` 实测可用，与既有记载不符——按实测更新记载（见 AGENTS 该条 261123 注）。
 
@@ -961,7 +970,6 @@
 - **移动端文档引用：真机（小米）未验**；另注意注册表是 `lazy` 组件，页面刚启动的极短窗口内若立刻插入文档引用会回落桌面浮层（理论窗口 < 一个 chunk 加载，实际未复现；要消掉就把 Sheet 改成静态 import，代价是 entry 预算）。
 - **文档引用 Sheet 的设备观感待用户点收**（标题/搜索/行高/拖动调高）；`mobilesnap` 基线未因本批重烤（本批未改既有屏几何，新增的是新弹层）。
 - **桌面右键菜单顶层新增两项**：其他入口（顶栏菜单/头部＋）未同步，若用户要求「所有入口一致」再评估（当前只按点单改目录右键）。
-- **stylesnap 其余 40 态**：本批只烤了目录行 hover 两态；发版前按 §3#21 跑一次全量确认无外溢。
 
 **261119 批待办**
 
