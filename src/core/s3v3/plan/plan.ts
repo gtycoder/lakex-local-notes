@@ -542,8 +542,11 @@ export function planSync(input: PlanInput): SyncPlan {
         }
         return {
           ...baseItem,
-          // 发布时标签关系一律排序成集合（顺序不跨端传播；空集合不写，保持既有 wire 形状）。
-          ...(tagIds?.length ? { tagIds: tagIds.toSorted() } : {}),
+          // 发布时标签关系一律排序成集合（顺序不跨端传播）。
+          // 261124 B2（审计①P1-3）：**空集合也显式写 []**（对齐文档侧 261105 P0 修复「空集合也写 []」）——
+          // 旧实现省略字段 ⇒ 接收侧 COALESCE 保留旧集合，「删光标签」不传播且 tie-break 两轮后复活回两端。
+          // 无版本的条目照旧不写（对照钉住，不无中生有）。
+          ...(tagIds !== undefined ? { tagIds: tagIds.toSorted() } : {}),
           ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
         };
       })
