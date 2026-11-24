@@ -110,6 +110,9 @@ mobile/files/{notes,usheets,bitables,boards,inks,note-assets,quick-notes,draft-j
    **隔离目录名唯一（P0-2 修复点）**：`workspace-pre-restore-<ISO 秒>-<单调序号><随机尾>`——同秒二次导入/恢复（双击导入按钮）不再撞名，两次都成功、各自隔离、旧隔离不丢；旧实现撞名会让第二次 rename 失败并叠加 P0-1 毁工作区。
 3. 交叉布局导入做**行映射**：全部导入行 `is_dirty=0`；`content_hash` 取包内基线索引（避免首轮全量重传）；
    回收站/日记（`space` 标记）/标签/小记语义两端对齐（判据见 AGENTS §3/§4、`docs/DIARY.md`）。
+   **写后计数复核（261124 数据事故）**：行写完成后逐表按**去重主键**清点（notes/folders/deleted_notes/quick_notes/quick_note_deleted/tags），
+   缺一行即整包失败（保留回滚副本、明示哪张表少几行）；「已导入」摘要计数以**复核实测值**为准，不再报映射产出——
+   真机曾间歇丢行（4 篇子文档整批消失、重试又正常）而摘要报成功，用户误以为迁入完整。
 4. **同步基线**：包内有云端 baseline ⇒ 转成本端形状写入（桌面 `sync-v3/baseline.json.gz` / 手机 `baseline.json.gz.b64`），
    intents/pending/assetsHash 置空；**纯离线包（无云端基线）⇒ 合成「合并底稿」基线（bootstrap baseline，§3.1）**：
    以包内内容哈希清单（导出时刻快照）+ 导入行元数据为条目底稿写入本端基线文件，谱系字段留空并打 `bootstrap: true`。
