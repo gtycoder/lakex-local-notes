@@ -165,34 +165,45 @@ async function resolveRestoreParent(
   preferred: string | null,
   restoringFolderIds: ReadonlySet<string> = new Set(),
   title = "",
-): Promise<string | null> {
+): Promise<{ parentId: string | null; fellBack: boolean }> {
+  // fellBack = 原位置不可用、回落默认笔记本/「未分类」（261124 桌面事故同口径：恢复必须能如实报落点，不许静默换家）。
+  // 日记条目原路返回日记空间不算回落。
   // 261112 task-55 防御性归一（不写数据迁移）：历史损坏行可能把回收站容器 id 当普通父存在（旧 staged 路径）。
   // 读到它一律按「无原父」处理 ⇒ 回落日记本/兜底笔记本，绝不让恢复卡在不存在的目录上。
   if (preferred === TRASH_NOTEBOOK_ID) preferred = null;
   if (preferred) {
     // 本次一起恢复的子树成员还没落库（trashed_at 仍是删除时的值）⇒ 视为可用，否则嵌套组/子文档会被拆散。
-    if (restoringFolderIds.has(preferred)) return preferred;
+    if (restoringFolderIds.has(preferred)) return { parentId: preferred, fellBack: false };
     const parent = await d.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
-    if (parent?.id) return preferred;
+    if (parent?.id) return { parentId: preferred, fellBack: false };
     // G2：移动端 note 也可作父节点（文档下建子文档/子分组）⇒ 原父是**活跃文档**时也必须原样回原位，
     // 否则恢复子文档/子分组会被错误落到首个笔记本根（树结构断裂）。
     const parentNote = await d.prepare("SELECT id FROM notes WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
-    if (parentNote?.id) return preferred;
+    if (parentNote?.id) return { parentId: preferred, fellBack: false };
   }
   // 261110：原位置不可用时，**日记条目必须先回日记本**（否则会落进默认笔记本 = 文档空间）。
   const diaryNotebookId = await resolveDiaryOriginNotebook(d, preferred);
   if (diaryNotebookId) {
     const diary = await d.prepare("SELECT id FROM folders WHERE id=? AND node_type='notebook' AND trashed_at IS NULL").get(diaryNotebookId) as { id?: string } | undefined;
     // 原路返回：按标题日期补建 年/月 分组；标题非日期时回日记本根。
-    if (diary?.id) return await ensureDiaryRestoreGroup(d, diary.id, title);
+    if (diary?.id) return { parentId: await ensureDiaryRestoreGroup(d, diary.id, title), fellBack: false };
   }
   const notebook = await d.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
-  if (notebook?.id) return notebook.id;
+  if (notebook?.id) return { parentId: notebook.id, fellBack: true };
   const id = "notebook-" + globalThis.crypto.randomUUID();
   await d.prepare(
     "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)"
   ).run(id, "未分类", new Date().toISOString());
-  return id;
+  return { parentId: id, fellBack: true };
+}
+
+/** 落点标题（父可能是笔记本/分组/文档）；查不到给空串，UI 自行兜底文案。 */
+async function restoreLandingTitle(d: MobileDb, parentId: string | null): Promise<string> {
+  if (!parentId) return "";
+  const folder = await d.prepare("SELECT title FROM folders WHERE id=?").get(parentId) as { title?: string } | undefined;
+  if (folder) return folder.title ?? "";
+  const note = await d.prepare("SELECT title FROM notes WHERE id=?").get(parentId) as { title?: string } | undefined;
+  return note?.title ?? "";
 }
 
 export async function restoreTreeItem(
@@ -200,7 +211,7 @@ export async function restoreTreeItem(
   id: string,
   kind: "folder" | "note",
   downloadAssets: (noteIds: string[]) => Promise<void>,
-): Promise<void> {
+): Promise<{ parentTitle: string; fellBack: boolean }> {
   let folderIds: string[] = [];
   let restoreNoteIds: string[] = [];
   // 261114：恢复与删除同口径 —— 计算整棵子树；folder 与 note 都可作根（note 可作父节点）。
@@ -223,7 +234,8 @@ export async function restoreTreeItem(
     // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
     // 261027：原父已被删（或不在活跃目录里）⇒ 回落兜底笔记本，绝不恢复成悬空文档。
     const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid, title FROM notes WHERE id=?").get(id) as { pid?: string | null; title?: string } | undefined;
-    const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
+    const resolved = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
+    const parentId = resolved.parentId;
     // 261114：恢复根文档时，**随它一起进回收站的子文档/子分组一起恢复**（否则它们继续留在回收站）。
     await d.transaction(async () => {
       const statements: MobileBatchStatement[] = [];
@@ -246,10 +258,11 @@ export async function restoreTreeItem(
       }
       await executeBatchInTransaction(d, statements);
     });
-    return;
+    return { parentTitle: await restoreLandingTitle(d, parentId), fellBack: resolved.fellBack };
   }
 
   const restoringFolders = new Set(folderIds);
+  let rootLanding: { parentTitle: string; fellBack: boolean } = { parentTitle: "", fellBack: false };
   await d.transaction(async () => {
     const now = new Date().toISOString();
     const statements: MobileBatchStatement[] = [];
@@ -258,7 +271,9 @@ export async function restoreTreeItem(
       // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
       // 261027：笔记本回根层；分组/目录若原父已删 ⇒ 回落兜底笔记本（与 note 分支同口径，不悬空）。
       const row = await d.prepare("SELECT node_type, COALESCE(deleted_from_parent_id, parent_id) AS pid FROM folders WHERE id=?").get(fid) as { node_type?: string; pid?: string | null } | undefined;
-      const parentId = row?.node_type === "notebook" ? null : await resolveRestoreParent(d, row?.pid ?? null, restoringFolders);
+      const resolved = row?.node_type === "notebook" ? { parentId: null, fellBack: false } : await resolveRestoreParent(d, row?.pid ?? null, restoringFolders);
+      const parentId = resolved.parentId;
+      if (fid === id) rootLanding = { parentTitle: await restoreLandingTitle(d, parentId), fellBack: resolved.fellBack };
       statements.push({
         statement: "UPDATE folders SET parent_id=?, trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
         values: [parentId, now, fid],
@@ -273,6 +288,7 @@ export async function restoreTreeItem(
     }
     await executeBatchInTransaction(d, statements);
   });
+  return rootLanding;
 }
 
 /** 自动过期守卫（回收站自动清理专用；手动「彻底删除」不传，行为不变）。 */

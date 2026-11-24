@@ -28,7 +28,7 @@ let root: Root;
 beforeEach(() => {
   bridgeMock.ensureTrashNoteAssets.mockReset().mockResolvedValue(undefined);
   bridgeMock.readNote.mockReset();
-  bridgeMock.restoreTreeItem.mockReset().mockResolvedValue(undefined);
+  bridgeMock.restoreTreeItem.mockReset().mockResolvedValue({ parentTitle: "原笔记本", fellBack: false }); // 261124 落点回执
   lakeProps.current = null;
   container = document.createElement("div");
   document.body.append(container);

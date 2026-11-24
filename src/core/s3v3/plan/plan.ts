@@ -421,7 +421,6 @@ export function planSync(input: PlanInput): SyncPlan {
 
   // 发布索引：只在本轮会改变索引时构建（零变更轮 publish=null，只读 pointer）。
   let publish: SyncPlan["publish"] = null;
-  if (process.env.DBG_PLAN) console.log("DBG-PLAN", JSON.stringify({ indexChanged, notes: lakePlan.notes.map((n) => ({ id: n.id, kind: n.kind, up: n.uploadLocal, ar: n.applyRemote, to: !!n.trashOverride })), folders: lakePlan.folders.map((f) => ({ id: f.id, kind: f.kind, up: f.uploadLocal, ar: f.applyRemote })), quick: quickPlan.items.map((q) => ({ id: q.id, kind: q.kind, up: q.uploadLocal, ar: q.applyRemote, to: !!q.trashOverride })) }));
   if (indexChanged) {
     const lakeNotes = lakePlan.notes
       .filter((p) => p.kind !== "local-purge" && p.kind !== "remote-purged-trash")

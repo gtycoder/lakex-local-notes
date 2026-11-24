@@ -319,7 +319,9 @@ class PortablePackagePlugin : Plugin() {
                 val file = stagingDbFile(stagingPath, dbKey)
                 db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
                 val rows = JSONArray()
-                db.rawQuery("SELECT * FROM " + table + " LIMIT " + limit + " OFFSET " + offset, null).use { cursor ->
+                // 261124 行丢失复盘加固：分页**必须 ORDER BY rowid**——无 ORDER BY 的 LIMIT/OFFSET 页序未定义，
+            // 页间计划器变化会跳/重行（真机曾间歇丢行）；staged 库是静态文件也按同一口径。
+            db.rawQuery("SELECT * FROM " + table + " ORDER BY rowid LIMIT " + limit + " OFFSET " + offset, null).use { cursor ->
                     while (cursor.moveToNext()) rows.put(rowToJson(cursor))
                 }
                 val out = JSObject()

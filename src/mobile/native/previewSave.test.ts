@@ -30,7 +30,7 @@ describe("图片预览长按保存到手机（261124）", () => {
     mocks.saveFileToUserVisible.mockClear();
     await actions[0].run({ src: "https://example.com/x.png" });
     expect(mocks.saveFileToUserVisible).not.toHaveBeenCalled();
-    expect(mocks.showToast).toHaveBeenLastCalledWith(expect.stringContaining("无法保存"), expect.objectContaining({ type: "error" }));
+    expect(mocks.showToast).toHaveBeenLastCalledWith(expect.stringContaining("暂不支持保存"), expect.objectContaining({ type: "error" }));
     setPreviewActions(null);
     closeImagePreview();
   });

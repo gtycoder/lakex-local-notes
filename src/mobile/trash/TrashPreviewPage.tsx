@@ -54,7 +54,11 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
     setBusy(true);
     setMsg("");
     try {
-      await bridge.restoreTreeItem(noteId, "note");
+      const landing = await bridge.restoreTreeItem(noteId, "note");
+      // 261124 同口径：如实报落点（原位置不可用回落默认笔记本时明示，用户按原位找不到 = 「恢复后消失」事故）。
+      setMsg(landing.fellBack
+        ? `已恢复到「${landing.parentTitle || "默认笔记本"}」：原位置不可用，可手动移回。`
+        : landing.parentTitle ? `已恢复到「${landing.parentTitle}」。` : "已恢复。");
       onRestored();
     } catch (e) {
       setMsg("恢复失败：" + (e as Error).message);

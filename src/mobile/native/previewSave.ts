@@ -34,7 +34,7 @@ export function installImagePreviewSave(): void {
       const ref = parseLocalAssetUrl(url);
       const localKey = assetLocalKeyOf(url);
       if (!ref || !localKey) {
-        showToast("该图片不在本机资源库（可能是云端链接），无法保存到手机", { type: "error" });
+        showToast(ref?.staging ? "暂存中的图片请先保存草稿，再从正文预览保存" : "该图片不在本机资源库（可能是云端链接），暂不支持保存到手机", { type: "error" });
         return;
       }
       const result = await saveFileToUserVisible({ localKey, name: ref.filename, mime: mimeFor(ref.filename), toDownloads: false });

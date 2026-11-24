@@ -82,7 +82,7 @@ const mobileFactory: ContractHarnessFactory = async (remote) => {
     listTrashIds: () => use(async () => (await listTrashed(db)).map((n) => n.id).sort()),
     listCloudDeletedIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
     trashNote: (id) => use(async () => { await trashNote(db, id); }),
-    restoreNote: (id) => use(() => restoreTreeItem(db, id, "note", () => Promise.resolve())),
+    restoreNote: (id) => use(async () => { await restoreTreeItem(db, id, "note", () => Promise.resolve()); }),
     purgeNote: (id) => use(async () => { await trashNote(db, id); await purgeTreeItem(db, id, "note"); }),
     readBody: (id) => use(async () => { const bytes = await device.readBody(id); return bytes ? new TextDecoder().decode(bytes) : null; }),
     // 移动端没有「文档锁定」UI（src/core/repositoryCapabilities.ts：移动端不提供）⇒ 直接写 DB 列，

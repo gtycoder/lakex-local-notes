@@ -51,9 +51,16 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
 
   const restore = async (row: TrashRow) => {
     try {
-      if (row.kind === "quick") await bridge.restoreQuickNote(row.id);
-      else await bridge.restoreTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
-      showToast("已恢复（同步后传播到其他设备）");
+      if (row.kind === "quick") {
+        await bridge.restoreQuickNote(row.id);
+        showToast("已恢复（同步后传播到其他设备）");
+      } else {
+        // 261124 同口径：如实报落点——原位置不可用回落默认笔记本时明示，不许静默换家。
+        const landing = await bridge.restoreTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
+        showToast(landing.fellBack
+          ? `已恢复到「${landing.parentTitle || "默认笔记本"}」：原位置不可用，可手动移回。`
+          : `已恢复${landing.parentTitle ? `到「${landing.parentTitle}」` : ""}（同步后传播到其他设备）`);
+      }
       await load();
       await onChanged();
     } catch (e) {

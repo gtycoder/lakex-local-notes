@@ -4,6 +4,7 @@ import {
   probeCloudTarget,
   s3SettingsChanged,
   applyQuickEncounterAction,
+  sameSyncTargetKey,
   classifyCloudProbe,
   encounterFactsText,
   needsFirstEncounterDecision,
@@ -44,6 +45,25 @@ describe("云端首次相遇：询问触发（功能二）", () => {
   });
   it("事实行文案", () => {
     expect(encounterFactsText({ localNotes: 100, cloudNotes: 50, overlapNotes: 0 })).toBe("本机 100 篇 / 云端 50 篇 / 重合 0 篇");
+  });
+});
+
+describe("目标身份比较 sameSyncTargetKey（261124：忽略 region）", () => {
+  const key = (ep: string, region: string, bucket: string, prefix: string) => [ep, region, bucket, prefix].join("\u0000");
+  it("region 不参与身份：同 endpoint/bucket/prefix 即相同（cn-north-1 vs cn-east-1 事故）", () => {
+    expect(sameSyncTargetKey(key("https://S3.cn-north-1.qiniucs.com", "cn-north-1", "b", "p"), key("https://s3.cn-north-1.qiniucs.com", "cn-east-1", "b", "p"))).toBe(true);
+  });
+  it("换桶/换前缀/换端点 = 不同目标；前缀首尾 / 归一", () => {
+    const a = key("https://s3.x.com", "cn-north-1", "b", "/p/");
+    expect(sameSyncTargetKey(a, key("https://s3.x.com", "cn-north-1", "b", "p"))).toBe(true);
+    expect(sameSyncTargetKey(a, key("https://s3.x.com", "cn-north-1", "b2", "p"))).toBe(false);
+    expect(sameSyncTargetKey(a, key("https://s3.x.com", "cn-north-1", "b", "q"))).toBe(false);
+    expect(sameSyncTargetKey(a, key("https://s3.y.com", "cn-north-1", "b", "p"))).toBe(false);
+  });
+  it("空值/格式异常一律不等（不抛）", () => {
+    expect(sameSyncTargetKey(undefined, key("https://s3.x.com", "r", "b", "p"))).toBe(false);
+    expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), "")).toBe(false);
+    expect(sameSyncTargetKey("a\u0000b", "a\u0000b\u0000c\u0000d")).toBe(false);
   });
 });
 

@@ -407,7 +407,8 @@ export const notesDomain = {
   },
 
   async restoreNote(id: string): Promise<void> {
-    return notesDomain.restoreTreeItem(id, "note");
+    // 平台合同口（deviceConformance restoreNote）保持 void；落点回执只走用户面 bridge.restoreTreeItem。
+    await notesDomain.restoreTreeItem(id, "note");
   },
 
   async listTrashed(): Promise<LocalNote[]> {
@@ -430,18 +431,20 @@ export const notesDomain = {
     return await trashRepository.listTrashTree(d);
   },
 
-  async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+  async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<{ parentTitle: string; fellBack: boolean }> {
     return runWrite("restoreTreeItem", async () => {
       const d = await ensureDb();
       // 261006 B 方案（与桌面一致）：恢复**不等网络**。puller 立刻返回，缺失资源排到本次任务之后
       // 在后台按需补拉（onlyMissing，走**维护域**）：与当前写域不同域、且不 await ⇒ 不会自锁（I3）；失败只告警，下次同步补拉。
-      await trashRepository.restoreTreeItem(d, id, kind, (noteIds) => {
+      const landing = await trashRepository.restoreTreeItem(d, id, kind, (noteIds) => {
         void runMaintenance("ensureTrashNoteAssets", () => downloadDeclaredAssetsFor(noteIds, true)).catch((error) => {
           console.warn("[trash] 恢复后的资源补拉失败（下次同步补拉）", error);
         });
         return Promise.resolve();
       });
       await reconcileIndex(d);
+      // 261124：落点回执（与桌面同口径）——原位置不可用时 UI 必须如实提示，不许静默换家。
+      return landing;
     });
   },
 
