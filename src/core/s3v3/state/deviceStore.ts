@@ -197,10 +197,23 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   const hashCache = deps.hashCache ?? new Map<string, { mtimeMs: number; size: number; hash: string }>();
   const protectedFolders = deps.protectedFolderIds ?? new Set<string>();
 
-  /** C5 父目录兜底：远端 parent 必须能在本机解析后才落库（其余回落兜底笔记本并保护不被删）。 */
-  async function resolveRemoteParent(parentId: string | null): Promise<string | null> {
+  /**
+   * C5 父目录兜底：远端 parent 必须能在本机解析后才落库（其余回落兜底笔记本并保护不被删）。
+   *
+   * 261124 P0（真桶复现）：**文档也可以是父**（AGENTS「文档下可有多级子文档」）——旧实现只查
+   * 目录（folders/tree_nodes），于是每一轮 saveState/apply 都把「文档当父」的子文档判成不可解析、
+   * 改挂到兜底笔记本：空桶首传当轮 child.parent_id 就从 parent-doc 变成兜底本（同设备实测），
+   * 首拉端更会连父文档一起落进「未分类」⇒ 用户可见「一同步就丢子文档」。
+   * 解析链 = 目录 → 文档（hasNote）→ 兜底笔记本；前两者任一命中都保留原父。
+   */
+  async function resolveRemoteParent(parentId: string | null, scope?: ReadonlySet<string>): Promise<string | null> {
     if (parentId === null || parentId === TRASH_NOTEBOOK_ID) return parentId;
     if (await p.hasTreeNode(parentId)) return parentId;
+    if (await p.hasNote(parentId)) return parentId; // 文档当父：本机已有该行 ⇒ 保留（261124 P0）
+    // 261124 P0（移动端批量写可见性）：importRemoteNote 在 beginWriteBatch 窗口内走 executeSet 批量落库，
+    // 同批的新行对 SELECT 不可见 ⇒ 「父文档与子文档同批首次导入」时 hasNote 看不到父，子文档会被改挂兜底本。
+    // 解析作用域 = 本轮世界的 id 集（现有行 ∪ 即将写入的行）：同批父在其中 ⇒ 保留原父。
+    if (scope?.has(parentId)) return parentId;
     try {
       const id = await p.defaultNotebookId();
       protectedFolders.add(id);
@@ -209,7 +222,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   }
 
   /** 目录 version：笔记本只能根层（回收站除外）；分组的父按文档同一套兜底。 */
-  async function resolveRemoteFolderParent(folder: LakeFolderEntry): Promise<string | null> {
+  async function resolveRemoteFolderParent(folder: LakeFolderEntry, scope?: ReadonlySet<string>): Promise<string | null> {
     // 261113（P2 #4）：wire 上 trashed 条目的 parentId 一律投影成 null（与文档同口径，见 positionOf），
     // 落库时必须按 trashedAt 归到本地回收站容器；否则会把「已进回收站」的目录误判成根层、
     // 再经 applyRemoteFolderMeta（它按 parentId===回收站 推导 trashed）把 trashed_at 清成 null ⇒
@@ -217,7 +230,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if (folder.trashedAt) return TRASH_NOTEBOOK_ID;
     if (folder.parentId === TRASH_NOTEBOOK_ID) return TRASH_NOTEBOOK_ID;
     if (folder.nodeType === "notebook") return null;
-    return resolveRemoteParent(folder.parentId);
+    return resolveRemoteParent(folder.parentId, scope);
   }
 
   const toFolderEntry = (f: SyncFolderRow): LakeFolderEntry => ({
@@ -405,7 +418,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   }
 
   /** 目录落库：先 import/更新（deleteMissing=false），再在 saveState 收尾删缺失（true）。 */
-  async function saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean): Promise<void> {
+  async function saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean, parentScope?: ReadonlySet<string>): Promise<void> {
     const current = new Map((await p.listFoldersForSync()).map((f: SyncFolderRow) => [f.id, f] as const));
     for (const raw of foldersParentsFirst(folders)) {
       // P1-a 兜底（261112 真实 S3）：**notebook 只能根层**。带 parent 却标 notebook 的条目 =
@@ -420,7 +433,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         : raw;
       const c = current.get(f.id);
       try {
-        const parentId = await resolveRemoteFolderParent(f);
+        const parentId = await resolveRemoteFolderParent(f, parentScope);
         if (!c) {
           // 远端目录 id 必须原样落库（createNotebook/createGroup 会生成新 id，跨端子文档将找不到父）
           await p.importRemoteFolder({ ...folderRow(f), parentId });
@@ -570,8 +583,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if ((state.bodyRecoveryPending ?? []).length > 0) await p.markBodyRecoveryPending(state.bodyRecoveryPending ?? []);
     else deps.recoveryConsumed?.();
 
+    // 父解析作用域（261124 P0）：现有行 ∪ 本轮世界 —— 必须在目录/文档落库**之前**建好，
+    // 批量写窗口（executeSet）里的新行 SELECT 不可见，靠它认「同批的父文档/父目录」。
+    const current = new Map((await p.listNotesSyncMeta()).map((n: SyncNoteMetaRow) => [n.id, n] as const));
+    const parentScope = new Set<string>([...current.keys(), ...state.lake.notes.map((n) => n.id)]);
+
     // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本地还不存在，先建目录才能建子文档。
-    await saveFolders(state.folders, false);
+    await saveFolders(state.folders, false, parentScope);
 
     // Review-A P2-1 / P2-E：标签关系版本**每轮批量读一次**（平台端口可选），供下面按版本差异决定是否逐篇应用。
     // - 端口缺失 = 该端未接入批量读 ⇒ null（退化逐篇调用，旧行为不变）；
@@ -583,14 +601,30 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
 
     // 批量写窗口（移动 executeSet）：只包「文档行写入」这一段；目录/小记保持逐条（与旧移动实现同序）。
     await p.beginWriteBatch?.();
-    const current = new Map((await p.listNotesSyncMeta()).map((n: SyncNoteMetaRow) => [n.id, n] as const));
     // 同步窗口守卫（P1-8）：本轮快照之后被 purge 的文档，不得因为 state 里还在就被 importRemoteNote 重建
     //（重建行 + 正文后，墓碑仍在 ⇒ 下一轮再删，表现为「删了又出现」的闪回与重复 PUT）。
     // purgedAt 用于区分「轮内被 purge、快照里还是旧条目」与「他端已恢复并重新发布」：
     // 只有快照条目的 updatedAt 不晚于本地 purge 时间，才算轮内删除；更晚 ⇒ 远端复活，正常导入。
     const purgedNow = new Map((await p.listPurgedTombstones()).map((t) => [t.id, t.purgedAt ?? ""] as const));
     const restoringNow = new Set(state.restorePending ?? []);
-    const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
+    // 261124 P0：**父先子后**（文档可当父）：同轮导入里 parent 也在名单时必须先落父行，
+    // 否则子文档解析父（hasTreeNode/hasNote）时父行还不存在 ⇒ 被 C5 兜底改挂到默认笔记本。
+    // 与 foldersParentsFirst 同思想；深度上限防环（环上条目按原序落行，不递归死循环）。
+    const notesParentsFirst: typeof state.lake.notes = [];
+    {
+      const byId = new Map(state.lake.notes.map((n) => [n.id, n] as const));
+      const seen = new Set<string>();
+      const emit = (n: LakeNoteEntry, depth: number): void => {
+        if (seen.has(n.id)) return;
+        if (depth > 32) { seen.add(n.id); notesParentsFirst.push(n); return; }
+        seen.add(n.id);
+        const parent = n.parentId ? byId.get(n.parentId) : undefined;
+        if (parent) emit(parent, depth + 1);
+        notesParentsFirst.push(n);
+      };
+      for (const n of state.lake.notes) emit(n, 0);
+    }
+    const wanted = new Map(notesParentsFirst.map((n) => [n.id, n]));
     // P0 判据来源：必须看**云端基线**（上次成功发布的集合）。本轮的 previous/state 已包含本地刚做的删除，
     // 拿它当基线会把「用户刚删」误判成「基线本来就是回收站」⇒ 远端 active 时隐式恢复。
     const deviceBaseline = await deps.baseline.load();
@@ -611,7 +645,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       const keepLocalTrash = !!cur && cur.trashedAt != null && !n.trashedAt
         && !restoringNow.has(n.id) && !baselineTrashedIds.has(n.id);
       // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库。
-      const resolvedParentId = n.trashedAt || keepLocalTrash ? TRASH_NOTEBOOK_ID : await resolveRemoteParent(n.parentId);
+      const resolvedParentId = n.trashedAt || keepLocalTrash ? TRASH_NOTEBOOK_ID : await resolveRemoteParent(n.parentId, parentScope);
       try {
         if (!cur) {
           // 轮内被 purge：以本地新动作为准（墓碑优先，不重建）；显式恢复/远端复活是例外。
@@ -765,7 +799,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if (p.pruneNoteTagLinks) {
       await p.pruneNoteTagLinks((state.quickNotes.tags ?? []).map((tag) => tag.id));
     }
-    await saveFolders(state.folders, true);
+    await saveFolders(state.folders, true, parentScope);
 
     // 引擎持久化的 remotePurged → 本地展示位 cloud_deleted；只保留「本地仍有行」的 id
     //（本地主动 purge 后行已物理删除，必须从信封清掉，否则永远打标、引擎每轮空转）。
