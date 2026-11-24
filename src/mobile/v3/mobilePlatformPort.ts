@@ -318,6 +318,11 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     quickNoteBodyPath(quickNoteId: string): string {
       return "qnote:" + quickNoteId;
     },
+    async hasDocNote(noteId: string): Promise<boolean> {
+      // 261124 P3-14（审计②）：父判定专用的纯文档存在性 —— hasNote 是 notes∪quick_notes（结算口径），
+      // 坏数据 parent 指向小记 id 会被放行为合法父。
+      return (await db.prepare("SELECT 1 AS one FROM notes WHERE id=?").get(noteId)) !== undefined;
+    },
     async hasNote(noteId: string): Promise<boolean> {
       // 移动端文档/小记同库：remotePurged 过滤必须把「小记回收站副本」也算作本地仍有行，
       // 否则「云端已删除·仅本地」的小记标记会在投影时被清掉（旧实现 purgedFinal 含小记）。

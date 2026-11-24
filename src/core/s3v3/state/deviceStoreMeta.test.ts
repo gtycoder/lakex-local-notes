@@ -62,7 +62,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async listBodyRecoveryPending() { return w.recovery; },
     noteBodyPath(id) { return "bodies/" + id + ".lake"; },
     quickNoteBodyPath(id) { return "quick/" + id + ".qnote"; },
-    async hasNote(id) { return w.notes.some((n) => n.id === id); },
+    async hasNote(id) { return w.notes.some((n) => n.id === id) || w.quickNotes.some((q) => q.id === id); }, // 镜像移动契约（notes∪quick_notes）
     async hasTreeNode(id) { return w.folders.some((f) => f.id === id); },
     async defaultNotebookId() { calls.push("defaultNotebookId"); return "notebook-fallback"; },
     async importRemoteNote(note) { calls.push("importRemoteNote:" + note.id); importedNotes.set(note.id, note); },
@@ -71,6 +71,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async applyRemoteNoteMeta(note, expected) { calls.push("applyRemoteNoteMeta:" + note.id); metaApplies.push({ id: note.id, expected: expected ?? null }); importedNotes.set(note.id, note); },
     async applyRemoteEditLock(id) { calls.push("applyRemoteEditLock:" + id); },
     async setNodeIcon(id) { calls.push("setNodeIcon:" + id); },
+    async hasDocNote(id) { return w.notes.some((n: { id: string }) => n.id === id); },
     async deleteNote(id) { calls.push("deleteNote:" + id); },
     async restoreTrashItem(id) { calls.push("restoreTrashItem:" + id); },
     async applyNotesCloudDeleted(ids) { calls.push("applyNotesCloudDeleted:" + ids.join(",")); },
@@ -395,6 +396,31 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     await meta.saveState(state);
     // 旧实现 hasNote(f1)=false ⇒ 目录 id 被滤掉 ⇒ 下轮徽标被投影清掉（目录「云端已删除」失明）
     expect(platform.calls).toContain("applyNotesCloudDeleted:f1");
+  });
+
+  it("P3-14：坏数据 parent 指向小记 id 不得放行为合法父（hasDocNote 纯文档判定）", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body") });
+    const platform = memoryPlatform({
+      notes: [],
+      quickNotes: [{ id: "q-quick", createdAt: "T0", updatedAt: "T0", contentHash: "0".repeat(64), isConflict: 0, deletedAt: null }],
+    });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map([["n1", new TextEncoder().encode("body")]]), // 新行建行前提（P0-2 分块门）
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: "q-quick", sortOrder: 0, updatedAt: "T0", contentHash: "0".repeat(64) }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    const applied = platform.importedNotes.get("n1") as { parentId: string | null } | undefined;
+    // 旧实现 hasNote 含 quick_notes ⇒ 小记 id 被放行为合法父（树链接指向不存在的树节点）
+    expect(applied?.parentId).toBe("notebook-fallback");
   });
 
   it("B8-P2-9：icon 显式清除要能传播（投影保留 icon: null，不丢成「字段缺失」）", async () => {

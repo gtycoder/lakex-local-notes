@@ -209,7 +209,10 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   async function resolveRemoteParent(parentId: string | null, scope?: ReadonlySet<string>): Promise<string | null> {
     if (parentId === null || parentId === TRASH_NOTEBOOK_ID) return parentId;
     if (await p.hasTreeNode(parentId)) return parentId;
-    if (await p.hasNote(parentId)) return parentId; // 文档当父：本机已有该行 ⇒ 保留（261124 P0）
+    // 文档当父：本机已有该**文档**行 ⇒ 保留（261124 P0）。
+    // 261124 P3-14（审计②P3-14）：用 hasDocNote（不含小记）——移动 hasNote 是 notes∪quick_notes，
+    // 坏数据把 parent 指到小记 id 会被放行为合法父（纵深防御；缺省回落 hasNote = 桌面本就纯文档）。
+    if (await (p.hasDocNote ?? p.hasNote)(parentId)) return parentId;
     // 261124 P0（移动端批量写可见性）：importRemoteNote 在 beginWriteBatch 窗口内走 executeSet 批量落库，
     // 同批的新行对 SELECT 不可见 ⇒ 「父文档与子文档同批首次导入」时 hasNote 看不到父，子文档会被改挂兜底本。
     // 解析作用域 = 本轮世界的 id 集（现有行 ∪ 即将写入的行）：同批父在其中 ⇒ 保留原父。
@@ -392,7 +395,8 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       folders,
       intents,
       pending: ledger?.pending ?? [],
-      remotePurged: hasDbProjection ? [...purged].toSorted() : [...purged],
+      // 261124 P3-13（审计②P3-13）：恒排序（旧实现只在 DB 投影时排 ⇒ 信封字节随输入顺序漂移）。
+      remotePurged: [...purged].toSorted(),
       restorePending,
       pendingAssets: ledger?.pendingAssets ?? [],
       ...(bodyRecoveryPending.length > 0 ? { bodyRecoveryPending } : {}),

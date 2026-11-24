@@ -49,7 +49,10 @@ describe("移动端 v3 云清理（parity：旧 manifest 路径恒 0）", () => 
     await runMobileV3Sync(db, SETTINGS, { remote, emptyCloud: "upload" });
     const now = Date.now();
     remote.add("objects/orphan-" + "a".repeat(64) + ".lake", "old", now - 10 * 86400000);
-    remote.add("objects/recent-" + "b".repeat(64) + ".lake", "recent", now);
+    // 261124 P3-11：retentionDays=0 的手动显式清理也有**锁 TTL 新鲜度下限**（与引擎 deepCleanup
+    // 同语义）—— 锁 TTL 外删、锁 TTL 内（他端已上传未切 pointer 的并发窗口）保留。
+    remote.add("objects/mid-" + "b".repeat(64) + ".lake", "mid", now - 5 * 60_000);
+    remote.add("objects/fresh-" + "e".repeat(64) + ".lake", "fresh", now);
     // 本机历史快照引用的附件（即使窗口=0 也必须保留）
     await db.prepare(
       "INSERT INTO note_history (note_id,file_path,content_hash,title,created_at,size,refs_json,ref_count) VALUES (?,?,?,?,?,?,?,?)"
@@ -58,7 +61,8 @@ describe("移动端 v3 云清理（parity：旧 manifest 路径恒 0）", () => 
 
     const manual = await runMobileV3DeepCleanup(db, SETTINGS, { remote, retentionDays: 0 });
     expect(manual.deleted).toContain("objects/orphan-" + "a".repeat(64) + ".lake");
-    expect(manual.deleted).toContain("objects/recent-" + "b".repeat(64) + ".lake");
+    expect(manual.deleted).toContain("objects/mid-" + "b".repeat(64) + ".lake"); // 锁 TTL 外
+    expect(manual.deleted).not.toContain("objects/fresh-" + "e".repeat(64) + ".lake"); // 锁 TTL 内保留（P3-11）
     expect(manual.deleted).not.toContain("assets/n1/hist.png");
     expect(manual.deleted).not.toContain("assets/n1/a.png");
     expect(remote.objects.has("assets/n1/hist.png")).toBe(true);

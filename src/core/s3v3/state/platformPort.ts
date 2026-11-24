@@ -156,6 +156,8 @@ export interface PlatformDataPort {
   /** 小记正文文件路径（FileDriver 命名空间）。 */
   quickNoteBodyPath(quickNoteId: string): string;
   hasNote(noteId: string): Promise<boolean>;
+  /** 文档行存在（**不含小记**）：父判定专用（坏数据 parent 指向小记 id 不得放行）；缺省回落 hasNote。 */
+  hasDocNote?(noteId: string): Promise<boolean>;
   hasTreeNode(nodeId: string): Promise<boolean>;
   /** 兜底父笔记本（无则懒建「未分类」）。 */
   defaultNotebookId(): Promise<string>;
