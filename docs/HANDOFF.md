@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261124 · 回收站小记预览（两端）+ 小记列表三修 + 两处门禁红清零（6 代码提交，未发版）**：
+  - **回收站小记预览（用户点单「要和文档一样的预览方式」）**：桌面 `TrashPanel` 小记页签并入文档同一个 SplitPane（小记行包 `.trash-tree-node` + `trash-row-text`，task-89/105 行规则原样复用、不写第二套），右列复用 `NoteDocPreview(policyKey="trash")`；数据面新增只读口 `readTrashQuickNote`（墓碑 + 软删保留的 `.qnote`，零状态变化、缺文件明确失败）+ 新通道 `read_quick_note_trash`（register/preload/WEB_METHODS/native 四面，**196→197**，parity 已更新）。移动 `TrashList` 小记行可点（kind note/quick）→ 同一个 `TrashPreviewPage`（`itemKind="quick"`：读本机 .qnote、不做资源补拉、恢复走 restoreQuickNote、读不到给占位不挂空 viewer）。
+  - **顺带修两个真问题**：① ui-metrics 红 = `--lake-font-size-base` 未定义 ×2（image-lightbox / mobile features.css，5393cefe 引入、HEAD 即红）→ `--lake-font-size-body`（与失效时继承值同档，观感不变）；② 移动预览层两层 flex `min-width:auto` 连锁：长标题把预览页撑到 2027px、「恢复」x=1955 出屏（562 视口实测）→ `.mobile-topbar-title` 与 `.mobile-settings-preview .mobile-document` 各补 `min-width:0`（mobile.css 1496→1498）。
+  - **移动「恢复后小记消失」（真机复现）**：`restore_pending_at` 被 7 处当可见性过滤（未开云同步 ⇒ 标记永不清 ⇒ 恢复的小记从时间线/搜索消失；DB 实测 deleted_at=null + 标记已写）→ 可见性一律只看 `deleted_at`（restore_pending 只服务重传，同步路径未动），恢复行由 reconcile 下次搜索重建索引；真机复验冷启首页立即显示。
+  - **小记列表三修（261124 用户四轮点单，均隔离实例 CDP 复现 → 修后复测）**：① **版式切换丢正文/保存覆盖旧版（数据丢失）** —— 切版式 = composer 换位重挂、种子 = draft.body 初值 ⇒ 正打的字喂给旧正文、再保存把磁盘覆盖成旧版（实测 A、B 双丢）→ `switchView` = `flushEditorMirrors()` → `saveBeforeSwitch()`（空放行/无改动不写库/**有改动自动保存**，失败不拦）→ 成功收起编辑 → 再切；复测 db = " TYPED-A TYPED-BORIGINAL-BASE" 全保住。② **「点新建小记没反应」** = 清空后被「默认选中第一条」(260919) 立刻抢回 + 冷启 ensureDetail 晚到竞态 → `startNewDraft` 回传是否真切换才置 autoSelectHold（离开列表视图/空间撤销）+ `editIntentRef` 意图代际作废晚到 startEditing；复测点击后 focus=0、右栏=新建空草稿（含冷启动首跑）。③ **列表内切换/离开页保存闸统一「无条件过闸」**（点另一条 / 类型·标签·时间筛选 / 搜索 / confirmLeave / startNewDraft；dirty 预判只看文本镜像会漏正文级改动；saveBeforeSwitch 内部本就空放行、无改动不写库）。
+  - **门禁**：tsc 双 0；全量 vitest **7089 passed / 0 failed**；ui-metrics 0（未定义令牌清零）；check:core 185/0；check:mobileui 过；check:bundle+arch PASS（desktop 582.4/592KB、mobile 342.1/345KB、entry 44.6/46KB）；diff-check 0。**真机**：lake_mobile 5554 装包点收（回收站预览截图 `/tmp/mb-final-preview.png`、恢复可见 `/tmp/mb-home-restored.png`；⚠️ 该机多虚拟屏、0 屏是白的，screencap 要 `-d <app 屏>`，屏号重启会变）；桌面隔离实例端到端（`/tmp/lake-trash-preview-shots/`）。**mobile-snap 门禁受阻（先于本批）**：lake_gate 数据已非固定夹具 ⇒ 未重烤、等裁决（§3）。
+
 - **261124 · 数据事故复盘批 + 三需求（v1.5.10）**：
   - **事故（正式数据，用户报「4 篇文档被删」）**：迁移丢行（真机间歇性、重试即好）× 配置指纹不一致（region 默认值两端不同）× 「以本地为准」把基线认识的文档当「云端多出」发布成已删 ⇒ 他端整批进回收站；次日恢复又因原位置指针丢失静默回落「01-生活」。全程只读取证（真包拆解 + 真 UI 导入复现 + 真 planSync 场景单测），**内容零丢失**（正文/附件全在，4 篇在 01-生活，用户自行拖回）。
   - **五修复**（`e25c85a9`/`f8333981`/`c92cda44`）：① 首次相遇破坏性改写**豁免基线已知条目**（basePresent）；② 导入**写后逐表计数复核**（去重主键口径，缺行整包失败留回滚副本，摘要报实测值）；③ sameSyncTargetKey **目标身份忽略 region**（兼容旧四段式键）；④ 恢复**如实报落点**（restoreTrashItem 返回 parentId/parentTitle/fellBack → 回收站横幅）；⑤ trashOverride 原父取值顺序修复（wire deletedFromParentId → parent，不再被位置合并的 null 覆盖）。plan 级事故回归 ④+① 钉死。
@@ -696,6 +703,8 @@
 
 ## 1. 当前基线（唯一状态来源）
 
+**261124 · 回收站小记预览 + 小记列表三修批（未发版；6 提交：60f4d583 / 7c3792c5 / df82cbe0 / 569b5970 / f5d94eb0 / 0eb526c3）**：全量 vitest **7089 passed / 0 failed（真退出码）**；tsc 双 0；ui-metrics 0（未定义令牌清零）；check:core 185/0；check:mobileui 过；check:bundle+arch PASS；diff-check 0；IPC 通道 **196→197**。设备：lake_mobile（5554）装 4 版 debug 包并设备级点收（回收站小记预览/恢复/恢复后可见）；lake_gate（5556）**数据已非固定夹具 ⇒ mobile-snap 未重烤**（§3 待裁决）。桌面弹窗/移动预览层的 stylesnap/mobile-snap 状态未覆盖本批改动面（trash/lightbox 不在态清单）。
+
 **261124 · 基线（数据事故复盘批 + 三需求，v1.5.10 发布中）**：e25c85a9 五修复 + 4acec2a2/5393cefe 三需求 + c92cda44 契约；全量 7073 passed。
 
 **261123 · 三次批基线（密钥/目录/首相遇收口；已发 v1.5.9）**
@@ -897,6 +906,12 @@
 ## 3. 待办（唯一待办清单）
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+
+**261124 批待办**
+
+- **mobile-snap 门禁裁决（受阻，先于本批）**：lake_gate(5556) 现为真实个人库（78 文档 / 夹具 0 / 无 `notebook-personal`）⇒ 与已提交基线不可比，`check:mobilesnap` 在 home-doc 态直接报「目录抽屉里没有可点的文档行」。A = 重灌夹具（gate-fixture.mjs，需先适配 `nodeType` 字段与默认笔记本 id 假设）+ 重烤；B = 承认新数据重烤（真实库会进基线）。**未动其数据、未重烤，等裁决。**
+- **格式级改动仍在 `dirty` 之外**：切换/离开的保存闸已统一无条件过闸，但**关窗/退出**的 `onDirtyChange(dirty)` 只看文本镜像 ⇒ 只改样式（加粗等）的正文改动直接退出时可能不存；闭掉需退出路径同步 flush + 比对 body（单独小批）。
+- **用户报的丢数据找回口径**：小记无历史快照、保存覆盖不留旧版 ⇒ 应用内能查的只有 text_cache（搜索索引最近保存版）与云端镜像（若当时已同步）；现场还在就先按这两条取证。
 
 **261123 二次批待办**
 
