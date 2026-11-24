@@ -566,19 +566,16 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       }
       if (wanted.has(cur.id)) continue;
       const purge = (state.intents ?? []).some((it) => it.noteId === cur.id) || (state.quickPurges ?? []).includes(cur.id);
-      const knownCloud = cur.cloudDeleted === true || baselineQuickIds.has(cur.id);
       try {
         if (purge) {
           try { await p.purgeQuickNote(cur.id); }
           catch { await p.deleteQuickNote(cur.id); await p.purgeQuickNote(cur.id); }
-        } else if (!knownCloud) {
-          // 261124 A1（审计②P1-1）：**绝不物删**（「小记不备份」只对显式 purge 成立）——
-          // 未同步条目从 wanted 消失一律软删进小记回收站（可恢复）。旧实现走 discardQuickNote
-          // 物理删（行+正文+图片），pull-all / 上传失败边界都会踩中；桌面本就不实现该端口，
-          // 现两端同语义。显式清理半成品走 removeUnsyncedQuickNote（转换回滚专用），不经过这里。
-          await p.deleteQuickNote(cur.id);
         } else {
           // 远端彻底删除（不是本地 purge）：进回收站保留正文/附件，并打「云端已删除 · 仅本地」标。
+          // 261124 A1（审计②P1-1）：**绝不物删**（「小记不备份」只对显式 purge 成立）——旧实现对
+          // 「从未同步」条目走 discardQuickNote 物理删（行+正文+图片），pull-all / 上传失败边界都会
+          // 踩中；现两类（曾同步 / 从未同步）一律软删进回收站（可恢复），打标语义保持 adapter 契约。
+          // 显式清理半成品走 removeUnsyncedQuickNote（转换回滚专用），不经过这里。
           await p.deleteQuickNote(cur.id);
           remoteDeletedQuickIds.push(cur.id);
         }

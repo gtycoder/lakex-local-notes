@@ -449,7 +449,7 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(platform.calls).toContain("deleteQuickNote:qc"); // baseline 内 ⇒ 软删
     expect(platform.calls).toContain("deleteQuickNote:qn"); // 261124 A1：从未同步也走软删（进小记回收站可恢复；旧物删违「绝不物删」红线）
     expect(platform.calls).not.toContain("discardQuickNote:qn");
-    expect(platform.calls).toContain("markQuickNotesCloudDeleted:qc"); // 只有软删的进打标集合
+    expect(platform.calls).toContain("markQuickNotesCloudDeleted:qc,qn"); // 软删进打标集合（261124 A1 补正：直接消失分支软删+打标保持 adapter 契约）
   });
 });
 
