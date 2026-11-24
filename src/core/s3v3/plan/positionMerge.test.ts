@@ -25,6 +25,25 @@ import {
 const pos = (parentId: string | null, trashedAt: string | null = null, deletedFromParentId: string | null = null): NotePosition => ({ parentId, trashedAt, deletedFromParentId });
 const lock = (locked: boolean, lockedAt: string | null): NoteLockState => ({ locked, lockedAt });
 
+describe("A4：trashed 条目的原父兜底（261124 审计②P1-2）", () => {
+  it("dfp 缺失时按原 parent 兜底（移动删除曾不写 dfp ⇒ 恢复静默换家「未分类」）", () => {
+    const pos = positionOf({ parentId: "orig-parent", trashedAt: "T1", deletedFromParentId: null } as never);
+    expect(pos!.deletedFromParentId).toBe("orig-parent");
+    expect(pos!.parentId).toBeNull(); // wire 口径：trashed 的 parent 恒 null
+  });
+
+  it("回收站容器 id 绝不外泄成原父（桌面本地 parent=notebook-trash）", () => {
+    const pos = positionOf({ parentId: "notebook-trash", trashedAt: "T1", deletedFromParentId: null } as never);
+    expect(pos!.deletedFromParentId).toBeNull();
+  });
+
+  it("显式 dfp 优先；active 条目不受影响", () => {
+    expect(positionOf({ parentId: "orig-parent", trashedAt: "T1", deletedFromParentId: "explicit" } as never)!.deletedFromParentId).toBe("explicit");
+    expect(positionOf({ parentId: "p", trashedAt: null, deletedFromParentId: null } as never)!.deletedFromParentId).toBeNull();
+    expect(positionOf({ parentId: "p", trashedAt: null, deletedFromParentId: null } as never)!.parentId).toBe("p");
+  });
+});
+
 describe("positionOf / samePosition（wire 位置投影）", () => {
   it("undefined / null / 空字段一律投影成「没有」", () => {
     expect(positionOf(null)).toBeNull();

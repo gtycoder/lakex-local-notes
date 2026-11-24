@@ -31,6 +31,8 @@ export type PositionWinner = "local" | "remote" | "same";
  * 若按原值比较会与「基线是 null / 移动端保留原父」判成位置变化 ⇒ 每轮误发布；恢复位置只看 deletedFromParentId。
  * 因此比较与发布都按「位置 = trashedAt；原始父 = deletedFromParentId」的口径。
  */
+import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
+
 export function positionOf(entry: Pick<LakeNoteEntry, "parentId" | "trashedAt" | "deletedFromParentId"> | null | undefined): NotePosition | null {
   if (!entry) return null;
   const trashedAt = entry.trashedAt ?? null;
@@ -38,7 +40,11 @@ export function positionOf(entry: Pick<LakeNoteEntry, "parentId" | "trashedAt" |
     // task-61：wire 不携带本地回收站容器 id —— trashed 条目的 parentId 不承载树父语义。
     parentId: trashedAt ? null : (entry.parentId ?? null),
     trashedAt,
-    deletedFromParentId: entry.deletedFromParentId ?? null,
+    // 261124 A4（审计②P1-2）：dfp 缺失时按**原 parent** 兜底 —— 移动 deleteNote 曾不写 dfp
+    // ⇒ trashed 条目把「原父」丢成 null，恢复静默换家「未分类」、purge 两路边集合漏删子树。
+    // 回收站容器 id 绝不外泄成原父（桌面本地 trashed 行 parent=notebook-trash）。
+    deletedFromParentId: entry.deletedFromParentId
+      ?? (trashedAt && entry.parentId && entry.parentId !== TRASH_NOTEBOOK_ID ? entry.parentId : null),
   };
 }
 

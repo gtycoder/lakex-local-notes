@@ -120,7 +120,8 @@ export class RemoteImportRepository {
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
              is_locked=excluded.is_locked,locked_at=excluded.locked_at,
              is_dirty=0,is_conflict=excluded.is_conflict,deleted_at=NULL,
-             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id,
+             trashed_at=excluded.trashed_at,
+             deleted_from_parent_id=CASE WHEN excluded.trashed_at IS NOT NULL THEN COALESCE(excluded.deleted_from_parent_id, notes.deleted_from_parent_id) ELSE excluded.deleted_from_parent_id END,
              kind=excluded.kind`
         ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
           note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, trashedAt, deletedFrom, noteKind);

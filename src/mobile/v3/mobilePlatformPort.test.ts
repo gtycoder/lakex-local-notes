@@ -53,6 +53,31 @@ function stateFor(ids: string[]): DeviceState {
   };
 }
 
+describe("A4：dfp 跨端往返（261124 审计②P1-2）", () => {
+  it("deleteNote 写原父 dfp + restoreTrashItem 回原父并清 dfp（恢复不换家）", async () => {
+    const { db } = await freshStore();
+    try {
+      const port = createMobilePlatformPort(db);
+      await port.importRemoteNote({
+        id: "n1", title: "N1", parentId: "orig-parent", sortOrder: 0, updatedAt: "2026-11-20T00:00:00.000Z",
+        contentHash: hashOf(bodyOf("n1")), isConflict: false, isEditLocked: false, editLockedAt: null,
+        icon: null, trashedAt: null, deletedFromParentId: null, kind: "doc",
+      }, new TextEncoder().encode(bodyOf("n1")));
+      // 远端墓碑 → 回收站：dfp 必须留住原父（COALESCE）
+      await port.deleteNote("n1");
+      const trashed = await db.prepare("SELECT parent_id, trashed_at, deleted_from_parent_id FROM notes WHERE id=?").get("n1") as { parent_id: string; trashed_at: string | null; deleted_from_parent_id: string | null };
+      expect(trashed.trashed_at).toBeTruthy();
+      expect(trashed.deleted_from_parent_id).toBe("orig-parent"); // 旧实现 = null ⇒ 原父丢失
+      // 恢复（远端恢复传播）：回原父 + 清 dfp
+      await port.restoreTrashItem("n1");
+      const restored = await db.prepare("SELECT parent_id, trashed_at, deleted_from_parent_id FROM notes WHERE id=?").get("n1") as typeof trashed;
+      expect(restored.parent_id).toBe("orig-parent");
+      expect(restored.trashed_at).toBeNull();
+      expect(restored.deleted_from_parent_id).toBeNull(); // 不清 ⇒ metaDiffers 永真每轮重写
+    } finally { await db.close(); }
+  });
+});
+
 async function freshStore() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(db);

@@ -123,9 +123,12 @@ export class SyncReconciliation {
   applyRemoteNoteMeta(note: SyncNote, expectedLocalUpdatedAt?: string): void {
     const tx = this.ctx.db.transaction(() => {
       // 回收站条目：同步 trashed_at + deleted_from_parent_id；移出回收站（恢复传播）时清空。
+      // 261124 A4（审计②P1-2）：trashed 且 wire 未带 dfp ⇒ **保留行上已有值**（COALESCE）——
+      // 旧实现无条件覆盖 null ⇒ 移动端（曾不写 dfp）传来的条目把桌面行的原父冲掉，恢复换家/purge 漏删。
       const inTrash = note.parentId === this.ctx.trashNotebookId;
       const trashedAt = inTrash ? (note.trashedAt ?? new Date().toISOString()) : null;
       const deletedFrom = inTrash ? (note.deletedFromParentId ?? null) : null;
+      const deletedFromCol = inTrash ? "COALESCE(?, deleted_from_parent_id)" : "?";
       // F-10/D4（261113）：远端把它作为 active 发布（= 他端显式恢复，AGENTS §3#4）⇒ 本地墓碑退役。
       // 只清 purged_at IS NULL 的行（前缀未结算的删除意图必须保留）。
       if (!trashedAt) this.reviveTombstone(note.id);
@@ -136,7 +139,7 @@ export class SyncReconciliation {
         ? [note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
         : [note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id];
       this.ctx.db.prepare(
-        "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=? WHERE " + noteWhere
+        "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=" + deletedFromCol + " WHERE " + noteWhere
       ).run(...noteArgs);
       // 旧清单无 icon 字段时保留本地图标（icon=undefined 是"未声明"，null 才是"显式清除"）；
       // 否则旧客户端写出的 manifest 会把新端本地图标静默清掉（验收 #1 健壮性）。

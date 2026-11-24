@@ -480,8 +480,13 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     async deleteNote(noteId: string): Promise<void> {
       // 远端墓碑 → 进回收站（软删）：时间戳优先用本轮 state 的远端 trashedAt（旧实现同口径）。
+      // 261124 A4（审计②P1-2）：必须写 deleted_from_parent_id（COALESCE 保已有）——移动行的 parent_id
+      // 保留原父（移动端模型里 parent=原父），不写 dfp ⇒ 位置投影把「原父」丢成 null ⇒ 恢复换家/漏删。
       const trashedAt = ctx.remoteTrashedAt.get(noteId) ?? nowIso();
-      await write("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?", [trashedAt, noteId]);
+      await write(
+        "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id=?",
+        [trashedAt, noteId],
+      );
       const snap = snapshot.get(noteId);
       if (snap) snap.trashed_at = trashedAt;
     },
@@ -502,9 +507,14 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       if (snap) snap.trashed_at = snap.trashed_at ?? now;
     },
     async restoreTrashItem(noteId: string): Promise<void> {
-      await write("UPDATE notes SET trashed_at=NULL, is_dirty=1 WHERE id=?", [noteId]);
-      const snap = snapshot.get(noteId);
-      if (snap) snap.trashed_at = null;
+      // 261124 A4（审计②P1-2）：恢复 = 回原父（dfp 优先，与桌面 trashLifecycle 同口径）+ 清 dfp ——
+      // 旧实现不清 dfp ⇒ metaDiffers 的 effDeletedFrom 毸真、每轮重写；不回原父 ⇒ 扁平化子文档落根。
+      await write(
+        "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, deleted_from_parent_id=NULL, is_dirty=1 WHERE id=?",
+        [noteId],
+      );
+      // 父级由 SQL 的 COALESCE(deleted_from_parent_id, parent_id) 决定 ⇒ 作废快照，下次读库回填。
+      snapshot.delete(noteId);
     },
     async applyNotesCloudDeleted(noteIds: string[]): Promise<void> {
       // 仅置位（core 在移动端走 applyCloudDeletedProjection；此方法只作接口兜底，不清无关标记）。
