@@ -54,7 +54,8 @@ function firstLine(text: string): string {
 export async function indexQuickNote(d: MobileDb, id: string, force = false): Promise<void> {
   const hasFts = await hasQuickFts(d);
   const row = await d.prepare(
-    "SELECT content_hash FROM quick_notes WHERE id=? AND deleted_at IS NULL AND restore_pending_at IS NULL"
+    // 恢复中的行（restore_pending_at）同样建索引：它内容在本机、只是待重传（261124 与列表同口径）。
+    "SELECT content_hash FROM quick_notes WHERE id=? AND deleted_at IS NULL"
   ).get(id) as { content_hash: string } | undefined;
   if (!row) { await removeQuickNoteFromIndex(d, id); return; }
   const prev = await d.prepare("SELECT content_hash FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as { content_hash: string } | undefined;
@@ -85,13 +86,14 @@ export async function removeQuickNoteFromIndex(d: MobileDb, id: string): Promise
   });
 }
 
-/** 账本对账：删除已删/缺失/恢复中的行；为新增或 content_hash 变更的小记重建索引。 */
+/** 账本对账：删除已删/缺失（行已不在 quick_notes）的索引；为新增或 content_hash 变更的小记重建索引。
+ *  恢复中的行（restore_pending_at）**不再**从索引里清掉（261124：内容在本机、只是待重传）。 */
 export async function reconcileQuickNotesIndex(d: MobileDb): Promise<void> {
   if (!(await hasQuickFts(d))) return;
   const stale = await d.prepare(
     "SELECT si.quick_note_id AS id, si.fts_rowid AS fts_rowid FROM quick_notes_search_index si " +
     "LEFT JOIN quick_notes q ON q.id = si.quick_note_id " +
-    "WHERE q.id IS NULL OR q.deleted_at IS NOT NULL OR q.restore_pending_at IS NOT NULL"
+    "WHERE q.id IS NULL OR q.deleted_at IS NOT NULL"
   ).all() as Array<{ id: string; fts_rowid: number }>;
   for (const row of stale) {
     await d.transaction(async () => {
@@ -101,7 +103,7 @@ export async function reconcileQuickNotesIndex(d: MobileDb): Promise<void> {
   }
   const changed = await d.prepare(
     "SELECT q.id AS id FROM quick_notes q LEFT JOIN quick_notes_search_index si ON si.quick_note_id = q.id " +
-    "WHERE q.deleted_at IS NULL AND q.restore_pending_at IS NULL AND (si.quick_note_id IS NULL OR si.content_hash != q.content_hash)"
+    "WHERE q.deleted_at IS NULL AND (si.quick_note_id IS NULL OR si.content_hash != q.content_hash)"
   ).all() as Array<{ id: string }>;
   for (const row of changed) await indexQuickNote(d, row.id);
 }
@@ -119,7 +121,7 @@ export async function searchQuickNotes(d: MobileDb, query: string, limit = 20): 
     "FROM quick_notes_fts f " +
     "JOIN quick_notes_search_index si ON si.fts_rowid = f.rowid " +
     "JOIN quick_notes q ON q.id = si.quick_note_id " +
-    "WHERE quick_notes_fts MATCH ? AND q.deleted_at IS NULL AND q.restore_pending_at IS NULL " +
+    "WHERE quick_notes_fts MATCH ? AND q.deleted_at IS NULL " +
     "ORDER BY bm25(quick_notes_fts, 1.0, 0.5), q.updated_at DESC LIMIT ?"
   ).all(match, Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; text_cache: string; tags: string }>;
   return rows.map((row) => quickResult(row, normalized));
@@ -148,7 +150,7 @@ async function searchQuickNotesFallback(d: MobileDb, query: string, limit: numbe
   let rows: Array<{ id: string; preview_text: string; updated_at: string }> = [];
   try {
     rows = await d.prepare(
-      "SELECT id, preview_text, updated_at FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC"
+      "SELECT id, preview_text, updated_at FROM quick_notes WHERE deleted_at IS NULL ORDER BY updated_at DESC"
     ).all() as Array<{ id: string; preview_text: string; updated_at: string }>;
   } catch { return []; }
   const needle = query.toLocaleLowerCase();
@@ -188,7 +190,7 @@ export async function searchQuickNotesByBody(
     "FROM quick_notes_fts f " +
     "JOIN quick_notes_search_index si ON si.fts_rowid = f.rowid " +
     "JOIN quick_notes q ON q.id = si.quick_note_id " +
-    "WHERE quick_notes_fts MATCH ? AND q.deleted_at IS NULL AND q.restore_pending_at IS NULL " +
+    "WHERE quick_notes_fts MATCH ? AND q.deleted_at IS NULL " +
     "ORDER BY bm25(quick_notes_fts, 1.0, 1.0), q.updated_at DESC LIMIT ?"
   ).all("body : (" + match + ")", Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; text_cache: string; tags: string }>;
   return rows.map((row) => quickResult(row, normalized));
@@ -211,7 +213,7 @@ export async function searchQuickNotesByTags(
     "FROM tag_links tl " +
     "JOIN tags t ON t.id = tl.tag_id " +
     "JOIN quick_notes q ON q.id = tl.target_id " +
-    "WHERE tl.target_kind = 'quickNote' AND t.name LIKE ? ESCAPE '\\' AND q.deleted_at IS NULL AND q.restore_pending_at IS NULL " +
+    "WHERE tl.target_kind = 'quickNote' AND t.name LIKE ? ESCAPE '\\' AND q.deleted_at IS NULL " +
     "GROUP BY q.id ORDER BY q.updated_at DESC LIMIT ?"
   ).all("%" + escapeLike(normalized) + "%", Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; matched_tags: string }>;
   return rows.map((row) => {

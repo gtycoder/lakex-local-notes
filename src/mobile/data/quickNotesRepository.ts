@@ -128,7 +128,10 @@ function quickNoteListItemFromRow(row: QuickNoteListRow, tagIds: readonly string
 /** 小记列表投影的分页读取；不传 limit 时保持旧的全集行为。 */
 export async function listQuickNotePage(d: MobileDb, options: QuickNotePageOptions = {}): Promise<QuickNotePage> {
   const values: unknown[] = [];
-  let where = "deleted_at IS NULL AND restore_pending_at IS NULL";
+  // 261124 修复：**恢复中的行也是活跃行**（restore_pending_at 只服务「local-wins 重传」，不是可见性开关，
+  // AGENTS §3#4 / 桌面列表同口径）。旧实现把 restore_pending 行藏起来 ⇒ 未开云同步时恢复的小记永远不回列表
+  // （真机复现：恢复成功、trash 清空、首页仍「暂无小记」）。可见性只看 deleted_at。
+  let where = "deleted_at IS NULL";
   if (options.cursor) {
     where += " AND (updated_at < ? OR (updated_at = ? AND id < ?))";
     values.push(options.cursor.updatedAt, options.cursor.updatedAt, options.cursor.id);

@@ -191,7 +191,8 @@ async function historyCounts(d: MobileDb, noteIds: readonly string[]): Promise<M
 /** 缺正文小记清单（只 stat 不读正文；搜索缓存文本只查派生表，不碰 .qnote）。 */
 export async function scanMissingQuickNotes(d: MobileDb, opts: { cloudConfigured: boolean }): Promise<MissingQuickNote[]> {
   const rows = await d.prepare(
-    "SELECT id, created_at, updated_at, preview_text, image_count FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL",
+    // 恢复中的行也在册（261124：restore_pending 不是可见性开关；缺正文该被发现而不是被藏起来）。
+    "SELECT id, created_at, updated_at, preview_text, image_count FROM quick_notes WHERE deleted_at IS NULL",
   ).all() as Array<{ id: string; created_at: string; updated_at: string; preview_text: string; image_count: number }>;
   if (rows.length === 0) return [];
   const ids = rows.map((row) => String(row.id));
