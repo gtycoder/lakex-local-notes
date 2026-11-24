@@ -447,6 +447,34 @@ describe("小记回收站（M6）", () => {
     expect(() => quickNotes.restoreQuickNote(id)).toThrow();
   });
 
+  it("回收站只读预览（261124）：软删条目按墓碑+保留正文文件读回；活动/purged/不安全 id 一律拒绝；预览零状态变化", async () => {
+    const id = quickNotes.createQuickNote({ text: "回收站预览正文", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;
+    // 活动行不在回收站 ⇒ 拒绝（不能拿回收站读口绕过 readQuickNote 的语义）
+    expect(() => quickNotes.readTrashQuickNote(id)).toThrow(/不在回收站/);
+
+    quickNotes.deleteQuickNote(id);
+    const doc = quickNotes.readTrashQuickNote(id);
+    expect(doc.id).toBe(id);
+    expect(doc.content.text).toBe("回收站预览正文");
+    expect(doc.content.body).toContain("回收站预览正文");
+    // 只读：预览不写库、不清墓碑、不回活动表（连读两次结果一致）
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).toContain(id);
+    expect(quickNotes.listQuickNotes().map((i) => i.id)).not.toContain(id);
+    expect(quickNotes.readTrashQuickNote(id).id).toBe(id);
+    expect(quickNotes.readTrashQuickNote(id).contentHash).toBe("");
+    // 预览后仍可正常恢复（状态没有被预览动过）
+    expect(quickNotes.restoreQuickNote(id).content.text).toBe("回收站预览正文");
+
+    // 内容文件被手动删掉：不返回空正文，明确失败（UI 据此给可操作提示，不留空白占位）
+    quickNotes.deleteQuickNote(id);
+    fs.rmSync(path.join(root, "quick-notes", "items", `${id}.qnote`));
+    expect(() => quickNotes.readTrashQuickNote(id)).toThrow(/内容文件已丢失/);
+
+    quickNotes.purgeQuickNote(id);
+    expect(() => quickNotes.readTrashQuickNote(id)).toThrow(/不在回收站/);
+    expect(() => quickNotes.readTrashQuickNote("../escape")).toThrow(/无效的小记 ID/);
+  });
+
   it("deleteQuickNote 幂等：删除不存在/已删的小记不抛 NotFound（同步先落地远端删除 → 撤销窗口到期提交不误报）", () => {
     expect(() => quickNotes.deleteQuickNote("never-existed")).not.toThrow();
     const id = quickNotes.createQuickNote({ text: "重复删除", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;

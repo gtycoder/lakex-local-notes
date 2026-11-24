@@ -84,6 +84,8 @@ export function registerQuickNotesIpc(
     return quickNotes.readQuickNote(id);
   });
   ipc.handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
+  // 261124 回收站小记预览：只读（墓碑 + 保留正文文件），与文档预览同一条 UI 链。
+  ipc.handle("read_quick_note_trash", (id: string) => quickNotes.readTrashQuickNote(id));
   ipc.handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
   ipc.handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));
   // ---- 缺正文小记（261023）：云端恢复 / 搜索缓存纯文本恢复 / 彻底删除 ----

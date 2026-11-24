@@ -195,6 +195,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   convertQuickNote: (quickNoteId, notebookId) => invoke("convert_quick_note", quickNoteId, notebookId),
   syncQuickNote: (id) => invoke("sync_quick_note", id),
   listQuickNoteTrash: () => invoke("list_quick_note_trash"),
+  readTrashQuickNote: (id) => invoke("read_quick_note_trash", id),
   restoreQuickNote: (id) => invoke("restore_quick_note", id),
   purgeQuickNote: (id) => invoke("purge_quick_note", id),
   listMissingQuickNotes: () => invoke("list_missing_quick_notes"),

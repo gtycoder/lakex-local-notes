@@ -24,6 +24,8 @@ const nativeMock = vi.hoisted(() => ({
   getS3GcSettings: vi.fn(),
   ensureTrashNoteAssets: vi.fn(),
   readNote: vi.fn(),
+  readTrashQuickNote: vi.fn(),
+  restoreQuickNote: vi.fn(),
 }));
 const previewCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 
@@ -63,6 +65,12 @@ beforeEach(() => {
   nativeMock.getS3GcSettings.mockReset().mockResolvedValue({ trashAutoPurgeDays: 0 });
   nativeMock.ensureTrashNoteAssets.mockReset().mockResolvedValue({ warnings: [], skipped: null });
   nativeMock.readNote.mockReset().mockResolvedValue({ id: "n1", title: "会议纪要", content: "<p>正文</p>", kind: "doc", cloudDeleted: true });
+  nativeMock.readTrashQuickNote.mockReset().mockResolvedValue({
+    id: "q1", createdAt: "2026-11-23T02:38:00.000Z", updatedAt: "2026-11-23T02:38:00.000Z", previewText: "小记正文",
+    imageCount: 0, contentHash: "", syncState: "local", isConflict: false,
+    content: { version: 3, text: "小记正文", body: "<p>小记正文</p>", images: [], tagIds: [], tags: [] },
+  });
+  nativeMock.restoreQuickNote.mockReset().mockResolvedValue({});
   previewCalls.length = 0;
   container = document.createElement("div");
   document.body.append(container);
@@ -166,6 +174,87 @@ describe("回收站预览（task-89）：整行可点 + 缺正文提示 + 标题
     await activate(row());
     expect(container.querySelector(".history-preview-inline-title")?.textContent).toBe("文档");
     expect(nativeMock.readNote).toHaveBeenCalledWith("n1");
+  });
+});
+
+/**
+ * 小记页签预览（261124 用户点单：「回收站小记没有做预览吗？需要支持预览就和文档成一样的预览方式就行」）。
+ * 之前小记行只有标题+时间，点行没有任何反应（右侧预览区只在文档页签里存在）。
+ * 这里锁四件事：
+ *  ① 小记行与文档行**同一条**预览链：点行/点文本区 → readTrashQuickNote → NoteDocPreview(policyKey=trash)；
+ *  ② 行内「恢复 / 彻底删除」是独立控件，点它们不能连带进预览（与文档行同语义）；
+ *  ③ 读取失败不挂空 viewer：给可操作提示，不留空白占位；
+ *  ④ 切页签清空选中：文档预览不残留在小记页签（右侧占位随页签改文案）。
+ */
+async function renderQuickPanel(items: Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }>) {
+  nativeMock.listTrash.mockResolvedValue([]);
+  nativeMock.listQuickNoteTrash.mockResolvedValue(items);
+  act(() => root.render(<TrashPanel open embed onClose={() => undefined} onRestored={() => undefined} />));
+  await flush();
+  const quickTab = [...container.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((el) => el.textContent?.includes("小记"));
+  await activate(quickTab ?? null);
+}
+
+const quickItem = (over: Partial<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }> = {}) => ({
+  id: "q1",
+  createdAt: "2026-11-23T02:38:00.000Z",
+  updatedAt: "2026-11-23T02:38:00.000Z",
+  deletedAt: "2026-11-23T02:38:00.000Z",
+  ...over,
+});
+
+describe("小记页签预览（261124）：与文档同一条预览链", () => {
+  it("点小记行/文本区 → readTrashQuickNote → 正文交给 NoteDocPreview(policyKey=trash)", async () => {
+    await renderQuickPanel([quickItem()]);
+    const text = container.querySelector<HTMLButtonElement>("button.trash-row-text");
+    expect(text?.tagName).toBe("BUTTON");
+    // 行与文档行同结构（role=group + 文本区独立原生按键 ⇒ 键盘/读屏同一套语义）
+    expect(text?.closest(".ln-list-item")?.getAttribute("role")).toBe("group");
+    await activate(text);
+
+    expect(nativeMock.readTrashQuickNote).toHaveBeenCalledWith("q1");
+    expect(previewCalls).toHaveLength(1);
+    expect(previewCalls[0]).toMatchObject({ noteId: "q1", body: "<p>小记正文</p>", policyKey: "trash" });
+    expect(container.querySelector(".history-preview-inline-title")?.textContent).toBe("小记");
+    expect(container.textContent).not.toContain("选择左侧小记查看内容");
+  });
+
+  it("点行内空白/徽标（不是标题文字）同样进预览（与文档行 task-89 同口径）", async () => {
+    await renderQuickPanel([quickItem({ cloudDeleted: true })]);
+    const badge = [...container.querySelectorAll(".badge")].find((el) => el.textContent?.includes("云端已删除（仅本地）"));
+    await activate(badge ?? null);
+    expect(nativeMock.readTrashQuickNote).toHaveBeenCalledWith("q1");
+    expect(previewCalls).toHaveLength(1);
+  });
+
+  it("行内「恢复」是独立控件：点它不触发预览", async () => {
+    await renderQuickPanel([quickItem()]);
+    const restore = container.querySelector<HTMLButtonElement>('button[aria-label="恢复"]');
+    await activate(restore);
+    expect(nativeMock.readTrashQuickNote).not.toHaveBeenCalled();
+    expect(previewCalls).toHaveLength(0);
+    expect(nativeMock.restoreQuickNote).toHaveBeenCalledWith("q1");
+  });
+
+  it("readTrashQuickNote 失败：不挂空 viewer，给可操作提示（不留空白占位）", async () => {
+    nativeMock.readTrashQuickNote.mockRejectedValue(new Error("小记内容文件已丢失，无法预览"));
+    await renderQuickPanel([quickItem()]);
+    await activate(container.querySelector("button.trash-row-text"));
+    expect(previewCalls).toHaveLength(0);
+    expect(container.textContent).toContain("读取小记失败");
+    expect(container.textContent).toContain("无法预览");
+  });
+
+  it("切到小记页签清空选中：文档预览不残留，右侧占位随页签改文案", async () => {
+    await renderPanel([trashItem()]);
+    await activate(row());
+    expect(previewCalls).toHaveLength(1);
+
+    const quickTab = [...container.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((el) => el.textContent?.includes("小记"));
+    await activate(quickTab ?? null);
+    expect(container.textContent).toContain("选择左侧小记查看内容");
+    expect(previewCalls).toHaveLength(1); // 清空选中 ⇒ 不会再挂一个预览实例
+    expect(container.querySelector(".history-preview-inline-title")).toBeNull();
   });
 });
 

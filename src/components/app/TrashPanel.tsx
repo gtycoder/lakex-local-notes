@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
 import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";
+import type { QuickNoteTrashItem } from "../../lib/types";
 import { createRequestVersion } from "../../core/requestVersion";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -42,6 +43,9 @@ function trashItemMeta(item: TrashItem): string {
   if (!when) return titled ? kind : "";
   return titled ? `${kind}，${when}` : when;
 }
+
+/** 回收站小记行的标题（小记没有标题概念，行与预览头共用同一份文案，别在两处各写一个）。 */
+const QUICK_TRASH_TITLE = "小记";
 
 /** 正文文件不在本机（readNote.bodyMissing / hasFile=false）：回收站预览只给可操作说明，不挂空 viewer。 */
 const TRASH_BODY_MISSING_HINT = "正文文件不在本机，无法预览；恢复后可从云端补回（若云端也没有，只能依靠本机历史快照）。";
@@ -155,7 +159,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
 }) {
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
-  const [quickItems, setQuickItems] = useState<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }>>([]);
+  const [quickItems, setQuickItems] = useState<QuickNoteTrashItem[]>([]);
   /** hint = 不可预览时的可操作说明（task-89：目录 / 缺正文引用 / 正文文件不在本机，绝不留空白占位）。 */
   const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind; hint?: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -252,8 +256,37 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   // ⚠️ 只给 **doc** 挂：表格/多维表/画板的正文是内部 JSON，塞给 doc viewer 会原样吐出 JSON
   //（用户 261006 报"多维表预览又坏了"）⇒ 其余的走 <HistorySnapshotPreview>（与历史面板同一实现）。
 
+  /**
+   * 选中小记 → 与文档**同一条**只读预览链（NoteDocPreview，policyKey="trash"；261124 用户点单）。
+   * 回收站小记的行已离开 quick_notes ⇒ 读口走专用 `readTrashQuickNote`（墓碑 + 软删保留的正文文件，
+   * 只读、零状态变化）；正文是内核 Lake 形态，交给同一个 viewer 渲染（图片走本地资产服务原图）。
+   */
+  const previewQuick = async (item: QuickNoteTrashItem) => {
+    const version = previewVersionRef.current.next();
+    setSelected(null); // 与文档预览同语义：销毁旧 viewer，加载期间不显示上一篇内容
+    setPreviewing(true);
+    try {
+      const doc = await native.readTrashQuickNote(item.id);
+      if (!previewVersionRef.current.isCurrent(version)) return;
+      setSelected({ id: doc.id, title: QUICK_TRASH_TITLE, noteId: doc.id, html: doc.content.body, kind: "doc" });
+    } catch (e) {
+      if (!previewVersionRef.current.isCurrent(version)) return;
+      setSelected({ id: item.id, title: QUICK_TRASH_TITLE, noteId: null, html: "", hint: "读取小记失败，无法预览；可稍后重试，或先恢复这条小记再查看。" });
+      setError(getNativeErrorMessage(e));
+    } finally {
+      if (previewVersionRef.current.isCurrent(version)) setPreviewing(false);
+    }
+  };
+
   const restoreQuick = async (id: string) => {
-    try { await native.restoreQuickNote(id); await refreshQuick(); }
+    try {
+      await native.restoreQuickNote(id);
+      // 条目已离开回收站：撤销在途预览并收掉右侧预览（与文档恢复同口径）。
+      previewVersionRef.current.invalidate();
+      setPreviewing(false);
+      if (selected?.id === id) setSelected(null);
+      await refreshQuick();
+    }
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
   const purgeQuick = async (id: string) => {
@@ -263,7 +296,13 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       confirmText: "彻底删除",
       danger: true,
     }))) return;
-    try { await native.purgeQuickNote(id); await refreshQuick(); }
+    try {
+      await native.purgeQuickNote(id);
+      previewVersionRef.current.invalidate();
+      setPreviewing(false);
+      if (selected?.id === id) setSelected(null);
+      await refreshQuick();
+    }
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
 
@@ -343,6 +382,18 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const roots = useMemo(() => buildTrashTree(items), [items]);
   const canPreview = !!selected?.noteId;
 
+  /**
+   * 切页签 = 换一列数据（文档 / 小记共用右侧预览区）：必须撤销在途预览并清空选中，
+   * 否则文档的预览会留在小记页签里（或反过来），选中态也跨页签错位。
+   */
+  const switchTab = (next: "docs" | "quick") => {
+    if (next === tab) return;
+    previewVersionRef.current.invalidate();
+    setPreviewing(false);
+    setSelected(null);
+    setTab(next);
+  };
+
   if (!open) return null;
 
   /** 主体（弹窗 / 成页共用；布局不改） */
@@ -367,10 +418,10 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标） */}
       <div className="ln-tabs trash-panel-tabs">
         <div className="ln-tabs__track" role="tablist" aria-label="回收站">
-          <button type="button" role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => setTab("docs")}>
+          <button type="button" role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => switchTab("docs")}>
             文档<span className="ln-tabs__count">{items.length}</span>
           </button>
-          <button type="button" role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => setTab("quick")}>
+          <button type="button" role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => switchTab("quick")}>
             小记<span className="ln-tabs__count">{quickItems.length}</span>
           </button>
         </div>
@@ -388,15 +439,58 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         <p className="trash-panel-notice" role="status">{restoreNotice}</p>
       )}
       {error && <div className="trash-error">{error}</div>}
-      <SplitPane ariaLabel="调整回收站列表宽度" storageKey="trash" hidden={tab !== "docs"} minRight={280}>
+      {/* 左列 = 当前页签的数据（文档树 / 小记行），右列 = 共用预览区：小记与文档走**同一条**预览链（261124 用户点单）。 */}
+      <SplitPane ariaLabel="调整回收站列表宽度" storageKey="trash" minRight={280}>
         <div className="history-list ln-list-panel ln-list-panel--background history-list-left">
-          {loading && <div className="ln-empty">加载中…</div>}
-          {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
-          {!loading && roots.map((item) => (
-            <TrashTreeRow key={item.id} item={item} items={items} selectedId={selected?.id ?? null}
-              trashAutoPurgeDays={trashAutoPurgeDays}
-              onSelect={(it) => void preview(it)} onRestore={(id) => void restore(id)} onPurge={(id) => void purge(id)} />
-          ))}
+          {tab === "docs" ? (
+            <>
+              {loading && <div className="ln-empty">加载中…</div>}
+              {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
+              {!loading && roots.map((item) => (
+                <TrashTreeRow key={item.id} item={item} items={items} selectedId={selected?.id ?? null}
+                  trashAutoPurgeDays={trashAutoPurgeDays}
+                  onSelect={(it) => void preview(it)} onRestore={(id) => void restore(id)} onPurge={(id) => void purge(id)} />
+              ))}
+            </>
+          ) : quickItems.length === 0 ? (
+            <div className="ln-empty">回收站是空的</div>
+          ) : (
+            // 小记行 = 文档行同一套结构与类（包 .trash-tree-node ⇒ 文本保底宽 / 徽标让位 / 按钮复位 /
+            // 整行可点 / 动作浮层这些 task-89 与 task-105 的规则原样复用，不写第二份行样式）。
+            quickItems.map((item) => {
+              const meta = formatDateTime(item.deletedAt);
+              return (
+                <div className="trash-tree-node" key={item.id}>
+                  <div
+                    className={`ln-list-item ln-row2 trash-row${selected?.id === item.id ? " ln-list-item--focus is-selected" : ""}`}
+                    role="group"
+                    aria-label={meta ? `${QUICK_TRASH_TITLE}，${meta}` : QUICK_TRASH_TITLE}
+                    onClick={() => void previewQuick(item)}
+                  >
+                    <span className="ln-list-item__graphic"><File size={14} /></span>
+                    {/* 文本区 = 独立原生按键（与文档行同语义：Enter/空格/读屏点击走浏览器默认路径）。 */}
+                    <button
+                      type="button"
+                      className="ln-list-item__text ln-row2__main ln-ellipsis trash-row-text"
+                      aria-current={selected?.id === item.id ? "true" : undefined}
+                      aria-label={`预览「${QUICK_TRASH_TITLE}」`}
+                      title="点击预览内容"
+                      onClick={(event) => { event.stopPropagation(); void previewQuick(item); }}
+                    >
+                      <span className="ln-row2__title">{QUICK_TRASH_TITLE}</span>
+                      {meta ? <span className="ln-row2__meta">{meta}</span> : null}
+                    </button>
+                    {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
+                    <span className="ln-spacer" />
+                    <span className="trash-row-actions">
+                      <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={(event) => { event.stopPropagation(); void restoreQuick(item.id); }}><RotateCcw size={14} /></button>
+                      <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={(event) => { event.stopPropagation(); void purgeQuick(item.id); }}><Trash size={14} /></button>
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
         <div className="history-preview-inline trash-preview">
           {previewing ? (
@@ -415,30 +509,10 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
               )}
             </>
           ) : (
-            <div className="ln-empty">选择左侧文档查看内容</div>
+            <div className="ln-empty">{tab === "docs" ? "选择左侧文档查看内容" : "选择左侧小记查看内容"}</div>
           )}
         </div>
       </SplitPane>
-      {tab === "quick" && (
-        <div className="history-list ln-list-panel ln-list-panel--background">
-          {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
-          {quickItems.map((item) => (
-            <div className="ln-list-item ln-row2 trash-row" key={item.id}>
-              <span className="ln-list-item__graphic"><File size={14} /></span>
-              <div className="ln-list-item__text ln-row2__main ln-ellipsis">
-                <span className="ln-row2__title">小记</span>
-                <span className="ln-row2__meta">{formatDateTime(item.deletedAt)}</span>
-              </div>
-              {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
-              <span className="ln-spacer" />
-              <span className="trash-row-actions">
-                <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
-                <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
       {!embed && <DialogResizeHandles onResize={floating.startResize} />}
       {confirmElement}
     </>

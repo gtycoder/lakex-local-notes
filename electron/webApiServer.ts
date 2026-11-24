@@ -205,6 +205,7 @@ export const WEB_METHODS: Record<string, string> = {
   convertQuickNote: "convert_quick_note",
   syncQuickNote: "sync_quick_note",
   listQuickNoteTrash: "list_quick_note_trash",
+  readTrashQuickNote: "read_quick_note_trash",
   restoreQuickNote: "restore_quick_note",
   purgeQuickNote: "purge_quick_note",
   getS3GcSettings: "get_s3_gc_settings",

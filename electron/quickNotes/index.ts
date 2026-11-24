@@ -64,6 +64,7 @@ import {
   markTargetNotesSynced,
   purgeOrphanQuickNote,
   purgeQuickNote,
+  readTrashQuickNote,
   recoverConversions,
   rememberDeleted,
   restoreQuickNote,
@@ -322,6 +323,8 @@ export class QuickNotesStore {
   listQuickNoteTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }> {
     return listQuickNoteTrash(this.trashDeps);
   }
+  /** 回收站条目只读预览（261124）：行已离开 quick_notes ⇒ 不能走 readQuickNote；按墓碑 + 保留的正文文件读回。 */
+  readTrashQuickNote(id: string): QuickNoteDocument { return readTrashQuickNote(this.trashDeps, id); }
   markQuickNoteTrashCloudDeleted(ids: readonly string[]): void { markQuickNoteTrashCloudDeleted(this.trashDeps, ids); }
   listCloudDeletedQuickNoteIds(): string[] { return listCloudDeletedQuickNoteIds(this.trashDeps); }
   listRestorePendingQuickNoteIds(): string[] { return listRestorePendingQuickNoteIds(this.trashDeps); }

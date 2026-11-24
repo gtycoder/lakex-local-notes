@@ -59,6 +59,38 @@ export function listQuickNoteTrash(deps: QuickNoteTrashDeps): Array<{ id: string
 }
 
 /**
+ * 回收站小记**只读预览**（261124 用户点单：小记要有与文档一样的预览）。
+ *
+ * 为什么不能走 readQuickNote：软删行已离开 `quick_notes`（活动行只剩墓碑），
+ * readQuickNote 读的是活动行 ⇒ 对回收站条目必然 NotFound。这里按「墓碑 + 软删保留的
+ * 正文文件（keepFiles）」读回，与 restoreQuickNote 同一份正文来源。
+ *
+ * 只读红线：不写库、不动文件、不清墓碑 —— 预览绝不产生状态变化；内容文件缺失
+ * （被手动删掉）= NotFound，由 UI 给可操作提示（不留空白占位）。
+ */
+export function readTrashQuickNote(deps: QuickNoteTrashDeps, id: string): QuickNoteDocument {
+  if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+  const tomb = deps.db.prepare(
+    "SELECT * FROM quick_note_deleted WHERE id=? AND conversion_target_note_id IS NULL AND purged_at IS NULL",
+  ).get(id) as QuickNoteDeletedRow | undefined;
+  if (!tomb) throw new AppError("NotFound", "小记不在回收站");
+  if (!fs.existsSync(itemPathOf(deps.paths, id))) throw new AppError("NotFound", "小记内容文件已丢失，无法预览");
+  const content = deps.queries.readStoredContent(id);
+  const row: QuickNoteRow = {
+    id,
+    created_at: tomb.created_at,
+    updated_at: tomb.updated_at,
+    preview_text: previewQuickNote(content.text, content.images.length),
+    image_count: content.images.length,
+    content_hash: "", // 只读预览不参与同步比对：权威 hash 只属于活动行，这里不伪造语义
+    is_dirty: 0,
+    is_conflict: 0,
+  };
+  // mapDocument 走 queries 自己的标签名解析器；软删保留的标签关系随预览一起读出（不写回）。
+  return deps.queries.mapDocument(row, content, deps.links.listFor(id));
+}
+
+/**
  * v3 remotePurged → 小记回收站副本的「云端已删除 · 仅本地」标记（sticky）。
  * 只置位、不自动清除：远端删除进回收站后要一直可读；恢复（墓碑行删除）或本地 purge（显式清 0）才消失。
  */

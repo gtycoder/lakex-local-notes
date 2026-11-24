@@ -369,6 +369,8 @@ export interface LakeNative {
   /** 「保存并同步」：只推这一条小记（其余小记在云端原样保留）。 */
   syncQuickNote(id: string): Promise<import("../core/quickNoteSyncTypes").QuickNotePushOutcome>;
   listQuickNoteTrash(): Promise<QuickNoteTrashItem[]>;
+  /** 回收站小记只读预览（261124）：行已离开 quick_notes，走墓碑 + 保留正文文件的专用读口。 */
+  readTrashQuickNote(id: string): Promise<QuickNoteDocument>;
   restoreQuickNote(id: string): Promise<QuickNoteDocument>;
   purgeQuickNote(id: string): Promise<void>;
   getS3GcSettings(): Promise<S3GcSettings>;
@@ -638,6 +640,7 @@ export const native = {
   convertQuickNote: (quickNoteId: string, notebookId: string) => api().convertQuickNote(quickNoteId, notebookId),
   syncQuickNote: (id: string) => api().syncQuickNote(id),
   listQuickNoteTrash: () => api().listQuickNoteTrash(),
+  readTrashQuickNote: (id: string) => api().readTrashQuickNote(id),
   restoreQuickNote: (id: string) => api().restoreQuickNote(id),
   purgeQuickNote: (id: string) => api().purgeQuickNote(id),
   listMissingQuickNotes: () => api().listMissingQuickNotes(),
