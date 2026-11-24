@@ -4,6 +4,7 @@ import {
   mapDesktopTree,
   mapOrphanNoteRow,
   mapQuickNoteRow,
+  mapTreeRow,
   mapTagLinkRow,
   mapTagRow,
   parsePortableBaseline,
@@ -37,6 +38,40 @@ const baselineJson = () => ({
 });
 
 const baseline = (): ParsedPortableBaseline => parsePortableBaseline(baselineJson());
+
+describe("B9/F9：便携包（桌面→移动）不丢 restore_pending / cloud_deleted（261124 审计④F9）", () => {
+  it("孤儿 notes 行：restore_pending_at 与 cloud_deleted 原样带过（旧实现硬编码 null/0）", () => {
+    const row = {
+      id: "n9", title: "已恢复未同步", parent_id: "nb1", sort_order: 0, updated_at: TS,
+      deleted_at: null, kind: "doc", is_conflict: 0, is_purged: 0,
+      trashed_at: null, deleted_from_parent_id: null,
+      restore_pending_at: TS, cloud_deleted: 1,
+      is_locked: 0, locked_at: null, icon: null, content_hash: H("a"),
+    };
+    const out = mapOrphanNoteRow(row as never, baseline());
+    expect(out).toBeTruthy();
+    expect(out!.restore_pending_at).toBe(TS); // 旧实现 = null ⇒ local-wins 恢复盾在迁移中消失
+    expect(out!.cloud_deleted).toBe(1);       // 「云端已删除·仅本地」标同丢
+  });
+
+  it("树上 notes 行同口径（mapTreeRow 携带 note 行字段）", () => {
+    const node = {
+      id: "nt1", workspace_id: "default", parent_id: "nb1", node_type: "note", title: "T",
+      note_file_id: "n9", sort_order: 0, created_at: TS, updated_at: TS,
+      deleted_at: null, is_dirty: 0, is_conflict: 0, icon: null, trashed_at: null, deleted_from_parent_id: null,
+    };
+    const note = {
+      id: "n9", title: "T", parent_id: "nb1", sort_order: 0, updated_at: TS, is_conflict: 0,
+      deleted_at: null, kind: "doc", is_locked: 0, locked_at: null,
+      restore_pending_at: TS, cloud_deleted: 1, trashed_at: null, deleted_from_parent_id: null,
+    };
+    const out = mapTreeRow(node as never, note as never, baseline());
+    expect(out && "note" in out ? (out as { note: { restore_pending_at: string | null; cloud_deleted: number } }).note : null).toBeTruthy();
+    const mapped = (out as { note: { restore_pending_at: string | null; cloud_deleted: number } }).note;
+    expect(mapped.restore_pending_at).toBe(TS);
+    expect(mapped.cloud_deleted).toBe(1);
+  });
+});
 
 describe("便携包同步基线解析（core 索引校验单一来源）", () => {
   it("解析出 MobileV3Baseline 与 id→contentHash 映射", () => {

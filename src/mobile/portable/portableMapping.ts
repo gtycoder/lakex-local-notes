@@ -221,7 +221,8 @@ export function mapTreeRow(
         deleted_from_parent_id: deletedFromParentId,
         is_dirty: 0,
         is_purged: 0,
-        cloud_deleted: 0,
+        // 261124 B9/F9：folder 的「云端已删除」标同样原样带过（与 notes 同口径）。
+        cloud_deleted: asBoolInt(node.cloud_deleted),
       },
       skipped: false,
     };
@@ -257,10 +258,12 @@ export function mapTreeRow(
       is_conflict: asBoolInt(note?.is_conflict) || asBoolInt(node.is_conflict),
       deleted_at: deletedAt,
       doc_kind: asTextOr(note?.kind, "doc"),
-      cloud_deleted: 0,
       trashed_at: trashedAt,
       deleted_from_parent_id: deletedFromParentId,
-      restore_pending_at: null,
+      // 261124 B9/F9（审计④F9）：restore_pending / cloud_deleted 原样带过 —— 旧实现硬编码
+      // null/0 ⇒「已恢复未同步」的 local-wins 盾与「云端已删除」标在便携迁移中静默消失。
+      restore_pending_at: asText(note?.restore_pending_at),
+      cloud_deleted: asBoolInt(note?.cloud_deleted),
       is_locked: asBoolInt(note?.is_locked),
       locked_at: asText(note?.locked_at),
       icon: asText(node.icon),
@@ -289,10 +292,11 @@ export function mapOrphanNoteRow(row: DesktopRow, baseline: ParsedPortableBaseli
     is_conflict: asBoolInt(row.is_conflict),
     deleted_at: asText(row.deleted_at),
     doc_kind: asTextOr(row.kind, "doc"),
-    cloud_deleted: 0,
+    // 261124 B9/F9：同 mapTreeRow，restore_pending / cloud_deleted 原样带过。
+    cloud_deleted: asBoolInt(row.cloud_deleted),
     trashed_at: asText(row.trashed_at) ?? asText(row.deleted_at),
     deleted_from_parent_id: asText(row.deleted_from_parent_id),
-    restore_pending_at: null,
+    restore_pending_at: asText(row.restore_pending_at),
     is_locked: asBoolInt(row.is_locked),
     locked_at: asText(row.locked_at),
     icon: asText(row.icon),
