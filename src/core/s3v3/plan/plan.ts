@@ -293,8 +293,9 @@ export function planSync(input: PlanInput): SyncPlan {
   // 目录：只有本地要发布（uploadLocal）才改索引；纯下载/应用远端不重发。
   // P1-b（261112 真实 S3 验收）：**本地 purge 也必须标记 indexChanged**——purge 后本地已无该目录，
   // 若本轮没有别的变更就会走「零变更短路」不发布，云端索引 folders[] 永久保留已删目录（对端会重新导入）。
-  // 「以云端为准」（首次相遇）：目录映射无对应改写（applyEncounterAction 只覆盖文档/小记）⇒
-  // 本地目录的 uploadLocal/本地删一律**不发布不上行**（云端为准；本地保留不丢数据，§21 已知近似）。
+  // 「以云端为准」（首次相遇）：目录映射（applyFolderEncounterAction，261124 P0-B1）对 cloud-wins 保持
+  // 既有近似 —— 本地目录的 uploadLocal/本地删一律**不发布不上行**（云端为准；本地保留不丢数据，§21 已知近似）。
+  // additive/local-wins 的目录改写已在 s3v3Merge 落地（只增不删/冲突本机胜），此处只管 cloud-wins 的发布抑制。
   const folderCloudWins = input.encounter === "cloud-wins";
   for (const f of lakePlan.folders) {
     if (!folderCloudWins && (f.uploadLocal || f.kind === "local-delete" || f.kind === "local-purge")) indexChanged = true;

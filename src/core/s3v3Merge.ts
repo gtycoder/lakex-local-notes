@@ -1,6 +1,6 @@
 import { isDiaryNotebookNode } from "./diary.js";
 import { decideItem, type ItemAction } from "./s3v3Decision.js";
-import { applyEncounterAction, applyQuickEncounterAction, type EncounterQuickAction, type FirstEncounterMode } from "./firstEncounter.js";
+import { applyEncounterAction, applyFolderEncounterAction, applyQuickEncounterAction, type EncounterFolderAction, type EncounterQuickAction, type FirstEncounterMode } from "./firstEncounter.js";
 import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { PlanWarning } from "./s3v3/plan/types.js";
 
@@ -239,10 +239,24 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     const l = localFolders.get(id) ?? null;
     const r = safeRemote(remoteFolders.get(id) ?? null);
     const purge = ctx.folderPurgeIntents.has(id);
-    if (purge && !l && r) {
-      folders.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, local: undefined, remote: r });
-      continue;
-    }
+    // 261124 P0-B1：目录决策同样过**首次相遇改写层**（旧实现裸用原始判定 ⇒ 「只增不删」轮也把本地目录
+    // 判 remote-purged-trash → remove-folder → deleteTreeNode 级联收整棵子树）。同时对齐 decideItem：
+    // 「基线在场」不是删除意图 —— 本地缺席 + 远端有一律 download 补回（真删除走 folderPurgeIntents /
+    // 软删 trashedAt 两个显式通道），删除传播不再冒充普通缺席。
+    const pushFolder = (rawKind: EncounterFolderAction): void => {
+      const kind = ctx.encounter
+        ? applyFolderEncounterAction(ctx.encounter, rawKind, { localPresent: !!l, remotePresent: !!r, basePresent: !!b })
+        : rawKind;
+      folders.push({
+        id,
+        kind: kind as LakeFolderPlan["kind"],
+        applyRemote: kind === "download" || kind === "remote-purged-trash",
+        uploadLocal: kind === "upload",
+        local: l ?? undefined,
+        remote: r ?? undefined,
+      });
+    };
+    if (purge && !l && r) { pushFolder("local-purge"); continue; }
     if (l && !r) {
       // 本地有、远端无：
       // - 无基线 = 本地新建 → upload；
@@ -252,29 +266,31 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       // F-01b（task-77）：**本地是回收站副本（trashed）且无基线 ⇒ 不是本地新建**。对端 purge 目录后，
       // 基线会被纯拉取轮推进到「不含该目录」的远端索引，上一版会在这里退化成 upload ⇒ 对端每轮把
       // 已 purge 的目录重新发布回云端 folders[]。回收站副本永远不参与上传（删除权威）。
-      if (!b && !l.trashedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
-      else if (b && !l.trashedAt && l.updatedAt > b.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
-      else folders.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, local: l, remote: undefined });
+      if (!b && !l.trashedAt) pushFolder("upload");
+      else if (b && !l.trashedAt && l.updatedAt > b.updatedAt) pushFolder("upload");
+      else pushFolder("remote-purged-trash");
       continue;
     }
     if (!l && r) {
-      // 本地无、远端有：**基线存在 = 用户删了本地目录 ⇒ 删除要传播**（发布不含它的新索引，对端跟随进回收站）；
-      // 无基线 = 远端新建 ⇒ 下载。
-      if (b) folders.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, local: undefined, remote: r });
-      else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: undefined, remote: r });
+      // 261124 P0-B1②（对齐 decideItem syncDecisions.ts:36）：**基线在场不是删除意图** ——
+      // 无 purge 意图的本地缺失一律按云端恢复（download）。旧实现判 local-delete 会把
+      // 「基线有、行缺失」（迁移/映射缺口）发布成缺席 ⇒ 他端整树进回收站。
+      pushFolder("download");
       continue;
     }
     if (!l || !r) continue;
     const lChanged = !b || l.updatedAt !== b.updatedAt;
     const rChanged = !b || r.updatedAt !== b.updatedAt;
-    if (lChanged && !rChanged) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
-    else if (!lChanged && rChanged) folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
+    if (lChanged && !rChanged) pushFolder("upload");
+    else if (!lChanged && rChanged) pushFolder("download");
     else if (lChanged && rChanged) {
       // 环检测（C4）：本地 new parent 在远端目录树中位于本目录之下 ⇒ 上传会成环，跟随远端断开。
       const wouldCycle = !!l.parentId && isRemoteDescendant(l.parentId, id, remoteFolderParents);
-      if (!wouldCycle && l.updatedAt > r.updatedAt && ctx.encounter !== "cloud-wins") folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: r });
-      else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
-    } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
+      // 261124 P0-B1③：additive/local-wins 的「冲突本机胜」不再按 updatedAt 让远端（cloud-wins 照旧让远端）。
+      const conflictLocalWins = ctx.encounter === "additive" || ctx.encounter === "local-wins" || l.updatedAt > r.updatedAt;
+      if (!wouldCycle && conflictLocalWins && ctx.encounter !== "cloud-wins") pushFolder("upload");
+      else pushFolder("download");
+    } else pushFolder("none");
   }
   const normalizedFolders = enforceDiarySpaceMonotone(folders);
   if (cycleWarnings.length > 0) return { notes, folders: normalizedFolders, warnings: cycleWarnings };

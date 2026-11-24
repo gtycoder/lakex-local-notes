@@ -126,6 +126,36 @@ export function applyEncounterAction(mode: FirstEncounterMode, action: ItemActio
   return action;
 }
 
+/**
+ * 目录条目决策的映射结果（folders 计划动作；261124 P0-B1 补齐）。
+ *
+ * 旧实现 applyEncounterAction 只覆盖文档/小记 ⇒ folders 循环裸用原始判定：
+ * 「只增不删」轮里本地独有目录仍被收进回收站（remove-folder → deleteTreeNode **级联整棵子树**），
+ * 与 §21.2「本轮双向都不删」直接矛盾。目录版映射镜像文档语义（不丢数据优先）：
+ * - additive（只增不删）：云端缺席不传播（本地目录保留上行）、本地删除推迟；
+ * - local-wins（以本地为准）：云端的删除一律不认（本地目录上行）、本地在场全量上行；
+ *   云端独有且基线不认识 ⇒ 直接补拉（**已知偏差**：文档走 download-to-trash 进回收站，
+ *   目录无此动作 —— 补拉多收一个目录不丢数据，方向安全，登记在 00-MASTER）；
+ * - cloud-wins：沿用既有近似（plan.ts 抑制本地上行；remote-purged-trash = 本地回收站，可恢复）。
+ */
+export type EncounterFolderAction = "upload" | "download" | "local-delete" | "local-purge" | "remote-purged-trash" | "none";
+
+export function applyFolderEncounterAction(mode: FirstEncounterMode, kind: EncounterFolderAction, ctx: EncounterItemContext): EncounterFolderAction {
+  if (mode === "smart") return kind;
+  if (mode === "additive") {
+    if (kind === "local-delete" || kind === "local-purge") return "none"; // 本地删除意图推迟（本轮不删）
+    if (kind === "remote-purged-trash") return "upload";                  // 云端缺席不传播：本地目录视为待上传
+    return kind;
+  }
+  if (mode === "local-wins") {
+    if (kind === "remote-purged-trash") return "upload";                  // 云端的删除被「本地为准」覆盖
+    if (kind === "download") return ctx.localPresent ? "upload" : "download"; // 在场全量上行；缺席补回
+    return kind;
+  }
+  // cloud-wins：目录沿用既有近似（不丢数据方向；见类型注释）
+  return kind;
+}
+
 /** 小记条目决策的映射结果（QuickNoteActionKind + download-to-trash）。 */
 export type EncounterQuickAction = "upload" | "download" | "remote-wins-history" | "local-delete" | "local-purge" | "none" | "download-to-trash";
 
