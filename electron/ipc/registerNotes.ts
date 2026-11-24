@@ -344,7 +344,8 @@ export function registerNotesIpc(
   ipc.handle("restore_trash", (id: string) => {
     // 261006 B 方案：**恢复立刻生效、不等网络**（原先先 await 全量资产下载，慢网会让恢复像卡死）。
     // 缺失资源由渲染层随后调 ensure_trash_note_assets 在后台补拉（离线则直接 skipped、不出网）。
-    store.restoreTrashItem(id);
+    // 落点回执（261124）：原位置不可用时 UI 必须告知落点，不许静默换家。
+    return store.restoreTrashItem(id);
   });
   ipc.handle("ensure_trash_note_assets", async (id: string) => {
     // 预览 / 恢复后台补拉：按需拉该笔记**缺失**的资源（best-effort，不恢复）。

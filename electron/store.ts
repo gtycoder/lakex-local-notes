@@ -1522,9 +1522,10 @@ export class Store {
     return this.trashLifecycle.autoPurgeExpiredTrash(days);
   }
 
-  /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。 */
-  restoreTrashItem(id: string): void {
-    this.trashLifecycle.restoreTrashItem(id);
+  /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
+   *  返回落点（parentId/parentTitle/fellBack）供 UI 如实提示——静默换家 = 用户找不到文档（261124 事故）。 */
+  restoreTrashItem(id: string): { parentId: string | null; parentTitle: string; fellBack: boolean } {
+    return this.trashLifecycle.restoreTrashItem(id);
   }
 
   /** 彻底删除回收站节点（不可恢复）：物理删子树 + 写 purge 墓碑（deleted_notes，带 purged_at）。 */

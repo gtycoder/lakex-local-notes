@@ -29,16 +29,32 @@ describe("首次相遇 × 基线豁免（plan 级事故回归）", () => {
     const writes = plan.writes.filter((w) => w.id === "n1");
     expect(writes).toHaveLength(1);
     expect(writes[0].kind).toBe("apply-remote");
-    const meta = (writes[0] as { meta: Record<string, unknown> }).meta;
+    const meta = (writes[0] as unknown as { meta: Record<string, unknown> }).meta;
     expect(meta.trashedAt).toBeUndefined(); // 绝不进回收站
     expect(meta.parentId).toBe("f617e71c-e06e-48a3-9199-e1b19f281a95");
     expect(plan.publish).toBeNull(); // 纯下载不发布
   });
 
+  it("④ wire 已 trash 条目再走 download-to-trash：deletedFromParentId 不得被 null 覆盖（261124 恢复回不了原位事故）", () => {
+    const trashed: LakeIndex = { v: 3, space: "lake", notes: [{ ...note("n1"), parentId: null, trashedAt: "2026-11-23T13:20:00.000Z", deletedFromParentId: "f617e71c-e06e-48a3-9199-e1b19f281a95" } as never], folders: [folder, root] };
+    const plan = planSync({
+      base: null as never,
+      local: { lake: mk(false), quickNotes: quick },
+      remote: { lake: trashed, quickNotes: quick },
+      encounter: "local-wins",
+      now: "2026-11-23T13:29:00.275Z",
+      state: { restorePending: [], purgeIntents: [], folderPurgeIntents: [], quickDeletes: [], purgedQuickIds: [], quickPurges: [], quickPurgeTimes: {}, pendingTagDeletes: [], removedTagIds: [], forcePublish: false },
+    } as never);
+    const pub = plan.publish?.lake.notes.find((n) => n.id === "n1") as unknown as Record<string, unknown>;
+    expect(pub.deletedFromParentId).toBe("f617e71c-e06e-48a3-9199-e1b19f281a95");
+    const meta = (plan.writes.find((w) => w.id === "n1") as unknown as { meta: Record<string, unknown> }).meta;
+    expect(meta.deletedFromParentId).toBe("f617e71c-e06e-48a3-9199-e1b19f281a95");
+  });
+
   it("②③ 真·云端多出（无基线）⇒ download-to-trash：发布条目 trashedAt=round now、deletedFromParentId=原父", () => {
     const plan = run(null);
     const writes = plan.writes.filter((w) => w.id === "n1");
-    expect((writes[0] as { meta: Record<string, unknown> }).meta.trashedAt).toBe("2026-11-23T13:29:00.275Z");
+    expect((writes[0] as unknown as { meta: Record<string, unknown> }).meta.trashedAt).toBe("2026-11-23T13:29:00.275Z");
     const pub = plan.publish?.lake.notes.find((n) => n.id === "n1");
     expect(pub?.trashedAt).toBe("2026-11-23T13:29:00.275Z");
     expect(pub?.parentId).toBeNull();

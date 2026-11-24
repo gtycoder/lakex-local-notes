@@ -276,19 +276,25 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       confirmText: "恢复",
     }))) return;
     try {
-      await native.restoreTrash(id);
+      const res = await native.restoreTrash(id);
+      // 261124：恢复必须**如实报落点**——原位置不可用时曾静默回落默认笔记本，用户按原位找不到 ⇒ 「恢复后消失」。
+      const landing = res?.fellBack
+        ? `已恢复到「${res.parentTitle || "默认笔记本"}」：原位置不可用（原父信息丢失），可手动移回。`
+        : res?.parentTitle
+          ? `已恢复到「${res.parentTitle}」。`
+          : "已恢复。";
       setSelected(null);
       await refresh();
       onRestored(id);
       // 261006 B 方案：恢复**不等网络**（立刻可见）。缺失资源在后台补拉，先给说明、再按回执更新。
-      setRestoreNotice("正在从 S3 拉取缺失数据…");
+      setRestoreNotice(landing + " 正在从 S3 拉取缺失数据…");
       void native.ensureTrashNoteAssets(id)
         .then(({ warnings, skipped }) => {
-          if (skipped) setRestoreNotice(cloudStateHint(skipped) ?? "云同步未启用：按纯本地空间处理。");
-          else if (warnings.length > 0) setRestoreNotice(`已恢复，但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`);
-          else setRestoreNotice(null);
+          if (skipped) setRestoreNotice(landing + " " + (cloudStateHint(skipped) ?? "云同步未启用：按纯本地空间处理。"));
+          else if (warnings.length > 0) setRestoreNotice(`${landing} 但有 ${warnings.length} 个资源未能下载（可能云端也没有）：附件/图片会显示为空，下次同步会自动重试。`);
+          else setRestoreNotice(landing);
         })
-        .catch(() => setRestoreNotice("资源补拉失败（已保留恢复），下次同步会自动重试。"));
+        .catch(() => setRestoreNotice(landing + " 资源补拉失败（已保留恢复），下次同步会自动重试。"));
     } catch (e) {
       setError(getNativeErrorMessage(e));
     }

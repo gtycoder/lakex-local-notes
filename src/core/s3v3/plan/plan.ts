@@ -242,7 +242,9 @@ export function planSync(input: PlanInput): SyncPlan {
         ? { ...baseMeta, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt }
         : baseMeta;
       // 首次相遇「以本地为准」：远端独有 → 本地回收站（在位置/锁合成之后改写，回收站语义最终生效）。
-      if (p.trashOverride) meta = { ...meta, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: meta.parentId ?? null };
+      // 261124：原父取值顺序 = wire 已带的 deletedFromParentId → parent —— 位置合并可能已把 parentId 改写成
+      // null（远端 trash 形态 wire parent=null），再拿它当原父会把真原父覆盖成 null ⇒ 回收站恢复永远回不了原位。
+      if (p.trashOverride) meta = { ...meta, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: meta.deletedFromParentId ?? meta.parentId ?? null };
       writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta, bodyHash: r.contentHash });
       if (p.trashOverride) indexChanged = true;
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "lake", id: p.id, title: r.title });
@@ -480,7 +482,7 @@ export function planSync(input: PlanInput): SyncPlan {
         }
         // task-61：**wire 不携带本地回收站容器 id**（`notebook-trash` 不在云端 folders[]，带出去就是悬空父）。
         // trashed 条目的位置只由 trashedAt 表达，原始父在 deletedFromParentId；收件端按 trashedAt 落本地回收站容器。
-        if (p.trashOverride) picked = { ...picked, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: picked.parentId ?? null } as typeof picked;
+        if (p.trashOverride) picked = { ...picked, parentId: null, trashedAt: p.trashOverride.trashedAt, deletedFromParentId: picked.deletedFromParentId ?? picked.parentId ?? null } as typeof picked;
         if (picked.trashedAt) picked = { ...picked, parentId: null } as typeof picked;
         return {
           ...picked,

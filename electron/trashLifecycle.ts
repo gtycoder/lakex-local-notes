@@ -209,13 +209,15 @@ export class TrashLifecycle {
 
   /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
    * 无墓碑可压（回收站条目是普通条目），恢复 = 移出 + 标 local 待上传（LWW 由 updatedAt 承担）。 */
-  restoreTrashItem(id: string): void {
+  restoreTrashItem(id: string): { parentId: string | null; parentTitle: string; fellBack: boolean } {
     const node = this.ctx.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND parent_id=? AND deleted_at IS NULL").get(id, this.ctx.trashNotebookId) as
       { note_file_id: string | null; node_type: string; deleted_from_parent_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
     // 笔记本只能回根层（parentId=null）；note/group 回原位置，原父缺失/被删/在回收站 → 默认笔记本
     const isNotebook = node.node_type === "notebook";
     let parentId: string | null = isNotebook ? null : node.deleted_from_parent_id;
+    /** 原位置不可用（原父缺失/被删/在回收站）⇒ 回落默认笔记本；UI 必须如实告知落点（261124「恢复后消失」事故）。 */
+    let fellBack = false;
     /** 需要"原路返回日记空间"时记下目标（年/月分组在事务内补建，见下）。 */
     let diaryRestore: { notebookId: string; title: string } | null = null;
     if (parentId === null || parentId === this.ctx.trashNotebookId) {
@@ -242,6 +244,7 @@ export class TrashLifecycle {
           };
         } else {
           parentId = this.ctx.resolveParentNotebook();
+          fellBack = true;
         }
       }
     }
@@ -304,6 +307,10 @@ export class TrashLifecycle {
       }
     });
     tx();
+    const parentTitle = parentId
+      ? ((this.ctx.db.prepare("SELECT title FROM tree_nodes WHERE id=?").get(parentId) as { title?: string } | undefined)?.title ?? "")
+      : "";
+    return { parentId, parentTitle, fellBack };
   }
 
   /** 彻底删除回收站节点（不可恢复）：物理删子树 + 写 purge 墓碑（deleted_notes，带 purged_at）。
