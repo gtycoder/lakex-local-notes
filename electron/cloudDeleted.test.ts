@@ -195,6 +195,24 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
   });
 });
 
+describe("B8-④F6：目录行的 cloud_deleted 置位/清除（note_file_id 匹配漏目录）", () => {
+  it("applyNotesCloudDeleted 对 folder 行（note_file_id=NULL）按节点 id 置位并可清除", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "cloud-del-folder-"));
+    try {
+      const store = await makeStore(root);
+      const nb = store.createNotebook("目录本");
+      const rawDb = (store as unknown as { db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } } }).db;
+      store.applyNotesCloudDeleted([nb.id]);
+      const nodeRow = rawDb.prepare("SELECT cloud_deleted FROM tree_nodes WHERE id=?").get(nb.id) as { cloud_deleted: number };
+      expect(nodeRow.cloud_deleted, "folder 行置不上 ⇒ 目录徽标失明").toBe(1);
+      // 旧实现 flagged 只扫 notes、树行按 note_file_id 匹配 ⇒ 目录行永远清不掉（settleCloudDeleted 永不失效）
+      store.applyNotesCloudDeleted([]);
+      const cleared = rawDb.prepare("SELECT cloud_deleted FROM tree_nodes WHERE id=?").get(nb.id) as { cloud_deleted: number };
+      expect(cleared.cloud_deleted).toBe(0);
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+});
+
 describe("cloudDeleted：端到端（v3 引擎 remotePurged → 桌面标 → 恢复后清除）", () => {
   it("B 彻底删除 → A 保留回收站副本并打标；A 恢复并重新上传成功后徽标消失、云端复活", async () => {
     const remote = new MemoryRemote();

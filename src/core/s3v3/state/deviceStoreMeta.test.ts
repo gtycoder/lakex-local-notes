@@ -376,6 +376,27 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(applied.trashedAt).toBe("T5");
   });
 
+  it("B8-④P2-1：remotePurged 里的**目录 id** 不得被 hasNote 误清（目录徽标依赖它）", async () => {
+    const files = memoryFiles();
+    const platform = memoryPlatform({ folders: [{ id: "f1", title: "目录", parentId: null, sortOrder: 0, updatedAt: "T0", nodeType: "notebook", space: null, cloudDeleted: true }] });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: ["f1"], restorePending: [],
+    };
+    await meta.saveState(state);
+    // 旧实现 hasNote(f1)=false ⇒ 目录 id 被滤掉 ⇒ 下轮徽标被投影清掉（目录「云端已删除」失明）
+    expect(platform.calls).toContain("applyNotesCloudDeleted:f1");
+  });
+
   it("B3①：本轮物化的新行清扫要看得见（download-to-trash 物化即软删，不留在活跃列表）", async () => {
     // 261124 审计②P1-3：清扫遍历 saveQuickNotes 开头的过期快照 ⇒ 同一轮里刚物化的行扫不到，
     // quickDeletes 分支永不命中 ⇒「首相遇下载落小记回收站」失效，远端小记永久留在活跃列表。

@@ -1879,13 +1879,19 @@ export class Store {
     const flagged = new Set(
       (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1").all() as Array<{ id: string }>).map((r) => r.id),
     );
+    // 261124 B8（审计④F6）：**目录行按节点 id 置位/清除**（tree_nodes.note_file_id=NULL）——
+    // 旧实现树行只按 note_file_id 匹配、flagged 只扫 notes ⇒ folder 徽标既立不上也清不掉
+    //（settleCloudDeleted 永不失效）。树行业务 id 归一 = note_file_id ?? id。
+    for (const row of this.db.prepare("SELECT id, note_file_id FROM tree_nodes WHERE cloud_deleted=1").all() as Array<{ id: string; note_file_id: string | null }>) {
+      flagged.add(row.note_file_id ?? row.id);
+    }
     const setNote = this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id=? AND cloud_deleted=0");
     const clearNote = this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE id=? AND cloud_deleted=1");
-    const setNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE note_file_id=? AND cloud_deleted=0");
-    const clearNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=0 WHERE note_file_id=? AND cloud_deleted=1");
+    const setNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE (note_file_id=? OR id=?) AND cloud_deleted=0");
+    const clearNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=0 WHERE (note_file_id=? OR id=?) AND cloud_deleted=1");
     const tx = this.db.transaction(() => {
-      for (const id of next) if (!flagged.has(id)) { setNote.run(id); setNode.run(id); }
-      for (const id of flagged) if (!next.has(id)) { clearNote.run(id); clearNode.run(id); }
+      for (const id of next) if (!flagged.has(id)) { setNote.run(id); setNode.run(id, id); }
+      for (const id of flagged) if (!next.has(id)) { clearNote.run(id); clearNode.run(id, id); }
     });
     tx();
   }

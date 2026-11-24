@@ -839,7 +839,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     // 引擎持久化的 remotePurged → 本地展示位 cloud_deleted；只保留「本地仍有行」的 id
     //（本地主动 purge 后行已物理删除，必须从信封清掉，否则永远打标、引擎每轮空转）。
     const remotePurged: string[] = [];
-    for (const id of state.remotePurged ?? []) if (await p.hasNote(id)) remotePurged.push(id);
+    // 261124 B8（审计④P2-1）：**目录 id 不得被 hasNote 误清** —— 目录没有 notes 行，只按 hasNote
+    // 过滤会把 remotePurged 里的目录 id 丢掉 ⇒ 目录行「云端已删除」徽标下轮被投影清掉（目录失明）。
+    const folderIdSet = new Set((await p.listFoldersForSync()).map((f: { id: string }) => f.id));
+    for (const id of state.remotePurged ?? []) {
+      if (await p.hasNote(id) || folderIdSet.has(id)) remotePurged.push(id);
+    }
     if (p.applyCloudDeletedProjection) await p.applyCloudDeletedProjection(remotePurged);
     else await p.applyNotesCloudDeleted(remotePurged);
 
