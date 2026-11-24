@@ -310,8 +310,10 @@ async function readBootstrapRowsFromDb(db: MobileDb): Promise<BootstrapRowSet> {
   const folders = (await db.prepare(
     "SELECT id,title,parent_id,sort_order,node_type,space,icon,updated_at,trashed_at,deleted_from_parent_id FROM folders WHERE is_purged=0",
   ).all()) as unknown as MobileFolderRow[];
+  // 261124 ⑤P3-4：**滤掉软删小记** —— bootstrap 底稿只收活跃条目（桌面侧无 deleted_at 概念、口径本就如此）；
+  // 软删条目以活跃形态进底稿会被首同步误判「云端已删」，用户导入后先恢复再同步会被误伤回回收站。
   const quickNotes = (await db.prepare(
-    "SELECT id,created_at,updated_at,content_hash,is_conflict,tags_updated_at FROM quick_notes",
+    "SELECT id,created_at,updated_at,content_hash,is_conflict,tags_updated_at FROM quick_notes WHERE deleted_at IS NULL",
   ).all()) as unknown as MobileQuickNoteRow[];
   const quickNoteDeleted = (await db.prepare(
     "SELECT id,created_at,updated_at,deleted_at,purged_at FROM quick_note_deleted",

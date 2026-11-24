@@ -65,6 +65,11 @@ describe("目标身份比较 sameSyncTargetKey（261124：忽略 region）", () 
     expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), "")).toBe(false);
     expect(sameSyncTargetKey("a\u0000b", "a\u0000b\u0000c\u0000d")).toBe(false);
   });
+  it("⑤P3-1：两个同样截断的短键不得自匹配（旧实现 undefined==undefined 互判同目标）", () => {
+    expect(sameSyncTargetKey("a\u0000b", "a\u0000b")).toBe(false);
+    expect(sameSyncTargetKey("https://s3.x.com", "https://s3.x.com")).toBe(false);
+    expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), key("https://s3.x.com", "r", "b", "p"))).toBe(true); // 完整键照常
+  });
 });
 
 describe("四选项对文档决策的映射", () => {
