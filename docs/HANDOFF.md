@@ -7,6 +7,11 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+- **261124 · S3/数据流程五流审计 + Batch A/P0 修复批（v1.6.1）**：
+  - **审计**（用户点单「团队并发 + 目标模式」）：五条并发审计流（合并决策/应用落库/发布协议/生命周期与写守卫/迁移基线）只读详计，报告 `docs/audit-261124/`（00-MASTER + 5 分册，833 行）；发现 9×P1、~12×P2、~21×P3（6 待复现），主卷对 7 条最重发现二次抽验 0 虚报。**B1 用户裁决「删除目录必级联子树」⇒ 升 P0**。
+  - **修复（10/10，护栏先行、逐条带回归、逐条独立提交）**：P0-B1 首相遇目录改写层（`31ff56d7`）/ A1 pull-all 不物删未同步小记（`78368006`）/ A2 恢复回滚误删活库（`9a1c2376`）/ A3 瞬时读失败不收敛删除（`c432bb85`）/ A5 保存不误清 restore_pending（`3a6f3184`）/ A6 元数据 LWW 与锁正交（`b48e6a3c`）/ A7/A8 失败轮不回滚本地 + 下载失败重试闭环（`024156c1`）/ A4 dfp 跨端链（`ab5e8a5a`）/ A9 便携包 tree id 不变量（`27cbfd99`）。语义订正两处已钉入测试：「基线在场 ≠ 删除意图」「绝不物删（清扫 discardQuickNote 退役）」。
+  - **修复后的残留边界（登记）**：A8 的可疑抑制依赖 bodyRecoveryPending 跨轮（信封持久化，移动端平台队列 no-op 已由信封并集覆盖）；B 批（firstEncounter folders download-to-trash 偏差、④F1 级联恢复 restore_pending、③P2-3 fieldChanged 双形态 diff 等）与 P3 清理、40 条护栏建议未动 —— 待办见 §3。
+  - **v1.6.1**：发布说明 = 10 条修复 + 找回口径（受影响数据只是位置/状态，内容都在：搜索标题找回、拖回原位）。
 - **261124 · P0「同步丢子文档」复现与双端修复 + v1.6.0 发版**：
   - **P0 现象**（正式 APK 稳定复现）：迁入（便携包）后一发生 S3 同步，**父级是文档**的子文档就从笔记本消失（03-收集 21→18、09-交易 31→30；录屏 ↓1 上传 0）。**空桶真 S3 双设备复现**（`src/mobile/v3/childDocs.s3.integration.test.ts`，用用户指定前缀 `lakex-notes-dev3`，测完自动清空）：同设备空桶首传当轮 `child-doc` 的 `parent_id` 就被改写；第二台首拉父子双双落 `notebook-uncategorized`。
   - **根因**（探针定位）：① `resolveRemoteParent`（共享编排 `core/s3v3/state/deviceStore.ts`）只查目录不认「文档当父」⇒ 每轮 saveState 的 apply 把子文档 parent 改写到兜底本（`metaDiffers` 拿改写后 parent 做 diff ⇒ **每轮必写**、手动移回也再被改、下轮还会把脏 parent 发布上云）；② 移动端 `importRemoteNote` 在 beginWriteBatch（executeSet）窗口落库，同批新行 SELECT 不可见 ⇒ 父子同批首拉双双落兜底本。**修复**：解析链 = 目录 → 文档（hasNote）→ **本轮世界作用域**（现有行 ∪ 待写行）→ 兜底本；saveState 先建 parentScope 再落库；真缺失父仍走 C5 兜底（语义不变）。修复前复现测试 2/2 红、修复后 2/2 绿；同步核心护栏 83 例全过。
@@ -710,6 +715,8 @@
 - **AGENTS 新红线（`68e90df4`）**：§3#23 写路径守卫分层（用户策略只在入口/同步专用写路径，声明 U/S/I/R/M 调用方分类）+ §3#24 位置与内容正交（位置基线三方合并、恢复历史=内容动作、purge 整棵子树、**不加位置 wire 时间戳**）——内容以 AGENTS 为准，本文不复述。
 
 ## 1. 当前基线（唯一状态来源）
+
+**261124 · v1.6.1（审计 Batch A/P0-B1 十条数据安全修复；tag v1.6.1 触发 Release）**：五流审计报告在 `docs/audit-261124/`；10 条修复各带回归（新护栏 ~25 例）；全量 vitest 见发版记录；语义订正钉 2 处（基线≠删除意图、绝不物删）。**B 批/P3/护栏清单在审计报告，未修**。
 
 **261124 · v1.6.0（P0 同步丢子文档修复 + 回收站小记预览 + 小记列表三修；tag v1.6.0 触发 Release）**：全量 vitest **7088 passed / 1 flaky（perf.integration 单跑 PASS）**；tsc 双 0；ui-metrics 0；check:core 185/0；check:bundle+arch PASS；stylesnap 重烤后 32 严格态 0 差异（10 态 UNSTABLE/FLAKY_ASYNC 跳过）；diff-check 0。**真桶复现测试**（`src/mobile/v3/childDocs.s3.integration.test.ts`，前缀 lakex-notes-dev3 每次测后清空）2/2 绿。提交链：60f4d583/7c3792c5/df82cbe0/569b5970/f5d94eb0/0eb526c3/da57e588/8dc1fa32/efb30d4c/872a38a1/82c6da74 + 发版 tag。mobile-snap 门禁仍受阻（lake_gate 数据非固定夹具，§3 等裁决）。
 
