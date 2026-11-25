@@ -16,6 +16,10 @@
  * - **只 stat，不读正文**（缺正文时读必失败；也不该为了"看一眼"去碰文件）；
  * - 扫描不写库（桌面那套「缺正文恢复队列」是事件驱动的 v2 遗产，移动端不引入：每次进资源管理现扫即可）；
  * - 恢复落盘先写文件、再改行（DB 不应声称正文已存在，与 noteRepository.createNote 同序）。
+ *
+ * 契约面：scanMissing*（按「可云恢复 / 仅历史 / 无备份」分组）+ applyRestored*（恢复落盘）。
+ * 不变量指针：判据单一来源 core/missingBody；入口 = 设置→资源管理，缺正文不打开、toast 每篇每会话一次
+ * （AGENTS §4 手动删数据条目）。
  */
 import { missingBodyRecovery, missingQuickNoteRecovery } from "../../core/missingBody.js";
 import type { MissingBodyRecovery, MissingQuickNoteRecovery } from "../../core/missingBody.js";

@@ -317,7 +317,8 @@ describe("关键路径静态契约（防退化）", () => {
   });
 
   it("资源管理两行 + 二次确认接线存在", () => {
-    const drawer = read("src/mobile/settings/SettingsDrawer.tsx");
+    // M-05 拆分：同步警告「去恢复」行在 S3SettingsSection.tsx ⇒ 按「设置页」聚合读。
+    const drawer = read("src/mobile/settings/SettingsDrawer.tsx") + read("src/mobile/settings/S3SettingsSection.tsx");
     expect(drawer).toContain('itemId="resources-missing-bodies"');
     expect(drawer).toContain('itemId="resources-missing-quicknotes"');
     expect(drawer).toContain("<MissingBodiesSheet");

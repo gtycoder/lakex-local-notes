@@ -8,7 +8,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
-const DRAWER = read("src/mobile/settings/SettingsDrawer.tsx");
+// M-05 拆分：「上次同步 / 同步诊断 / 警告清单」视图块搬进 S3SettingsSection.tsx，同步记录 Sheet 仍在抽屉 ⇒ 聚合读。
+const DRAWER = read("src/mobile/settings/SettingsDrawer.tsx") + "\n" + read("src/mobile/settings/S3SettingsSection.tsx");
 const HOOK = read("src/mobile/settings/useSyncSettingsForm.ts");
 const BRIDGE = read("src/mobile/bridge/notes.ts");
 

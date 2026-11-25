@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
 const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-const DOCK = strip(read("src/mobile/editor/EditorDock.tsx"));
+// M-04 拆分：条目清单在 DockPanels.tsx、分栏气泡编排在 EditorDock.tsx ⇒ 按「＋面板」功能聚合读。
+const DOCK = ["src/mobile/editor/EditorDock.tsx", "src/mobile/editor/DockPanels.tsx"].map((p) => strip(read(p))).join("\n");
 const CSS = strip(read("src/mobile/editor/editor-dock.css"));
 
 describe("＋ 面板：分栏气泡 / 高亮块直插（261104 用户口径）", () => {

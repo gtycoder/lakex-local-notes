@@ -29,7 +29,8 @@ const FLOW = code(read("./captureModeFlow.ts"));
 const COMPOSER_SKELETON = code(read("./QuickNoteComposerSkeleton.tsx"));
 const EDITOR = code(read("../../features/quickNotes/QuickNoteEditor.tsx"));
 const AUTO_SYNC = code(read("../hooks/useAutoSync.ts"));
-const SETTINGS = code(read("../settings/SettingsDrawer.tsx"));
+// M-05 拆分：「上次同步」行在 S3SettingsSection.tsx ⇒ 聚合读（语义 = 设置页常驻显示这一行）。
+const SETTINGS = code(read("../settings/SettingsDrawer.tsx") + read("../settings/S3SettingsSection.tsx"));
 const SYNC_FORM = code(read("../settings/useSyncSettingsForm.ts"));
 const BRIDGE = ["bridge.ts", "bridge/sync.ts", "bridge/notes.ts", "bridge/quickNotes.ts", "bridge/tree.ts"].map((f) => code(read("../" + f))).join("\n");
 const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));

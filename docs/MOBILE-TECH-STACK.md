@@ -63,22 +63,23 @@
 
 | 面 | 数量 | 载体 | 说明 |
 | --- | --- | --- | --- |
-| 桌面 IPC | **121** | `electron/preload.cjs` | 桌面渲染层的能力面 |
-| 移动实现本体 | **76** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 互斥域判据按此表登记（261020 移动端批 +createBitable；ink 批 +createInk 等；261010 收窄：删死方法 `uploadObject`） |
-| 移动调试契约 | **50** + 2 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口（261020 +createBitable 供造数/验收）；+2 = `runNativeSqliteSpike` / `migrateSnapshotToNativeSqlite` |
+| 桌面 IPC | **197** | `electron/preload.cjs` | 桌面渲染层的能力面（通道数唯一口径 = `electron/ipc/ipcChannelParity.test.ts` 断言） |
+| 移动实现本体 | **> 60** | `src/mobile/bridge.ts` 的 `bridge` 对象 | 精确数唯一口径 = `contractSurface.test.ts` 断言，本文不维护（历史 49/51/71/76 多个数漂移过）；互斥域判据按此登记（261020 +createBitable；ink 批 +createInk 等；261010 收窄：删死方法 `uploadObject`） |
+| 移动调试契约 | **69** = 68 + 1 | `window.lakeNative`（`src/mobile/native/lakeNativeContract.ts`，**从实现派生**） | CDP/真机自动化入口（261020 +createBitable 供造数/验收）。计数唯一口径 = `lakeNativeContract.test.ts` 断言：68 个 bridge 派生方法 + 1 个附加入口 `runNativeSqliteSpike`（`migrateSnapshotToNativeSqlite` 已删，261125） |
 | 移动性能探针 | 2 | `window.__lakePerf`（reset / snapshot） | 资产传输耗时观测 |
 
 ### 契约面「归属」分类（261010：`bridge` 不再是「70 个方法没人知道谁在用」）
 
 `bridge` 同时是**共享契约 `window.lakeNative` 的移动端实现**（类型面 `src/lib/native.ts`，共享组件用 `native.X()` 调）
-与移动端 UI 的内部 API。每个方法必须至少有**一类归属**：
+与移动端 UI 的内部 API。每个方法必须至少有**一类归属**；**分类与成员的唯一口径 = `contractSurface.test.ts`
+的运行时扫描与 `TEST_SEAM` 断言**（下表是登记快照；数字与扫描漂移时以测试为准，勿在文档另行重数）：
 
 | 类 | 数量 | 判据 | 含义 |
 | --- | --- | --- | --- |
-| **T1 移动端 UI 直接调** | **50** | `src/mobile/**`（非测试）出现 `bridge.X(` | 移动端自己的界面在用（261020 +createBitable） |
-| **T2 共享契约** | **9** | 共享代码（非 mobile、非测试）出现 `native.X(` | 两端都跑的组件会调 ⇒ 移动端**必须实现**。成员：`createQuickNote` `getNoteInfo` `readAssetPreview` `previewHistorySnapshot` `openAttachment` `saveAssetAs` `cleanupHistory` `listS3GcPending` `uploadResource` |
-| **T3 自动化 / 调试契约** | **5** | `scripts/**` 出现 `.X(` 或登记在 `lakeNativeContract.ts` | 供 e2e 脚本与真机手工调试。成员：`saveQuickNote` `saveQuickNoteWithImages` `trashNote` `restoreNote` `listTrashed` |
-| **T4 测试观测/播种口**（显式登记，只许变小） | **7** | 三类都没有，但写在 `contractSurface.test.ts` 的 `TEST_SEAM` | **去向已定（261010）**：生产走 `gcRepository` 直调与 `dbPort`，这几个只是再暴露一份；现存单测借它**播种+观测**验证真实行为（GC 分批删除 / 维护队列写 / 墓碑发布 / folder 防复活）⇒ **保留并登记，不许增长** |
+| **T1 移动端 UI 直接调** | **> 40**（断言口径） | `src/mobile/**`（非测试）出现 `bridge.X(` | 移动端自己的界面在用（261020 +createBitable） |
+| **T2 共享契约** | **8** | 共享代码（非 mobile、非测试）出现 `native.X(` | 两端都跑的组件会调 ⇒ 移动端**必须实现**。成员：`createQuickNote` `getNoteInfo` `readAssetPreview` `previewHistorySnapshot` `openAttachment` `saveAssetAs` `cleanupHistory` `uploadResource`（`listS3GcPending` **已归 T4**：261028 桌面 s3_gc_pending 链路删除后桥方法仅单测/预留，261125 纠正） |
+| **T3 自动化 / 调试契约** | **5** | `scripts/**` 出现 `.X(` 或登记在 `lakeNativeContract.ts` | 供 e2e 脚本与真机手工调试。成员（快照）：`saveQuickNote` `saveQuickNoteWithImages` `trashNote` `restoreNote` `listTrashed` |
+| **T4 测试观测/播种口**（显式登记，只许变小） | **7** | 三类都没有，但写在 `contractSurface.test.ts` 的 `TEST_SEAM` | 成员（= 测试断言原文）：`addS3GcPending` `removeS3GcPending` `recordS3GcLog` `listS3GcPending` `listDeletedNotesForSync` `readDeletedContent` `isFolderPurged`。**去向已定（261010）**：生产走 `gcRepository` 直调与 `dbPort`，这几个只是再暴露一份；现存单测借它**播种+观测**验证真实行为（GC 分批删除 / 维护队列写 / 墓碑发布 / folder 防复活）⇒ **保留并登记，不许增长** |
 
 **护栏** `src/mobile/contractSurface.test.ts`：无归属方法必须登记进 `TEST_SEAM`；`TEST_SEAM` 只许变小；`lakeNative` 声明必须是 `bridge` 的子集。
 ⇒ **新方法不写清用途就直接失败**，从机制上阻止契约面无声增长（"上帝对象"的真实成因是契约面，不是文件行数）。

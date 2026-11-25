@@ -19,7 +19,8 @@ const PANES = code(read("src/mobile/notebook/NotePaneHost.tsx"));
 const SESSION = code(read("src/mobile/notebook/useWorkspaceSession.ts"));
 const WORKSPACE = code(read("src/mobile/notebook/NotebookWorkspace.tsx"));
 const BRIDGE = code(read("src/mobile/bridge/notes.ts"));
-const SETTINGS = code(read("src/mobile/settings/SettingsDrawer.tsx"));
+// M-05 拆分：同步警告清单在 S3SettingsSection.tsx ⇒ 按「设置页」聚合读。
+const SETTINGS = code(read("src/mobile/settings/SettingsDrawer.tsx") + read("src/mobile/settings/S3SettingsSection.tsx"));
 
 describe("编辑锁在移动端真正生效（task-56 N4）", () => {
   it("tabs：读正文后落 editLocked 并强制退出编辑态；已知锁定时进入编辑会给宿主回调", () => {

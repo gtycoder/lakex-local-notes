@@ -57,7 +57,8 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
     expect(openFile).toContain("Environment.DIRECTORY_DOWNLOADS");
     expect(openFile).toContain("fun saveToDownloads");
     expect(openFile).toContain('getBoolean("toDownloads")');
-    const plugin = read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackagePlugin.kt");
+    // M-16②：条目名/上限/后缀闸纯规则拆到 PortablePackageRules.kt ⇒ 按「便携包插件面」聚合读两文件。
+    const plugin = read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackagePlugin.kt") + read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackageRules.kt");
     expect(plugin).toContain("fun exportSnapshot");
     expect(plugin).toContain("fun inspectSnapshot");
     expect(plugin).toContain("fun restoreSnapshot");
@@ -75,7 +76,8 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
   });
 
   it("v2 大统一口径（261122）：formatVersion 2 / 500k 条目 / 历史不进包 / 导出清 note_history / 清单无 hasHistory", () => {
-    const plugin = read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackagePlugin.kt");
+    // M-16②：条目名/上限/后缀闸纯规则拆到 PortablePackageRules.kt ⇒ 按「便携包插件面」聚合读两文件。
+    const plugin = read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackagePlugin.kt") + read("android/app/src/main/java/com/lakexlocalnotes/android/PortablePackageRules.kt");
     expect(plugin).toContain("PORTABLE_FORMAT_VERSION = 2");
     expect(plugin).toContain("MAX_ENTRIES = 500_000");
     // 历史快照不进导入导出（261122 裁决）：快照目录不含 history，导出端清 note_history 索引行

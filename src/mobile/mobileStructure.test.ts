@@ -21,8 +21,9 @@ import { describe, expect, it } from "vitest";
 
 const MOBILE = path.dirname(fileURLToPath(import.meta.url));
 
-/** 允许留在 src/mobile 根级的源码（应用外壳/入口 + vitest setup + 环境声明）。 */
-const ROOT_ALLOWED = new Set(["main.tsx", "MobileApp.tsx", "bridge.ts", "testSetup.ts", "wasm-url.d.ts"]);
+/** 允许留在 src/mobile 根级的源码（应用外壳/入口 + vitest setup + 环境声明）。
+ *  MobileBootPages.tsx = 启动三页（启动失败/坏库/骨架），属应用外壳（M-06② 从 MobileApp.tsx 拆出后按本护栏登记）。 */
+const ROOT_ALLOWED = new Set(["main.tsx", "MobileApp.tsx", "MobileBootPages.tsx", "bridge.ts", "testSetup.ts", "wasm-url.d.ts"]);
 /** 按职责分的四个桶。 */
 const BUCKETS = ["data", "native", "hooks", "sync"];
 

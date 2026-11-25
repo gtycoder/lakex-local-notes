@@ -1,3 +1,9 @@
+/**
+ * 原生 SQLite 适配（Capacitor 插件 → MobileDb 接口）：prepare/executeSet/pragma 的桥封装。
+ * 契约面：实现 data/dbPortTypes 的 MobileDb（sql.js 测试后端同接口对拍；core 判据不感知后端）。
+ * 不变量：PRAGMA 语句单独识别（prepare().get() 在 sql.js 下不释放语句，见 data/schema 注释）；
+ * 批量写/DDL 走 executeSet 减少桥往返（AGENTS §4 移动 schema 条目）；连接已存在错误幂等吞掉。
+ */
 import type { MobileDb, MobileDbStatement } from "../data/dbPortTypes.js";
 import { loadCapacitorSqlite } from "./sqlitePlugin";
 

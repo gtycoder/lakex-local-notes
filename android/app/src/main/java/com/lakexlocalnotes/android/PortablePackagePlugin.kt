@@ -34,6 +34,10 @@ import java.util.zip.ZipInputStream
  *  · 本插件只做文件系统与「只读打开桌面 SQLite 分页返回行」；
  *  · 解压严格防 zip-slip（拒绝绝对路径 / ".." / 反斜杠 / 符号链接式条目），总大小 ≤4GiB；
  *  · 导入前把当前数据隔离到 files/portable-import/rollback-<ts>/：DB 复制、正文/资产目录 **rename 移动**；
+ *
+ * 本体按三个分区组织（各分区首行有 ---- 标记）：staging（选包/解压/清单校验）→
+ * import（只读读桌面库 + 复制正文/资产 + 回滚隔离/提交/恢复）→ snapshot（手机整机快照导出/检视/恢复，
+ * 复用 import 的回滚/pending 机制）；纯规则（条目名/上限/后缀闸）在 PortablePackageRules.kt。
  *    写 pending.json；提交删除隔离；失败/下次启动发现 pending 自动回滚。
  */
 @CapacitorPlugin(name = "PortableImport")
@@ -43,16 +47,7 @@ class PortablePackagePlugin : Plugin() {
         private const val PORTABLE_FORMAT = "lakex-local-notes-portable"
         /** v2（261122 大统一）：一份清单两种布局（desktop-workspace / mobile-snapshot）互导；不写 v1 兼容。 */
         private const val PORTABLE_FORMAT_VERSION = 2
-        /** 只接受最新后缀；旧 .zip 不再兼容（用户 261110 定稿：不为历史数据做兼容）。 */
-        private const val PORTABLE_EXTENSION = ".zip.lln"
-        private const val PORTABLE_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
-        /**
-         * 条目上限：10k 文档 + 100k 附件实测 = 110,005 条；261122 按大库量级
-         * 放宽到 500k（防炸弹闸，与 core portableFormat 的口径同拍）。zip bomb 仍由
-         * 4GiB 包体上限、逐条路径/越界校验、解压总量与落盘空间共同兜底。
-         */
-        private const val MAX_ENTRIES = 500_000
-        private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+        // 后缀闸 / 上限 / 条目名裁决 = PortablePackageRules（M-16② 纯规则 + JVM 单测；本体只做 IO/Activity）。
         private const val PAGE_SIZE_MAX = 1000
 
         private const val IMPORT_ROOT = "portable-import"
@@ -102,7 +97,7 @@ class PortablePackagePlugin : Plugin() {
         }
     }
 
-    // ---- 1) 选包 + 解压 + 清单校验 ----
+    // ---- staging 1) 选包 + 解压 + 清单校验 ----
 
     @PluginMethod
     fun pickAndStage(call: PluginCall) {
@@ -142,7 +137,7 @@ class PortablePackagePlugin : Plugin() {
                 if (cursor.moveToFirst()) cursor.getString(0) else null
             }
         } catch (_: Exception) { null }
-        if (displayName == null || !displayName.endsWith(PORTABLE_EXTENSION, ignoreCase = true)) {
+        if (displayName == null || !PortablePackageRules.hasPortableExtension(displayName)) {
             call.reject("只支持最新的 .zip.lln 便携包（不再兼容旧 .zip）")
             return
         }
@@ -171,7 +166,7 @@ class PortablePackagePlugin : Plugin() {
             val rawPath = call.getString("path") ?: throw IOException("缺少 path 参数")
             val file = File(rawPath)
             if (!file.isFile) throw IOException("便携包文件不存在: " + rawPath)
-            if (!file.name.endsWith(PORTABLE_EXTENSION, ignoreCase = true)) {
+            if (!PortablePackageRules.hasPortableExtension(file.name)) {
                 throw IOException("只支持最新的 .zip.lln 便携包（不再兼容旧 .zip）")
             }
             val uri = Uri.fromFile(file)
@@ -203,14 +198,13 @@ class PortablePackagePlugin : Plugin() {
                     while (true) {
                         val entry = zin.nextEntry ?: break
                         entryCount += 1
-                        if (entryCount > MAX_ENTRIES) throw IOException("zip 条目过多（上限 " + MAX_ENTRIES + "）")
+                        if (entryCount > PortablePackageRules.MAX_ENTRIES) throw IOException("zip 条目过多（上限 " + PortablePackageRules.MAX_ENTRIES + "）")
                         val rawName = entry.name ?: throw IOException("zip 条目缺少名称")
-                        if (rawName.contains('\\') || rawName.startsWith("/")) throw IOException("zip 条目含非法路径")
-                        var name = rawName.replace('\\', '/').trim('/')
-                        while (name.startsWith("./")) name = name.substring(2)
+                        // 条目名裁决 = PortablePackageRules（zip-slip 语义，JVM 单测 PortablePackageRulesTest）。
+                        if (PortablePackageRules.hasIllegalEntryPath(rawName)) throw IOException("zip 条目含非法路径")
+                        val name = PortablePackageRules.normalizeEntryName(rawName)
                         if (name.isEmpty()) continue
-                        val parts = name.split('/')
-                        if (parts.any { it == ".." || it == "." || it.isEmpty() }) throw IOException("zip 条目含上级目录")
+                        if (PortablePackageRules.hasForbiddenSegment(name)) throw IOException("zip 条目含上级目录")
                         val target = File(stage, name).canonicalFile
                         if (target.path != stageRoot && !target.path.startsWith(stageRoot + File.separator)) {
                             throw IOException("zip 条目越界")
@@ -226,7 +220,7 @@ class PortablePackagePlugin : Plugin() {
                                 val read = zin.read(buffer)
                                 if (read < 0) break
                                 totalBytes += read
-                                if (totalBytes > PORTABLE_LIMIT_BYTES) throw IOException("便携包超过 4GiB 上限")
+                                if (totalBytes > PortablePackageRules.PORTABLE_LIMIT_BYTES) throw IOException("便携包超过 4GiB 上限")
                                 out.write(buffer, 0, read)
                             }
                         }
@@ -250,12 +244,12 @@ class PortablePackagePlugin : Plugin() {
     private fun validateStagedPackage(stage: File, totalBytes: Long): String {
         val manifestFile = File(stage, "portable.json")
         if (!manifestFile.isFile) throw IOException("缺少 portable.json")
-        if (manifestFile.length() > MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
+        if (manifestFile.length() > PortablePackageRules.MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
         val text = manifestFile.readText(Charsets.UTF_8)
         val obj = JSONObject(text)
         if (obj.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
         if (obj.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")
-        if (obj.optLong("limitBytes", 0L) != PORTABLE_LIMIT_BYTES) throw IOException("便携包上限声明不匹配")
+        if (obj.optLong("limitBytes", 0L) != PortablePackageRules.PORTABLE_LIMIT_BYTES) throw IOException("便携包上限声明不匹配")
         val source = obj.optJSONObject("source") ?: throw IOException("便携包来源缺失")
         when (source.optString("platform")) {
             "desktop" -> {
@@ -301,7 +295,7 @@ class PortablePackagePlugin : Plugin() {
         dir.deleteRecursively()
     }
 
-    // ---- 2) 只读读桌面库（分页） ----
+    // ---- import 2) 只读读桌面库（分页） ----
 
     @PluginMethod
     fun readRows(call: PluginCall) {
@@ -377,7 +371,7 @@ class PortablePackagePlugin : Plugin() {
         }
     }
 
-    // ---- 3) 复制正文/资产/小记文件到 App 私有 Data ----
+    // ---- import 3) 复制正文/资产/小记文件到 App 私有 Data ----
 
     @PluginMethod
     fun copyPayload(call: PluginCall) {
@@ -429,7 +423,7 @@ class PortablePackagePlugin : Plugin() {
         return files to bytes
     }
 
-    // ---- 4) 回滚隔离 / 提交 / 恢复 ----
+    // ---- import 4) 回滚隔离 / 提交 / 恢复 ----
 
     @PluginMethod
     fun beginImport(call: PluginCall) {
@@ -654,7 +648,7 @@ class PortablePackagePlugin : Plugin() {
         return out
     }
 
-    // ---- 5) 261117 D 项：移动端导出便携快照（卸载/换机前的 100% 可靠备份） ----
+    // ---- snapshot 5) 261117 D 项：移动端导出便携快照（卸载/换机前的 100% 可靠备份） ----
 
     /**
      * 把**当前移动端全量数据**打成 store 快照 zip（写到 App 私有 files/portable-export/，再由 JS 调
@@ -683,7 +677,7 @@ class PortablePackagePlugin : Plugin() {
         // 清掉上一次导出遗留（同目录只留最新的包，避免占空间）
         exportRoot.listFiles()?.forEach { it.deleteRecursively() }
         val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
-        val fileName = SNAPSHOT_PREFIX + stamp + PORTABLE_EXTENSION
+        val fileName = SNAPSHOT_PREFIX + stamp + PortablePackageRules.PORTABLE_EXTENSION
         val outFile = File(exportRoot, fileName)
         val dbDir = context.getDatabasePath(MOBILE_DB_FILE).parentFile
             ?: throw IOException("无法定位应用数据库目录")
@@ -701,7 +695,7 @@ class PortablePackagePlugin : Plugin() {
             .put("exportedAt", isoNow())
             .put("source", JSONObject().put("platform", "mobile"))
             .put("baseline", baselineRef ?: JSONObject.NULL)
-            .put("limitBytes", PORTABLE_LIMIT_BYTES)
+            .put("limitBytes", PortablePackageRules.PORTABLE_LIMIT_BYTES)
             .put("counts", counts)
             .put("note", "明文全量备份（不含历史快照；含草稿/素材/同步基线），请妥善保管")
         try {
@@ -730,7 +724,7 @@ class PortablePackagePlugin : Plugin() {
                 for (file in mainDbFiles(scrubDir)) {
                     bytes += writeZipFile(zos, "mobile/databases/" + file.name, file)
                     entries += 1
-                    if (bytes > PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
+                    if (bytes > PortablePackageRules.PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
                 }
                 // 正文/资产/历史/草稿目录
                 val filesRoot = context.filesDir
@@ -740,7 +734,7 @@ class PortablePackagePlugin : Plugin() {
                     val added = writeZipDir(zos, "mobile/files/" + relative, dir)
                     entries += added.first
                     bytes += added.second
-                    if (bytes > PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
+                    if (bytes > PortablePackageRules.PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
                 }
             }
         } catch (e: Exception) {
@@ -788,7 +782,7 @@ class PortablePackagePlugin : Plugin() {
             java.util.zip.ZipFile(file).use { zip ->
                 val manifestEntry = zip.getEntry("portable.json") ?: throw IOException("不是便携包（缺 portable.json）")
                 val manifestText = zip.getInputStream(manifestEntry).use { it.readBytes().toString(Charsets.UTF_8) }
-                if (manifestText.length > MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
+                if (manifestText.length > PortablePackageRules.MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
                 val manifest = JSONObject(manifestText)
                 if (manifest.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
                 if (manifest.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")
@@ -800,14 +794,14 @@ class PortablePackagePlugin : Plugin() {
                 while (enumeration.hasMoreElements()) {
                     val entry = enumeration.nextElement()
                     entries += 1
-                    if (entries > MAX_ENTRIES) throw IOException("zip 条目过多（上限 " + MAX_ENTRIES + "）")
+                    if (entries > PortablePackageRules.MAX_ENTRIES) throw IOException("zip 条目过多（上限 " + PortablePackageRules.MAX_ENTRIES + "）")
                     val name = entry.name ?: continue
                     if (name.contains("\\") || name.startsWith("/") || name.split('/').any { it == ".." || it == "." }) {
                         throw IOException("zip 条目含非法路径")
                     }
                     names.add(name)
                     totalBytes += entry.size.coerceAtLeast(0)
-                    if (totalBytes > PORTABLE_LIMIT_BYTES) throw IOException("快照超过 4GiB 上限")
+                    if (totalBytes > PortablePackageRules.PORTABLE_LIMIT_BYTES) throw IOException("快照超过 4GiB 上限")
                 }
                 val dbEntryName = "mobile/databases/" + MOBILE_DB_FILE
                 val dbEntry = zip.getEntry(dbEntryName) ?: throw IOException("快照缺少数据库")
@@ -966,7 +960,7 @@ class PortablePackagePlugin : Plugin() {
         return entries to bytes
     }
 
-    // ---- 6) 261117 D 项：从手机整机快照恢复（覆盖本机，复用导入的回滚/pending 机制） ----
+    // ---- snapshot 6) 261117 D 项：从手机整机快照恢复（覆盖本机，复用导入的回滚/pending 机制） ----
 
     /**
      * 把「导出便携包到文件」生成的手机整机快照恢复到本机：
@@ -1033,7 +1027,7 @@ class PortablePackagePlugin : Plugin() {
     private fun validateSnapshotStaging(stage: File) {
         val manifestFile = File(stage, "portable.json")
         if (!manifestFile.isFile) throw IOException("缺少 portable.json")
-        if (manifestFile.length() > MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
+        if (manifestFile.length() > PortablePackageRules.MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
         val obj = JSONObject(manifestFile.readText(Charsets.UTF_8))
         if (obj.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
         if (obj.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")

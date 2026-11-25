@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
  * MOB-08：启动失败必须可处置（重试 / 清缓存重试 / 复制诊断），且错误页优先于骨架。
  * 旧实现 catch 后 phase 仍停在 booting ⇒ 只会永久显示骨架 + 启动遮罩（error 分支根本走不到）。
  */
-const APP = readFileSync(new URL("./MobileApp.tsx", import.meta.url), "utf8");
+// M-06②：三个启动页组件已拆到 MobileBootPages.tsx（调用顺序/接线仍在 MobileApp）⇒ 按「启动面」聚合读。
+const APP = readFileSync(new URL("./MobileApp.tsx", import.meta.url), "utf8") + readFileSync(new URL("./MobileBootPages.tsx", import.meta.url), "utf8");
 
 describe("移动端启动失败页（MOB-08）", () => {
   it("错误页优先于 booting 骨架，不再被永久骨架挡住", () => {

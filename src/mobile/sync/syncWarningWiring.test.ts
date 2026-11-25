@@ -15,7 +15,8 @@ const V3_SYNC = code(read("src/mobile/v3/sync.ts"));
 const BRIDGE_SYNC = code(read("src/mobile/bridge/sync.ts"));
 const HOME = code(read("src/mobile/home/HomePage.tsx"));
 const WORKSPACE_SYNC = code(read("src/mobile/notebook/useWorkspaceSync.ts"));
-const SETTINGS = code(read("src/mobile/settings/SettingsDrawer.tsx"));
+// M-05 拆分：同步警告摘要行在 S3SettingsSection.tsx ⇒ 按「设置页」聚合读。
+const SETTINGS = code(read("src/mobile/settings/SettingsDrawer.tsx") + read("src/mobile/settings/S3SettingsSection.tsx"));
 const SYNC_HOOK = code(read("src/mobile/settings/useSyncSettingsForm.ts"));
 const STATUS_STORE = code(read("src/mobile/sync/syncStatusStore.ts"));
 

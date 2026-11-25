@@ -51,7 +51,8 @@ const INPUT_ROW_IDS = [
 ];
 
 // jsdom 环境下 import.meta.url 是 http(s) 形式（vitest 的 jsdom url），读源码走 cwd 相对路径。
-const drawerSource = () => ["src/mobile/settings/SettingsDrawer.tsx", "src/mobile/settings/AiSettingsSection.tsx", "src/mobile/settings/BasicSettingsSections.tsx"].map(file => readFileSync(path.resolve(process.cwd(), file), "utf8")).join("\n");
+// M-05 拆分：S3 输入行搬进 S3SettingsSection.tsx ⇒ 一并纳入扫描面。
+const drawerSource = () => ["src/mobile/settings/SettingsDrawer.tsx", "src/mobile/settings/S3SettingsSection.tsx", "src/mobile/settings/AiSettingsSection.tsx", "src/mobile/settings/BasicSettingsSections.tsx"].map(file => readFileSync(path.resolve(process.cwd(), file), "utf8")).join("\n");
 
 describe("Field = 内容输入行的唯一行语义", () => {
   it("标签+说明在上、控件容器在后（占满下一行），保留 data-set-id", () => {

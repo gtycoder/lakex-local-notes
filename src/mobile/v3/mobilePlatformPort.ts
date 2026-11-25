@@ -1,7 +1,6 @@
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { previewQuickNote, validateQuickNoteContent } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
-import type { FileDriver } from "../../core/s3v3/state/ports.js";
 import type { DeviceBaseline } from "../../core/s3v3DeviceStore.js";
 import type {
   NoteSearchCaches, PlatformDataPort, PurgedTombstoneRow, QuickAssetWrite, QuickDeletedRow, QuickNoteSyncRow,
@@ -10,7 +9,7 @@ import type {
 import { executeBatch, type MobileDb } from "../data/dbPortTypes.js";
 import { trashSubtree } from "../data/trashSubtree.js";
 import {
-  deleteNoteBodies, deleteQuickNoteBody, moveStagedBodyFiles as moveStagedBodyFilesFs, readNoteBody, readQuickNoteBody,
+  deleteQuickNoteBody, moveStagedBodyFiles as moveStagedBodyFilesFs,
   writeNoteBodiesBatch, writeNoteBody, writeQuickNoteBody,
 } from "../data/noteBodies.js";
 import { loadV3State } from "../data/v3StateRepository.js";
@@ -40,6 +39,7 @@ import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace } from "../.
  * - cloud_deleted DB 投影（「云端已删除·仅本地」）：作为行上的 cloudDeleted 交给 core 并入 remotePurged；
  * - 资产 hash 兜底：移动旧数据可能只有 baseline 里带 assetsHash ⇒ 行上带 assetsHash 兜底；
  * - 正文 staging 在文件（不是 JS 内存）⇒ 批量窗口钩子（begin/flush）+ moveStagedBodyFiles 钩子。
+ * M-06③（纯搬移）：正文 FileDriver = ./mobileBodyFileDriver.ts（只依赖 noteBodies/DB kind 现查）；本文件只留端口映射。
  */
 
 /** 移动端端口写批上下文：由 MobileDeviceStore 持有并在每轮 saveState 入口重置本轮标记。 */
@@ -718,70 +718,5 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       await deleteQuickNoteBody(quickNoteId).catch(() => undefined);
       for (const key of await listQuickNoteAssetKeysFs(quickNoteId)) await removeAssetBytesFs(key);
     },
-  };
-}
-
-/**
- * 移动端正文 FileDriver（共享 loadState/saveState 的「content_hash 为空时读盘补算」+ 小记正文读取）。
- * 路径约定：note:{id}（kind 由 DB 现查）/ qnote:{id}；stat 读一次并缓存字节，避免共享层 stat→read 双读。
- *
- * stagedQuickBodies：引擎本轮通过 writeQuickBody 暂存的小记正文（在 JS 内存，未落盘）。
- * saveState 的共享编排通过本驱动读小记正文 ⇒ 必须先看 staging，否则会把「本轮刚写入的小记」当成缺正文跳过。
- * staging 是瞬态的，不参与缓存。
- */
-export function createMobileBodyFileDriver(
-  db: MobileDb,
-  opts: { stagedQuickBodies?: () => ReadonlyMap<string, Uint8Array> } = {},
-): FileDriver {
-  const cache = new Map<string, Uint8Array | null>();
-  const kindOf = async (id: string): Promise<NoteKind> => {
-    const row = await db.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
-    return normalizeNoteKind(row?.doc_kind);
-  };
-  const readPath = async (path: string): Promise<Uint8Array | null> => {
-    if (path.startsWith("qnote:")) {
-      const staged = opts.stagedQuickBodies?.().get(path.slice(6));
-      if (staged) return new Uint8Array(staged);
-    }
-    if (cache.has(path)) return cache.get(path)!;
-    let bytes: Uint8Array | null = null;
-    try {
-      if (path.startsWith("note:")) {
-        const content = await readNoteBody(await kindOf(path.slice(5)), path.slice(5));
-        bytes = content == null ? null : new TextEncoder().encode(content);
-      } else if (path.startsWith("qnote:")) {
-        const content = await readQuickNoteBody(path.slice(6));
-        bytes = content == null ? null : new TextEncoder().encode(content);
-      }
-    } catch { bytes = null; }
-    cache.set(path, bytes);
-    return bytes;
-  };
-  return {
-    async read(path) {
-      const bytes = await readPath(path);
-      return bytes ? new Uint8Array(bytes) : null;
-    },
-    async stat(path) {
-      const bytes = await readPath(path);
-      return bytes ? { size: bytes.length, mtimeMs: 0 } : null;
-    },
-    async writeAtomic(path, bytes) {
-      if (path.startsWith("note:")) {
-        const id = path.slice(5);
-        await writeNoteBody(await kindOf(id), id, new TextDecoder().decode(bytes));
-      } else if (path.startsWith("qnote:")) {
-        await writeQuickNoteBody(path.slice(6), new TextDecoder().decode(bytes));
-      } else throw new Error("非法正文路径: " + path);
-      cache.set(path, new Uint8Array(bytes));
-    },
-    async remove(path) {
-      if (path.startsWith("note:")) await deleteNoteBodies(path.slice(5));
-      else if (path.startsWith("qnote:")) await deleteQuickNoteBody(path.slice(6));
-      cache.delete(path);
-    },
-    async removeDir() { /* 正文目录按类型组织，不支持整目录删（共享层当前不使用） */ },
-    async list() { return []; },
-    async mkdir() { /* no-op */ },
   };
 }

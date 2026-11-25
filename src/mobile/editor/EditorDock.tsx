@@ -1,5 +1,5 @@
 /**
- * 移动端编辑态底部 dock（app 化适配，对齐 prototype/index.html 编辑态交互）：
+ * 移动端编辑态底部 dock（app 化适配；交互口径 = AGENTS §3「移动端 Lake 输入面 = 底部 dock，没有第二条路」）：
  * - 主工具栏悬浮在输入法上方：插入(+)、Aa（字体）、B、列表、待办、收起键盘
  * - 展开面板**占住输入法键盘区（键盘不显示）**：insert（图片/拍照/附件/表格/音频/视频/高亮块/状态/引用/分割线/代码块）+ font（块级/行内/对齐/颜色/背景）
  * - 键盘收起（dock 隐藏 + 右下角重显按钮）
@@ -10,84 +10,31 @@
  * - 命令按钮（B/列表/待办 及面板内 mark/block）随光标/选区**实时高亮**（queryCommandState + getSelectionAttrs）；
  * - 底部被占高度（面板/键盘）由**外壳高度**承担（`--mb-app-h` = 稳定外壳高 − 占用，见 viewportShell.ts），
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
+ *
+ * M-04 拆分（261125，纯搬移）：命令判据/hook = editor/dockCommandState.ts；面板 JSX/条目清单 = editor/DockPanels.tsx；
+ * 本文件只留工具栏 + 编排（面板开合、链接浮窗、分栏气泡、键盘开合）。
  */
-import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
-import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, AlignJustify, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Bold, List, ListTodo, Keyboard, KeyboardOff, X, Type, MoreHorizontal, Undo, Redo } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
-import { beginFormatPainter, formatPaintService } from "./formatPainter";
 import { setDockPanelPhase } from "./dockPanelPhase";
-import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { useSnapshotUndo } from "./useSnapshotUndo";
 import type { StackLimits } from "./snapshotUndoModel";
-import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
-import { cardValueFromBoardDoc, createBoardDoc, type BoardPreset } from "../../core/boardDoc";
-import { QUICK_TEXT_COLORS, MOBILE_BOARD_LIGHT, MOBILE_BOARD_SOLID } from "../../core/colorPalette";
-// 「Aa」面板的取值型命令（字号/对齐/字色/背景色）与链接，全部复用既有单一来源（本文不另造一套）
-// 注：移动端**色板**不再走内核色卡适配器 LakeColorBoard，而是照语雀排布自己画 2×7 圆点格
-//（用户 261012 定稿「色板照抄语雀、不用那么多颜色」）；颜色仍全部取自 core/colorPalette.ts 的内核色阶。
-import { normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant } from "../../features/editor/selectionToolbar/colorMemory";
-import { colorApplyCommand, toFontSize, unwrapValue } from "../../features/editor/selectionToolbar/selectionToolbarModel";
+// 链接编辑的判定/选区还原复用共享实现（桌面浮栏同一份，不另造一套；契约见 dockCommandState.ts 的取值型命令注释）。
 import { applyTextLink, captureLinkTarget, type LinkEditorTarget } from "../../features/editor/selectionToolbar/linkEditor";
 import { LinkEditorSheet } from "./LinkEditorSheet";
 // 「编辑面」的口径：算术在 editSurfaceModel.ts（纯函数 + CI 单测），owner（外壳高 / 面板状态机 / 输入法 / 焦点守卫）在 useEditSurface.ts
 import { useEditSurface } from "./useEditSurface";
 import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
-// 卡内 textarea 等非正文输入面的「光标处插入」与插入命令的「卡片保护区」（261123：插表情把整卡顶掉）。
-import { activeTextEntryField, insertTextIntoField, isTextEntryField } from "../../features/editor/fieldInsert";
-import { INSERT_BLOCKED_HINT, selectionTouchesCard } from "../../features/editor/insertGuard";
-// 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
-import { EmojiPanel } from "../ui/EmojiPanel";
-// 字号步进器（261104）：移动端共用控件，几何/交互与表格 T 面板同款；档位算术在它自己的纯函数里（有单测）。
-import { FontSizeStepper } from "../ui/FontSizeStepper";
-import { LineHeightStepper, type LineHeightValue } from "../ui/LineHeightStepper";
+// 焦点交还正文时放行卡内 textarea 等非正文输入面（261123：插完表情要能就地继续输入）。
+import { isTextEntryField } from "../../features/editor/fieldInsert";
 // 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
 import { showNativeKeyboard } from "../native/nativeKeyboard";
+import { useActiveCommandStates, useEditorExec } from "./dockCommandState";
+import { DockPanels } from "./DockPanels";
 
 type PanelMode = "insert" | "font" | "more" | "emoji" | null;
-
-/** dock 面板条目的动作；`anchor` = 触发按钮（表情选择器要锚定它）。 */
-type DockAction = (anchor?: HTMLElement | null) => void;
-/** 面板条目形状（`+ ` /「更多」两个网格共用，保证几何与置灰态单一来源）。
- *  `glyph` = 用数字/字形代替图标（B6：行高 6 档没有专属图标，直接显示 1 / 1.15 / …） */
-type DockItem = { label: string; Icon?: typeof ImageIcon; glyph?: string; run?: DockAction; disabled?: boolean };
-
-/** 行高回显值（activeValues.lineHeight 是字符串）→ 步进器取值：空串 = 内核默认（未设置）。 */
-function lineHeightValue(raw: string): LineHeightValue | null {
-  if (!raw) return null;
-  if (raw === "default") return "default";
-  const value = Number(raw);
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-// 输入法抑制（setbackIme）与焦点守卫已迁到 useEditSurface.ts —— 261014 P2 收口：
-// 「外壳高度 / 输入法抑制 / 焦点守卫」三件事只有那一处实现，本组件只负责面板状态与渲染。
-
-/** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
-const COMMAND_ICONS: Record<string, typeof Bold> = {
-  // 行内代码用 \`</>\`（Code），与「＋」面板的**代码块卡片**（SquareCode，方框内 code）一眼可辨（用户 261012）
-  bold: Bold, italic: Italic, underline: Underline, strikethrough: Strikethrough, code: Code,
-  quote: Quote, unorderedList: List, orderedList: ListOrdered, taskList: ListTodo,
-  hr: Minus, undo: Undo, redo: Redo,
-  // B6（261017）：清除格式放进行内标记行（与 B/I/U/S/行内代码同一行）
-  clearFormat: Eraser,
-};
-
-/** 移动端字号档（261104 用户批准：改「− 当前 +」步进器、搬进「更多」面板与行高同组；
- *  261012 原为「Aa」面板最底部一行 8 钮 —— 面板内容 354px > 可视 312px，正好把这一行裁掉）。
- *  仍从内核 12 档 `FONT_SIZE_OPTIONS` 里掐掉最小的 12/13 与最大的 40/48 ⇒ 中间 8 档（14…32）。
- *  取值全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
-const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
-
-/** 文本绘图卡的默认 initValue（与 vendor src/cards/TextToDiagram/index.ts 的 initValue 同形；照抄最小 mnermaid 示例）。 */
-const MERMAID_DEFAULT_VALUE: Record<string, unknown> = {
-  code: "flowchart TD\n    A[Start] --> B[Decision]\n    B -->|Yes| C[End]",
-  type: "mermaid",
-  cardHeight: 500,
-  showEditor: true,
-  showPreview: true,
-};
 
 /** 分栏数量（261104：内核 columns 命令接数量，设备实测 3 栏生效）。 */
 const COLUMN_CHOICES: ReadonlyArray<{ value: number; label: string }> = [
@@ -98,130 +45,6 @@ const COLUMN_CHOICES: ReadonlyArray<{ value: number; label: string }> = [
 /** 分栏气泡的估算尺寸（与 editor-dock.css 的 .med-chooser-pop 一致；只用于定位，不参与布局）。 */
 const COLUMN_POPOVER_WIDTH = 236;
 const COLUMN_POPOVER_HEIGHT = 48;
-
-/** 对齐（内核 `alignment`：left/center/right/justify；移动端 261104 补齐 justify）。 */
-const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right" | "justify"; label: string; Icon: typeof Bold }> = [
-  { value: "left", label: "左对齐", Icon: AlignLeft },
-  { value: "center", label: "居中", Icon: AlignCenter },
-  { value: "right", label: "右对齐", Icon: AlignRight },
-  // 261104：内核 alignment 接受 justify（设备实测 ne-alignment=justify / text-align:justify），补第 4 档。
-  { value: "justify", label: "两端对齐", Icon: AlignJustify },
-];
-
-/** 需要监测实时状态（生效高亮）的命令 */
-const STATE_COMMANDS = ["bold", "italic", "underline", "code", "quote", "unorderedList", "orderedList", "taskList", "undo", "redo"] as const;
-/** 需要监测「可用态」（按钮置灰）的命令：历史命令用 queryCommandEnabled，不是 state/active。 */
-const ENABLED_COMMANDS = ["undo", "redo"] as const;
-
-/** 行内标记命令：生效检测走 DOM 计算样式（lakex 的 queryCommandState 对 mark 恒返回 -1，不可靠）。 */
-const MARK_NAMES = new Set(["bold", "italic", "underline", "code"]);
-
-/** 读取光标/选区处某个标记是否生效（基于 DOM 计算样式，lakex 版本无关）：加粗 font-weight≥600、斜体 font-style、下划线、行内代码。 */
-function activeMarkFromDom(name: string): boolean {
-  const sel = document.getSelection();
-  if (!sel || sel.rangeCount === 0) return false;
-  const node = sel.anchorNode;
-  if (!node) return false;
-  let el: Element | null = node.nodeType === 1 ? (node as Element) : (node as ChildNode).parentElement;
-  const editor = el?.closest?.('[contenteditable="true"]');
-  if (!editor || !el) return false;
-  for (let cur: Element | null = el; cur && editor.contains(cur); cur = cur.parentElement) {
-    const s = getComputedStyle(cur);
-    if (name === "bold" && parseInt(s.fontWeight) >= 600) return true;
-    if (name === "italic" && s.fontStyle === "italic") return true;
-    if (name === "underline" && s.textDecorationLine.includes("underline")) return true;
-    if (name === "code" && (cur.tagName === "CODE" || /\bne-code\b|\bne-inline-code\b/.test(cur.className || ""))) return true;
-    if (cur === editor) break;
-  }
-  return false;
-}
-
-/**
- * 读取某命令当前是否生效：
- * - 行内标记（bold/italic/underline/code）→ DOM 计算样式（可靠，见 activeMarkFromDom）；
- * - 块级/历史（quote/列表/待办/undo/redo）→ lakex renderer.queryCommandState（返回 1= 生效，-1= 不确定）；
- * 均做了安全访问，查不到即视为未生效（不误点亮）。 */
-function isCommandEnabled(editor: LakeEditorInstance | null, name: string): boolean {
-  if (!editor) return false;
-  const ed = editor as unknown as {
-    queryCommandEnabled?: (n: string) => unknown;
-    renderer?: { queryCommandEnabled?: (n: string) => unknown };
-  };
-  try {
-    const v = ed.queryCommandEnabled?.(name) ?? ed.renderer?.queryCommandEnabled?.(name);
-    return v === true;
-  } catch {
-    return false;
-  }
-}
-
-function isCommandActive(editor: LakeEditorInstance | null, name: string): boolean {
-  if (MARK_NAMES.has(name)) return activeMarkFromDom(name);
-  if (!editor) return false;
-  const ed = editor as unknown as {
-    queryCommandState?: (n: string) => boolean | number;
-    renderer?: { queryCommandState?: (n: string) => boolean | number };
-  };
-  try {
-    const v = ed.queryCommandState?.(name) ?? ed.renderer?.queryCommandState?.(name);
-    if (typeof v === "boolean") return v;
-    if (typeof v === "number") return v === 1;   // 1=生效，0=未生效，-1=不确定 → 不当生效处理
-  } catch { /* 内核未实现该命令查询 / 实例销毁：按「未生效」返回，避免误点亮工具栏 */ }
-  return false;
-}
-
-/** 选区处的「取值型」命令状态（字号/对齐/字色/背景色）—— 面板高亮与色板回显的唯一来源。 */
-interface SelectionValues { fontSize: number | null; lineHeight: string; alignment: string; color: string; bgColor: string }
-const EMPTY_VALUES: SelectionValues = { fontSize: null, lineHeight: "", alignment: "", color: "", bgColor: "" };
-function sameValues(a: SelectionValues, b: SelectionValues): boolean {
-  return a.fontSize === b.fontSize && a.lineHeight === b.lineHeight && a.alignment === b.alignment && a.color === b.color && a.bgColor === b.bgColor;
-}
-/** 读内核查询值（解数组、异常归 undefined；调用方自行把 undefined/null 当"无值"，不误点亮）。 */
-function readCommandValue(editor: LakeEditorInstance, name: string, arg?: unknown): unknown {
-  try { return unwrapValue(editor.queryCommandValue?.(name, ...(arg === undefined ? [] : [arg]))); } catch { return undefined; }
-}
-function valueText(editor: LakeEditorInstance, name: string): string {
-  const v = readCommandValue(editor, name);
-  return v === null || v === undefined ? "" : String(v);
-}
-
-/** 光标/选区变化时刷新各命令生效状态（selectionchange + 命令执行后主动 refresh）。 */
-function useActiveCommandStates(editor: LakeEditorInstance | null) {
-  const [states, setStates] = useState<Record<string, boolean>>({});
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
-  const [values, setValues] = useState<SelectionValues>(EMPTY_VALUES);
-  const editorRef = useRef(editor);
-  editorRef.current = editor;
-  const refresh = useCallback(() => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    const next: Record<string, boolean> = {};
-    for (const name of STATE_COMMANDS) next[name] = isCommandActive(ed, name);
-    setStates((prev) => (STATE_COMMANDS.some((k) => prev[k] !== next[k]) ? next : prev));
-    const nextEnabled: Record<string, boolean> = {};
-    for (const name of ENABLED_COMMANDS) nextEnabled[name] = isCommandEnabled(ed, name);
-    setEnabled((prev) => (ENABLED_COMMANDS.some((k) => prev[k] !== nextEnabled[k]) ? nextEnabled : prev));
-    // 字号必须带第二参 false 才是「生效字号」（不带第二参时正文返回 null，与桌面固定栏同源）；
-    // ⚠️ 内核把字号序列化成 lake-fontsize-N（N = px × 0.75，不是 px）⇒ **不许解析 class**，只能读 queryCommandValue。
-    const nextValues: SelectionValues = {
-      fontSize: toFontSize(readCommandValue(ed, "fontsize", false)),
-      // 261104：行高也进回显（默认返回 null → valueText = ""），供「− 当前 +」步进器显示。
-      lineHeight: valueText(ed, "lineHeight"),
-      alignment: valueText(ed, "alignment"),
-      color: valueText(ed, "color"),
-      bgColor: valueText(ed, "bgColor"),
-    };
-    setValues((prev) => (sameValues(prev, nextValues) ? prev : nextValues));
-  }, []);
-  useEffect(() => {
-    const onSel = () => refresh();
-    document.addEventListener("selectionchange", onSel);
-    return () => document.removeEventListener("selectionchange", onSel);
-  }, [refresh]);
-  // editor 就绪/切换时刷新一次（selectionchange 不会为首次光标触发）
-  useEffect(() => { if (editor) refresh(); }, [editor, refresh]);
-  return { states, enabled, values, refresh };
-}
 
 export interface EditorDockProps {
   editor: LakeEditorInstance | null;
@@ -244,24 +67,6 @@ export interface EditorDockProps {
   onInsertTable?: () => void;
   /** 触发拍照（相机直出图片） */
   onInsertCamera?: () => void;
-}
-
-/** 执行 Lake 命令（**统一走 execEditorCommandResult**：renderer 缺失时回退实例 execCommand，
- *  文档编辑器就是这种形态；editor 未就绪静默）。
- *  ⚠️ **必须回传内核返回值**：链接的「这条不行就换另一条」判定靠它（linkEditor.ts），
- *  吞掉返回值会退化成"两条都算成功" = 静默 no-op。 */
-function useEditorExec(editor: LakeEditorInstance | null) {
-  return (cmd: string, ...args: unknown[]) => {
-    // 卡片保护区（261123）：插入类命令在「选区触卡」时一律不执行——内核语义是「非折叠选区被替换」，
-    // 整卡选中/卡聚焦态下执行 = 整卡被顶掉或插入静默丢失（insertGuard 头注释）。表情/「＋」面板全部插入项共用这条。
-    if ((cmd === "insertAtSelection" || cmd === "insertCard") && selectionTouchesCard()) {
-      showToast(INSERT_BLOCKED_HINT, { type: "error" });
-      return undefined;
-    }
-    const result = execEditorCommandResult(editor, cmd, ...args);
-    if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(cmd, result), { type: "error" });
-    return result.ok ? result.value : undefined;
-  };
 }
 
 export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
@@ -378,42 +183,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     window.setTimeout(showNativeKeyboard, 300);
   };
 
-  /** 内核日历卡 `currentDate` 形态 = YYYYMMDD 整数（HANDOFF §0(五) 实测）。 */
-  const dateStamp = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
-  /** 表情：选中后按内核原意插**文本**（`unicodeEmoji` 卡是死占位，见 LAKEX-CONTRACT §5.29）。
-   *  面板本身在 `.med-panel` 里就地渲染（EmojiPanel fill），所以这里只负责插。
-   *  261123（用户现场「插表情把加密文本整卡顶掉」）：
-   *  ① 焦点在卡内 textarea / 输入框等**非正文输入面** ⇒ 插进该输入面的光标处（setRangeText + input 事件），
-   *     一个内核命令都不发——绝不让「替换选区」语义碰到卡片；
-   *  ② 其余情况交给 exec 层的卡片保护区（选区触卡 ⇒ 明确不动作 + 提示，不静默吞卡）。 */
-  const insertEmoji = (emoji: string) => {
-    const field = activeTextEntryField();
-    if (field) {
-      insertTextIntoField(field, emoji);
-      try { field.focus(); } catch { /* 输入面已卸载：插入已完成，不阻断 */ }
-      return;
-    }
-    runPanel("insertAtSelection", "text/lake", `<span>${emoji}</span>`);
-  };
-
-  /**
-   * 应用颜色：语义**完全复用桌面那一套**（colorApplyCommand = 内核 descriptor 的 onEvent('select')：
-   * 文字色取到正文色 ⇒ clearColor、背景色空/等于当前 ⇒ clearBgColor），"最近使用色"也与桌面共用同一记忆
-   * （colorMemory）。空串 = 面板里的「默认/无填充」行 ⇒ 取内核默认色。
-   */
-  const pickColor = (raw: string, variant: ColorVariant) => {   // variant 必填：字色/背景色各走各的，别再有隐含默认
-    if (!editor) return;
-    const value = raw || paletteDefaultValue(editor, variant);
-    rememberColor(editor, variant, value);
-    const { command, arg } = colorApplyCommand(variant, {
-      visual: value,
-      persistent: persistentColor(editor, value),
-      normalText: normalTextColor(editor),
-      currentBg: readCommandValue(editor, "bgColor"),
-    });
-    runPanel(command, ...(arg === undefined ? [] : [arg]));
-  };
-
   /** 打开链接浮窗：先捕获当前选区（我们自己的输入框会抢走内核选区，确认前必须还回去）。 */
   const openLinkSheet = () => {
     snapshotSelection();
@@ -472,142 +241,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     attempt(0);
   };
 
-  /**
-   * 「＋」面板的插入项清单（用户 261015 亲自指定顺序与分组）。
-   *
-   * **两组（8 + 11）**：① 拍照 图片 附件 音频 视频 表情 状态 日期；② 表格 引用 分割线 代码块 高亮块 分栏 折叠块 链接 文档引用 加密文本 日历。
-   * **4 列**下：① 8 项 = 2 行**零空洞**；② 11 项 = 3 行（末行 3 项、1 个空位）。两组之间用更大的间距分隔。
-   */
-  const INSERT_GROUPS: ReadonlyArray<{ key: string; items: ReadonlyArray<DockItem> }> = [
-    // ① 媒体与时间（用户 261015 定：拍照 · 图片 · 附件 · 音频 · 视频 · 表情 · 状态 · 日期 · 日历）
-    { key: "media", items: [
-      { label: "拍照", Icon: Camera, run: () => onInsertCamera?.() },
-      { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
-      { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
-      { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
-      { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
-      // 表情：**在面板区内展开**（用户 261013：像输入法那样占满展开区、固定高度不跳），不再弹浮层。
-      { label: "表情", Icon: Smile, run: () => togglePanel("emoji") },
-      { label: "状态", Icon: Tag, run: () => runPanel("insertCard", "label") },
-      { label: "日期", Icon: CalendarDays, run: () => runPanel("insertCard", "dateCard", { date: Date.now() }, false) },
-    ] },
-    // ② 剩下的（表格 · 引用 · 分割线 · 代码块 · 高亮块 · 分栏 · 折叠块 · 链接 · 文档引用）
-    { key: "block", items: [
-      { label: "表格", Icon: Table2, run: () => onInsertTable?.() },
-      { label: "引用", Icon: Quote, run: () => runPanel("quote") },
-      { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
-      { label: "代码块", Icon: SquareCode, run: () => runPanel("insertCard", "codeblock") },
-      // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard）。
-      // 261104 用户口径：**不要再弹类型选择**——高亮块被选中后内核自带色板可改颜色/类型（见设备截图），
-      // 插入时只给默认档（tips）即可。
-      { label: "高亮块", Icon: Highlighter, run: () => runPanel("alert", "tips") },
-      // 标签用「分栏」而不是「分栏卡片」：窄格下 4 个字会被省略号截断（桌面端仍叫分栏卡片）。
-      // 261104：2/3/4 栏改成**贴着条目**的锚定气泡（run 收到被点条目当锚点）。
-      { label: "分栏", Icon: Columns2, run: (anchor) => openColumnsChooser(anchor) },
-      { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
-      // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
-      { label: "链接", Icon: Link2, run: () => openLinkSheet() },
-      { label: "文档引用", Icon: FileSymlink, run: () => runPanel("insertCard", "customBlock", { $name: "lake-note-ref", $htmlStr: "", noteId: "", title: "" }, true) },
-      // 加密文本（261023）：自定义卡「lake-locked-text」，与桌面「+」面板同一张卡（卡值是密文，明文从不进正文）
-      { label: "加密文本", Icon: Lock, run: () => runPanel("insertCard", "customBlock", { $name: "lake-locked-text", $htmlStr: "" }, true) },
-      // 日历从第一组挪到这里（用户 261015：「把日历放到第二组」）
-      { label: "日历", Icon: Calendar, run: () => runPanel("insertCard", "calendar", { currentDate: dateStamp(), colorIndex: 0, schedules: {}, __spacing: "both" }, true) },
-    ] },
-  ];
-  /** 文档内画板族插入：内核 insertCard 的返回值就是新卡 id；随后用官方的 focusCard 把选区落到卡上。
-   *  先 restoreSelection 保证在当前光标处插入；面板走 hide 档（收起但不放回输入法），否则画板一插入就会拉起键盘。 */
-  const insertBoardCard = (cardName: string, preset: BoardPreset) => {
-    restoreSelection();
-    const value = {
-      $name: cardName,
-      $htmlStr: "",
-      ...cardValueFromBoardDoc(createBoardDoc(preset)),
-      cardHeight: 560,
-    };
-    // custom-card 插件的正式入口 = 插一张 customBlock，卡值里的 $name 指向注册名；
-    // 直接 insertCard('drawing-board', …) 不会命中 customBlock 插件（实测 no-op）。
-    const cardId = exec("insertCard", "customBlock", value, true);
-    snapshotSelection();
-    refreshActive();
-    closePanel("hide");
-    if (typeof cardId === "string" && cardId) {
-      window.setTimeout(() => {
-        exec("focusCard", cardId);
-        refreshActive();
-      }, 80);
-    }
-  };
-
-  /**
-   * 「格式刷」= **内核服务调用，不是命令**（261104 设备实测 + bundle 实据，见 formatPainter.ts 头注释）：
-   * 先还选区 → 让内核按当前光标记录格式（已在刷形态则取消）→ **hide 档收面板**（不放回键盘，否则键盘盖住目标）。
-   * 记录之后由内核自管「点目标即应用、应用后退出」，dock 不再做第二步，也**不要再无参 execCommand('paintFormat')**。
-   */
-  const onFormatPainter = () => {
-    restoreSelection();
-    // 已在刷形态 ⇒ 本次点击 = 取消（与桌面点同一颗按钮一致），不用等收面板。
-    const alreadyActive = !!formatPaintService(editor)?.hasPaintFormat?.();
-    snapshotSelection();
-    refreshActive();
-    closePanel("hide");
-    // ⚠️ 记录必须**晚于面板收起后的焦点/选区事件**：内核 formatPainter 在 afterExecCommand('selection')
-    // 且未处于鼠标按下时，会把「已记录格式」立刻应用到当前选区并（once=true）退出刷形态
-    // ⇒ 收面板/还焦点产生的 selection 命令会把刚记录的刷子当场消费掉，表现为点了没反应。
-    window.setTimeout(() => {
-      const result = beginFormatPainter(editor);
-      if (result === "unavailable") {
-        // 兜底：内核换代丢了服务时保持旧行为并明说（v1.99.0 不会走到这里）。
-        exec("paintFormat");
-        showToast("当前编辑器不支持格式刷", { type: "error" });
-      } else if (result === "cancelled") {
-        showToast("已退出格式刷");
-      } else {
-        showToast("格式刷已开启，点选目标文字");
-      }
-    }, alreadyActive ? 0 : 160);
-  };
-
-  // 「更多」面板：**按行分组**（261017 二改用户点单；261104 二次收口）——公式/上下标/格式刷一行、缩进三项一行、
-  // **字号 + 行高同一行**（两枚「− 当前 +」步进器）、画图占位一行。
-  // 文本增强命令全部走内核 `renderer.execCommand`。
-  // 行条目两种形态：`items` = 图标/文字/数值按钮行；`custom` = 整块自定义控件（步进器），共用同一 .med-f-row 几何。
-  // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
-  const moreRows: ReadonlyArray<{ key: string; label?: string; items?: ReadonlyArray<DockItem>; custom?: () => ReactNode }> = [
-    { key: "inline", items: [
-      { label: "公式", Icon: Sigma, run: () => runPanel("insertCard", "math", null, true) },
-      { label: "上标", Icon: Superscript, run: () => runPanel("sup") },
-      { label: "下标", Icon: Subscript, run: () => runPanel("sub") },
-      // 格式刷是「取格式 → 点目标」的两步模式：**激活后必须收面板、放回输入法**，否则用户无法点目标
-      { label: "格式刷", Icon: Paintbrush, run: onFormatPainter },
-    ] },
-    { key: "indent", items: [
-      // 261104 澄清文案：内核 firstIndent 是**整篇**把 root 下所有 p 设 text-indent（只 set 不 remove，无法撤销）
-      // ⇒ 名字改成「全文首行缩进」，避免被当成"当前段"的开关。
-      { label: "全文首行缩进", Icon: ArrowRightFromLine, run: () => runPanel("firstIndent") },
-      { label: "减少缩进", Icon: IndentDecrease, run: () => runPanel("outdent") },
-      { label: "增加缩进", Icon: IndentIncrease, run: () => runPanel("indent") },
-    ] },
-    // 字号 + 行高（261104 二次收口，用户点单）：两行合并成**一行**，各自「− 当前 +」步进器。
-    // 字号 = 内核 8 档（MOBILE_FONT_SIZES，px 入参）；行高 = 内核 lineHeight 取值域 + 「默认」档。
-    // 行高命令：数值直接传；「默认」= **不传参**调用（设备实测 execCommand("lineHeight") 可清 ne-line-height，传 "default" 会抛错）。
-    { key: "size-line", custom: () => (
-      <>
-        <div className="med-f-card med-f-step"><FontSizeStepper value={activeValues.fontSize} sizes={MOBILE_FONT_SIZES} onPick={(px) => runPanel("fontsize", px)} /></div>
-        <div className="med-f-card med-f-step"><LineHeightStepper value={lineHeightValue(activeValues.lineHeight)} onPick={(v) => (v === "default" ? runPanel("lineHeight") : runPanel("lineHeight", v))} /></div>
-      </>
-    ) },
-    // 画图族：纯文字（用户 261017）；Drawnix 四类共用同一画板内核，261019 P0 解禁。
-    // 文本绘图仍单独评估（不是同一套 Drawnix 场景），先保持置灰，不在本批偷偷放出一个未验收入口。
-    { key: "drawing", items: [
-      { label: "画板", run: () => insertBoardCard("drawing-board", "drawing") },
-      { label: "流程图", run: () => insertBoardCard("flowchart-board", "flowchart") },
-      { label: "UML 图", run: () => insertBoardCard("uml-board", "uml") },
-      { label: "思维导图", run: () => insertBoardCard("drawing-mindmap-board", "mindmap") },
-      // 261114（用户点单「移动端可以做」）：文本绘图解禁。卡注册名 = vendor customCard 的 `name`（不是 slash 的 `custom-text-to-diagram`）；
-      // 走 customBlock 正式入口（与画板族同一条 insertCard 路径），initValue 必须带 code/type/cardHeight/showEditor/showPreview。
-      { label: "文本绘图", run: () => runPanel("insertCard", "customBlock", { $name: "text-to-diagram", $htmlStr: "", ...MERMAID_DEFAULT_VALUE }, true) },
-    ] },
-  ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
   // ⌨：三种状态三条路（261015 定）——
   //   ① 面板开着 ⇒ `closePanel("restore")`：**面板与展开区一起收、键盘放回来**（不留空白；与 × 同一条路）；
@@ -620,72 +253,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   // 面板开 = 面板占住的键盘区高度（键盘收起过程中 innerHeight 530→842 时它同步长出来，
   // 工具栏屏幕 Y 恒定、面板"接管"键盘腾出的位置 —— HANDOFF §8.3 原始结论）。
   const isOn = (name: string) => !!activeStates[name];
-  /** 「＋」面板的插入条目（方块：图标 + 文字）。 */
-  const insBtn = ({ label, Icon, run, disabled }: DockItem) => (
-    <button
-      key={label}
-      className="med-ins-item"
-      aria-label={label}
-      disabled={!!disabled}
-      title={disabled ? label + "（移动端暂未支持）" : undefined}
-      onClick={run ? (e) => run(e.currentTarget) : undefined}
-    >
-      {Icon ? <Icon size={22} /> : null}
-      <span className="med-ins-label">{label}</span>
-    </button>
-  );
-  /** 「更多」面板的行条目：图标 + 文字 / 数值（行高档）/ 纯文字（画图占位）；几何与「Aa」面板同款。 */
-  const rowBtn = ({ label, Icon, glyph, run, disabled }: DockItem) => (
-    <button
-      key={label + (glyph ?? "")}
-      className="med-f-btn"
-      aria-label={glyph ? label + " " + glyph : label}
-      disabled={!!disabled}
-      title={disabled ? label + "（移动端暂未支持）" : label}
-      onClick={run ? (e) => run(e.currentTarget) : undefined}
-    >
-      {glyph ? <span className="med-f-glyph">{glyph}</span> : Icon ? (<><Icon size={18} /><span className="med-f-label">{label}</span></>) : <span className="med-f-label">{label}</span>}
-    </button>
-  );
-
-  /** 面板里的命令条目（行内 / 块级 / 历史共用一套渲染，避免三段重复 JSX）。 */
-  const cmdBtn = (c: { name: string; label: string }) => {
-    const Icon = COMMAND_ICONS[c.name];
-    return (
-      <button key={c.name} className={"med-f-btn" + (isOn(c.name) ? " med-f-on" : "")} onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>
-        {Icon ? <Icon size={20} /> : c.label}
-      </button>
-    );
-  };
-  // 「一卡一组、一行最多两卡」的分组（用户 261012 定：照语雀那样拆开排布）
-  // 行内标记：加粗/斜体/下划线/删除线/**行内代码**（用户 261012：行内代码恢复，就放在这一行）
-  // B6（261017 用户点单）：行内标记行 = B / I / U / S / 行内代码 + **清除格式**
-  const inlineMarks = [...MARK_COMMANDS, { name: "clearFormat", label: "清除格式", group: "mark" as const }];
-  // 列表：与「对齐」同处一行（用户 261012：对齐和列表放一行）
-  const listItems = BLOCK_INSERT_COMMANDS.filter((c) => c.name === "unorderedList" || c.name === "orderedList" || c.name === "taskList");
-  /** 取值型高亮：对齐（内核默认返回空串 = 左对齐）、字色（空串 = 正文色）、背景色。 */
-  const alignActive = (value: string) => (activeValues.alignment || "left") === value;
-  const textColorActive = (hex: string) => !!activeValues.color && activeValues.color.toLowerCase() === hex.toLowerCase();
-  const noTextColor = !activeValues.color;
-  /**
-   * 色板 = **背景色**（261014 解耦）：过去这一块由 colorVariant 驱动 —— 切到字色时它回显的是字色，
-   * A 排点一下它就跟着标红，用户看到的就是"两行串联"。现在两行各自独立：
-   *   A 排 = 文字色（回显 activeValues.color）；色板 = 背景色（回显 activeValues.bgColor）。
-   */
-  const boardColorActive = (hex: string) => !!activeValues.bgColor && activeValues.bgColor.toLowerCase() === hex.toLowerCase();
-  /** 首格「无填充」的当前态。 */
-  const boardClearActive = !activeValues.bgColor || activeValues.bgColor === "transparent";
-  /** 背景色色块（圆形，照语雀）。 */
-  const boardSwatch = (hex: string) => (
-    <button
-      key={hex}
-      className={"med-f-sw" + (boardColorActive(hex) ? " is-on" : "")}
-      style={{ background: hex }}
-      onClick={() => pickColor(hex, "bg")}
-      aria-label={"背景色 " + hex}
-      title={hex}
-    />
-  );
   const plusCls = "med-btn med-toggle" + (panelMode === "insert" ? " med-open" : "");
   const aaCls = "med-btn med-toggle med-aa" + (panelMode === "font" ? " med-open" : "");
 
@@ -736,115 +303,32 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
         </button>
       </div>
 
-      {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载。
-          261019(八) 用户报「收面板→键盘 闪烁」：restore 档不能提前播滑出/淡出 —— 键盘是**从面板上方滑上来**的，
-          面板内容保持可见（closingHold）直到被键盘盖住；否则键盘还在上升、面板先变成一块空白（实测约 200ms 空块）。
-          只有输入法迟迟不来时才放行滑出（useEditSurface 的 1800ms 兜底）。 */}
-      {(panelMode || closing) && (
-      <div className="med-panel" data-open={panelMode || closingHold ? "1" : "0"} data-closing={closing ? "1" : undefined} data-kind={renderedPanel ?? "none"} aria-hidden={!panelMode} onMouseDown={(e) => {
-        // 默认 preventDefault 保选区（点面板条目不丢内核选区）；但**表单输入必须放行**（261119 设备报障：
-        // 链接编辑行的文本/链接输入框点得见聚焦态、打字进不去、键盘不出）—— mousedown 默认动作 = 聚焦 +
-        // 落光标 + 唤起软键盘，被 cancel 后 label 激活兜出的程序化 focus 不弹键盘（AGENTS §7#17）。
-        // 与桌面 SelectionToolbar 容器同一豁免口径（260924「输入即关闭 / 写不进去」），别再收窄/放宽选择器。
-        const t = e.target as HTMLElement | null;
-        if (t && typeof t.closest === "function" && t.closest("input, textarea, .ne-link-editor")) return;
-        e.preventDefault();
-      }}>
-        <div className="med-panel-inner" onTransitionEnd={(event) => { if (event.target === event.currentTarget) surface.onPanelTransitionEnd(); }}>
-          {renderedPanel === "emoji" ? (
-            /* 表情：**占满面板区**（输入法式；.med-panel 已是固定高）——不弹浮层、不随内容跳高度。 */
-            <EmojiPanel bucket="input" fill onPick={insertEmoji} onBack={() => togglePanel("insert")} />
-          ) : renderedPanel === "insert" || renderedPanel === "more" ? (
-            <>
-              {/* 「＋」= **方块网格**（261015 用户点单：照图1 的方块样式；两组 8+10、3 列）。
-                  「更多」= **分行白卡**（261017 二改用户点单：公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行；
-                  261104 在缩进与行高之间加「字号」步进器行 —— 用户批准把字号从「Aa」面板搬过来与行高同组）。 */}
-              {renderedPanel === "insert" ? (
-                <div className="med-ins-groups">
-                  {INSERT_GROUPS.map((g) => (
-                    <div className="med-ins-grid med-ins-grid--tile" key={g.key}>{g.items.map(insBtn)}</div>
-                  ))}
-                </div>
-              ) : (
-                <div className="med-font-panel">
-                  {moreRows.map((row) => (
-                    <div className="med-f-row" key={row.key}>
-                      {row.custom ? row.custom() : (
-                        <div className="med-f-card" data-count={row.items?.length ?? 0}>
-                          {row.label ? <span className="med-f-rowlabel">{row.label}</span> : null}
-                          {row.items?.map(rowBtn)}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* 261120：链接编辑已改为底部浮窗（见组件底部 LinkEditorSheet），面板内不再内联输入行。 */}
-            </>
-          ) : (
-            <div className="med-font-panel">
-              {/* 段落样式（独占一行） */}
-              <div className="med-f-row">
-                <div className="med-f-card" data-count={STYLE_BLOCKS.length}>
-                  {STYLE_BLOCKS.map((b) => (
-                    <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)} aria-label={b.label} title={b.label}>
-                      {b.value === "p" ? <Pilcrow size={20} /> : b.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 行内标记（独占一行）——行内代码/链接按用户 261012 移出本面板：
-                  代码块在「+」面板已有，链接融合进「+」面板 */}
-              <div className="med-f-row">
-                <div className="med-f-card" data-count={inlineMarks.length}>{inlineMarks.map(cmdBtn)}</div>
-              </div>
-
-              {/* 对齐 ｜ 列表（用户 261012：两者放一行；**261015 用户点单：左右对调** ⇒ 对齐在左、列表在右）
-                  注：「引用 / 分割线」已删（+ 面板已有）、「撤销 / 重做」已移到**主工具栏**（261017） */}
-              <div className="med-f-row">
-                <div className="med-f-card" data-count={ALIGN_ITEMS.length}>
-                  {ALIGN_ITEMS.map(({ value, label, Icon }) => (
-                    <button key={value} className={"med-f-btn" + (alignActive(value) ? " med-f-on" : "")} onClick={() => runPanel("alignment", value)} aria-label={label} title={label}><Icon size={20} /></button>
-                  ))}
-                </div>
-                <div className="med-f-card" data-count={listItems.length}>{listItems.map(cmdBtn)}</div>
-              </div>
-
-              {/* 字色：一排 A（默认 + 常用色）—— **只属于文字色**（261014：与下面背景色板互不影响；
-                  原先末位还有个"背景色入口"用来切色板变体，正是两行串联的根源，已删除）。 */}
-              <div className="med-f-row">
-                <div className="med-f-card med-f-colors" data-count={QUICK_TEXT_COLORS.length + 1}>
-                  <button className={"med-f-btn med-f-a" + (noTextColor ? " med-f-on" : "")} onClick={() => pickColor("", "text")} aria-label="默认颜色" title="默认颜色">A</button>
-                  {QUICK_TEXT_COLORS.map((c) => (
-                    <button key={c} className={"med-f-btn med-f-a" + (textColorActive(c) ? " med-f-on" : "")} style={{ color: c }} onClick={() => pickColor(c, "text")} aria-label={"字色 " + c} title={"字色 " + c}>A</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 背景色板（261014 解耦：**只属于背景色**，与上面那排 A 各管各的）—— 2 行 × 7 格，照语雀排布：
-                  浅色行首格 = 无填充，其余 6 淡色；第二行 7 实色。颜色全部取内核色阶
-                  （core/colorPalette.ts 的 MOBILE_BOARD_*，逐色 ΔE 就近映射，不自己造色）。 */}
-              <div className="med-f-row">
-                <div className="med-f-card med-f-board">
-                  <div className="med-f-board-row">
-                    <button
-                      className={"med-f-sw med-f-sw--none" + (boardClearActive ? " is-on" : "")}
-                      onClick={() => pickColor("", "bg")}
-                      aria-label="无填充"
-                      title="无填充"
-                    />
-                    {MOBILE_BOARD_LIGHT.map(boardSwatch)}
-                  </div>
-                  <div className="med-f-board-row">{MOBILE_BOARD_SOLID.map(boardSwatch)}</div>
-                </div>
-              </div>
-
-            </div>
-          )}
-        </div>
-      </div>
-      )}
+      {/* 展开面板（JSX/条目清单在 DockPanels.tsx；props = 命令执行器 + 当前值）。 */}
+      <DockPanels
+        panelMode={panelMode}
+        renderedPanel={renderedPanel}
+        closing={closing}
+        closingHold={closingHold}
+        onPanelTransitionEnd={surface.onPanelTransitionEnd}
+        runPanel={runPanel}
+        exec={exec}
+        restoreSelection={restoreSelection}
+        snapshotSelection={snapshotSelection}
+        refreshActive={refreshActive}
+        closePanel={closePanel}
+        togglePanel={togglePanel}
+        onInsertImage={onInsertImage}
+        onInsertAttachment={onInsertAttachment}
+        onInsertAudio={onInsertAudio}
+        onInsertVideo={onInsertVideo}
+        onInsertTable={onInsertTable}
+        onInsertCamera={onInsertCamera}
+        openLinkSheet={openLinkSheet}
+        openColumnsChooser={openColumnsChooser}
+        activeValues={activeValues}
+        isOn={isOn}
+        editor={editor}
+      />
       {/* 分栏选择气泡：锚在「分栏」条目上（fixed 定位，不受面板 inner 滚动/裁切影响；z 高于面板）。 */}
       {columnsAnchor && (
         <>

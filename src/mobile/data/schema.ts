@@ -28,6 +28,10 @@ import {
  *    · 第一批 = 不依赖读状态的"底表"建表（含旧库 DROP）；
  *    · 第二批 = 需要读 `PRAGMA table_info` / `sqlite_master` / 种子的条件语句 + 小记 schema 增量。
  *    两批之间只有 4~5 次只读查询，写侧从 28 次往返降到 **2 次**。
+ *
+ * 契约面：applyMobileSchema / MOBILE_SCHEMA_VERSION（PRAGMA user_version 版本门，已到版本整段跳过）。
+ * 不变量：改表/索引必须 +1 版本号；新增 DDL 只加进 baseSchemaStatements/collectSchemaStatements，
+ * 不回到逐条 exec（AGENTS §4 移动 schema 条目）；SQLite 只存元数据/hash/同步账本/派生缓存，正文是文件。
  */
 
 /**

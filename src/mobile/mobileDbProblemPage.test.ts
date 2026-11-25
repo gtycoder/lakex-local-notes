@@ -11,7 +11,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const APP = readFileSync(new URL("./MobileApp.tsx", import.meta.url), "utf8");
+// M-06②：坏库页组件已拆到 MobileBootPages.tsx（恢复/重试接线仍在 MobileApp）⇒ 按「启动面」聚合读。
+const APP = readFileSync(new URL("./MobileApp.tsx", import.meta.url), "utf8") + readFileSync(new URL("./MobileBootPages.tsx", import.meta.url), "utf8");
 const MAIN = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
 const HOME = readFileSync(new URL("./home/HomePage.tsx", import.meta.url), "utf8");
 

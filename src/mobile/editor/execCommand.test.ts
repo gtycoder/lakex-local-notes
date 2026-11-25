@@ -87,7 +87,8 @@ describe("移动端命令入口唯一性（源码级）", () => {
   });
 
   it("用户触发的 dock / 插入命令走结构化结果并上报失败", () => {
-    const dock = readFileSync(path.join(ROOT, "editor/EditorDock.tsx"), "utf8");
+    // M-04 拆分后 dock 的命令执行路径在 dockCommandState.ts（useEditorExec）⇒ 按「dock 命令面」聚合读两个文件。
+    const dock = ["editor/EditorDock.tsx", "editor/dockCommandState.ts"].map((p) => readFileSync(path.join(ROOT, p), "utf8")).join("\n");
     const host = readFileSync(path.join(ROOT, "editor/EditorDockHost.tsx"), "utf8");
     const composer = readFileSync(path.join(ROOT, "home/QuickNoteComposer.tsx"), "utf8");
     for (const source of [dock, host, composer]) {

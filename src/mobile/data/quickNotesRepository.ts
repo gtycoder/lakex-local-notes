@@ -28,6 +28,10 @@ import { indexQuickNote } from "./quickNotesSearch.js";
  * - 正文 = quick-notes/items/{id}.qnote（JSON 文件，内容格式与桌面 .qnote 字节一致）；
  * - SQLite quick_notes 只存元数据 + content_hash（不含正文）；
  * - 未提交草稿 = draft-journal/{id}.json（原 device_state 大字段，与桌面草稿日志同构）。
+ *
+ * 契约面：QuickNote 内容格式与桌面 .qnote 字节一致（core/quickNoteModel 单一来源）；列表投影不带正文。
+ * 不变量：小记无历史快照（随手记语义，AGENTS §3#3）；「保存并同步」= 单条快路径
+ * （docs/SYNC-PROTOCOL.md §12.3）；标签顺序设备本地、不进 S3（AGENTS §4 标签顺序条目）。
  */
 
 export interface QuickNoteImageFile {

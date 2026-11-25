@@ -17,6 +17,10 @@ import { trashSubtree } from "./trashSubtree.js";
  *
  * 261019 起正文不再存 SQLite：notes 行只有元数据 + content_hash + 派生 text_cache；
  * 正文读写在 native/bodyStore（文件，路径与桌面同构，见 core/noteBodyPaths.ts）。
+ *
+ * 契约面：LocalNote/正文读写/搜索/noteGoneState（保存屏障判 gone 的行级事实）。
+ * 不变量：saveNote 不改树归属（parent_id=COALESCE，护栏 bridgeTree.test）；noteGoneState 必须返回
+ * trashedAt（AGENTS §3#16）；正文缺失不抛错（返回缺正文态，AGENTS §4 手动删数据条目）。
  */
 
 export interface LocalNote {

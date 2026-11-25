@@ -49,7 +49,8 @@ describe("移动端设置分组（对齐桌面）", () => {
     expect(s3Start).toBeGreaterThan(-1);
     expect(backupStart).toBeGreaterThan(s3Start);
     expect(cacheStart).toBeGreaterThan(backupStart);
-    const s3Body = DRAWER.slice(s3Start, backupStart);
+    // M-05 拆分后 s3 视图本体在 S3SettingsSection.tsx ⇒ 切片 + 分节源码一起判。
+    const s3Body = DRAWER.slice(s3Start, backupStart) + read("src/mobile/settings/S3SettingsSection.tsx");
     const backupBody = DRAWER.slice(backupStart, cacheStart);
     expect(s3Body).not.toContain("从云端恢复（换机或数据损坏）");
     expect(backupBody).toContain("从云端恢复（换机或数据损坏）");

@@ -1,3 +1,9 @@
+/**
+ * 移动端笔记本子树查询（只读）：返回笔记本完整子树，供目录抽屉/工作区树渲染。
+ * 契约面：NotebookTreeItem（kind=group|note、noteKind 分型取默认图标、createdAt 供日记同日排序）。
+ * 不变量：note 也能作父节点（文档下可有多级子文档，AGENTS §3#5）；递归 CTE 只取当前笔记本子树；
+ * 本文件只读、不写库、不碰回收站语义（trashSubtree 判据在 data/trashSubtree）。
+ */
 import type { MobileDb } from "./dbPortTypes";
 
 export interface NotebookTreeItem {

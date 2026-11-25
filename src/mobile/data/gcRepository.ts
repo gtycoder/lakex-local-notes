@@ -1,3 +1,9 @@
+/**
+ * 移动端 S3 GC 待删账本：s3_gc_pending 登记/销账/列举 + GC 执行日志。
+ * 契约面：addS3GcPending/removeS3GcPending/listS3GcPending/recordS3GcLog（listS3GcPending 属测试
+ * 预留 seam，归属表见 docs/MOBILE-TECH-STACK.md §三，护栏 contractSurface.test.ts）。
+ * 不变量：设备本地账本、不进 S3；先登记后删对象、确认删除才销账（深清 keep 集口径 = SYNC-PROTOCOL §14）。
+ */
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
 import type { MobileDb } from "./dbPortTypes";
 

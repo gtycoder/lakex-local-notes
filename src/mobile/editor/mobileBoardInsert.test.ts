@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-const DOCK = read("./EditorDock.tsx");
+// M-04 拆分：插入条目清单与画板插入动作（insertBoardCard）搬进 DockPanels.tsx，护栏跟着搬。
+const DOCK = read("./DockPanels.tsx");
 const BOARD_CORE = read("../../../vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx");
 const BOARD_CSS = read("../../../vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.css");
 const EDIT_SURFACE_KERNEL_CSS = read("./edit-surface-kernel.css");

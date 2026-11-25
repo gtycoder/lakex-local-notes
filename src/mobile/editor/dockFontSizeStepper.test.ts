@@ -16,7 +16,8 @@ const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
 /** 去掉注释再断言：文件里保留了「当年为什么这样放」的说明，注释提到旧类名是允许的。 */
 const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const DOCK = strip(read("src/mobile/editor/EditorDock.tsx"));
+// M-04 拆分：「更多」面板条目（moreRows，含字号+行高合并行）搬进 DockPanels.tsx，护栏跟着搬。
+const DOCK = strip(read("src/mobile/editor/DockPanels.tsx"));
 const FONT = strip(read("src/mobile/ui/FontSizeStepper.tsx"));
 const LINE = strip(read("src/mobile/ui/LineHeightStepper.tsx"));
 const VALUE = strip(read("src/mobile/ui/ValueStepper.tsx"));

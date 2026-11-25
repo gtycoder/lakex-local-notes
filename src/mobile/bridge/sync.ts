@@ -1,3 +1,13 @@
+/**
+ * 移动端同步桥（bridge.sync* 域）：整轮同步 / 单条小记推送 / 资产补拉 / GC / 同步诊断的编排入口——
+ * 组装 core 引擎（S3v3SyncEngine、runQuickPush）与移动端口（mobileDeviceStore、assetFs、secretStore）。
+ * 契约面：bridge 方法面归属表 = docs/MOBILE-TECH-STACK.md §三（护栏 src/mobile/contractSurface.test.ts）；
+ * 「上次同步」状态落盘的**唯一写入点** = bridge.syncNow()（syncStatusStore，AGENTS §4）。
+ * 不变量：本地是真相（AGENTS §3#1）；能否出网只判 core/cloudState.canTouchNetwork（§3#20）；
+ * 同步/GC/深度清理共用 enqueueMaintenance 串行、互斥域三条不变量 I1–I3（core/maintenancePolicy）；
+ * 「保存并同步」走 runPriority 单条快路径（docs/SYNC-PROTOCOL.md §12.3），不排整轮队列。
+ */
+
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs, listQuickNoteAssetKeysFs } from "../native/assetFs";
 import type { AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";

@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const RAW = readFileSync(path.join(process.cwd(), "src/mobile/editor/EditorDock.tsx"), "utf8");
+// M-04 拆分：「Aa」面板颜色两行（含 pickColor / 回显判据）全部搬进 DockPanels.tsx，护栏跟着搬。
+const RAW = readFileSync(path.join(process.cwd(), "src/mobile/editor/DockPanels.tsx"), "utf8");
 /** 去掉注释再断言：文件里保留了"当年为什么错"的说明，注释里出现 colorVariant 是允许的。 */
 const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 

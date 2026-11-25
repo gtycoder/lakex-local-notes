@@ -1,3 +1,9 @@
+/**
+ * 移动端孤儿资产：列举/删除「正文引用之外」的落盘资产文件（资源管理页数据源）。
+ * 契约面：OrphanAsset + listOrphanAssets/deleteOrphanAsset/cleanOrphanAssets（删文件 + 删行）。
+ * 不变量：资产存在性 = 远端声明差集（AGENTS §3#11），本表只是本地扫查结果、不是权威；
+ * 只删确认无人引用的文件，删除失败可见、不半途吞错。
+ */
 import type { MobileDb } from "./dbPortTypes";
 
 export interface OrphanAsset {

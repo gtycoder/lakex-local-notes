@@ -1,3 +1,8 @@
+/**
+ * 移动端资源管理诊断（只读）：文档/小记/资源/孤儿/GC 待删/快照计数 + 库大小。
+ * 契约面：MobileDiagnostics（设置→资源管理页数据源）。
+ * 不变量：纯统计、不写库、不出网；计数从表内聚合，不重实现业务判据。
+ */
 import type { MobileDb } from "./dbPortTypes";
 
 export interface MobileDiagnostics {

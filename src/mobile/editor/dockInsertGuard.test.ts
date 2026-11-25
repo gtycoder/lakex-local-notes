@@ -8,7 +8,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
-const DOCK = read("src/mobile/editor/EditorDock.tsx");
+// M-04 拆分后 dock 命令面横跨三个文件（判据 hook / 编排 / 面板 JSX）⇒ 按功能聚合读，断言语义不变。
+const DOCK = ["src/mobile/editor/dockCommandState.ts", "src/mobile/editor/EditorDock.tsx", "src/mobile/editor/DockPanels.tsx"].map(read).join("\n");
 const SURFACE = read("src/mobile/editor/useEditSurface.ts");
 const CSS = read("src/mobile/editor/editor-dock.css");
 const QN_WIDGETS = read("src/features/quickNotes/quickNoteToolbarWidgets.ts");

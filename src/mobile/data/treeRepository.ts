@@ -1,3 +1,10 @@
+/**
+ * 移动端树仓储：树节点/笔记本/分组的创建、改名、图标、移动/排序、回收站移动（trashNote/trashTreeItem）。
+ * 契约面：TreeNode 形状与桌面同构（lib/types）；显式移动只有 moveTreeNodeOrdered 是树操作。
+ * 不变量：保存正文不改树归属（noteRepository.saveNote 用 COALESCE 保 parent_id）；删除 = 整棵子树
+ * 软删进回收站、对已 trashed 节点重复删除幂等不改 parent（AGENTS §3#5）；日记本不可删/不可排序、
+ * space 只允许 null → diary（AGENTS §3#25）；标题/移动/图标断言走 core/treeRules 单一来源。
+ */
 import { executeBatch, type MobileBatchStatement, type MobileDb } from "./dbPortTypes";
 import type { TreeNode, TreeNodeType } from "../../lib/types";
 import {

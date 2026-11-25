@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 const BRIDGE = readFileSync(new URL("./bridge/sync.ts", import.meta.url), "utf8");
 const V3 = readFileSync(new URL("./v3/sync.ts", import.meta.url), "utf8");
-const DRAWER = readFileSync(new URL("./settings/SettingsDrawer.tsx", import.meta.url), "utf8");
+// M-05 拆分：「按需下载附件」开关在 S3SettingsSection.tsx ⇒ 按「设置页」聚合读。
+const DRAWER = readFileSync(new URL("./settings/SettingsDrawer.tsx", import.meta.url), "utf8") + readFileSync(new URL("./settings/S3SettingsSection.tsx", import.meta.url), "utf8");
 const NOTES = readFileSync(new URL("./bridge/notes.ts", import.meta.url), "utf8");
 // CORE-10 tail：共享类型定义已下沉 core/sharedTypes.ts（lib/types.ts 只是 re-export）。
 const TYPES = readFileSync(new URL("../core/sharedTypes.ts", import.meta.url), "utf8");

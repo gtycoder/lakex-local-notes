@@ -14,7 +14,9 @@ import {
 import { baselineFileForDb, MOBILE_BASELINE_FILE_PATH, writeBaselineFile } from "../data/v3BaselineFile.js";
 import { createDeviceStoreMeta, createFileBackedAssetIo, type AssetIoPort, type DeviceStoreMeta } from "../../core/s3v3/state/deviceStore.js";
 import { createCapacitorAssetFileDriver } from "./capacitorAssetFileDriver.js";
-import { createMobilePlatformPort, createMobileBodyFileDriver, type MobilePlatformPortContext } from "./mobilePlatformPort.js";
+import { createMobilePlatformPort, type MobilePlatformPortContext } from "./mobilePlatformPort.js";
+// 正文 FileDriver（M-06③ 拆出）：只依赖 noteBodies/DB kind 现查。
+import { createMobileBodyFileDriver } from "./mobileBodyFileDriver.js";
 import { listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 import * as historyRepository from "../data/historyRepository.js";
@@ -30,6 +32,11 @@ import type { PlanWarning } from "../../core/s3v3/plan/types.js";
  * - 「云端已删除·仅本地」：state.remotePurged ↔ notes/folders/quick_notes.cloud_deleted（DB 投影，UI 徽标读它）；
  *   小记副本保留在 quick 回收站（deleted_at 非空、正文/图片/标签不删），恢复并上传成功后清空标记；
  * - 写侧细节（批量 executeSet 窗口、legacy 正文批写、移动旧口径回收站/小记删除）在 mobilePlatformPort。
+ *
+ * 契约面：core/s3v3DeviceStore 的 S3v3DeviceStore 端口（与 electron/s3v3/deviceStore 同构对拍，
+ * 一致性门禁 electron/s3v3/deviceConformance）。不变量：baseline 文件（sync-v3/baseline.json.gz.b64）
+ * **绝不上传**（AGENTS §4）；正文下载先落 staging、saveState 由端口钩子搬到最终路径（I2「未变才应用」，
+ * core/maintenancePolicy）；state.remotePurged ↔ cloud_deleted 投影是「云端已删除·仅本地」徽标唯一来源。
  */
 
 /** 已建过 v3 状态表的库（单条推送/整轮共用同一 db 实例）：避免每次 `保存并同步` 都跑一次 DDL。 */

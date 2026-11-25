@@ -2,12 +2,12 @@
 /**
  * 261122 真机现场：小记编辑态是「文字上、图片下」，列表卡却把首图当封面画在标题上方 ⇒ 顺序反了。
  * 判据：**只有正文首块是媒体**时列表卡才画封面；文字在前的卡片必须按正文顺序渲染。
- * 这里钉 HomePage 的接线（封面门槛 + 隐藏首图只在画了封面时生效）。
+ * 这里钉小记卡（M-06① 起 = home/QuickNoteCard.tsx）的接线（封面门槛 + 隐藏首图只在画了封面时生效）。
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const HOME = readFileSync(process.cwd() + "/src/mobile/home/HomePage.tsx", "utf8");
+const HOME = readFileSync(process.cwd() + "/src/mobile/home/QuickNoteCard.tsx", "utf8");
 
 describe("小记列表卡封面顺序（261122）", () => {
   it("封面门槛 = 正文首块是媒体（quickNoteStartsWithMedia(note.body)）", () => {

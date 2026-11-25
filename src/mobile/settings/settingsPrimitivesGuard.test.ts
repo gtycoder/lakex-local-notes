@@ -11,6 +11,7 @@ const read = (rel: string): string => readFileSync(path.join(process.cwd(), rel)
 
 const PAGE_FILES = [
   "src/mobile/settings/SettingsDrawer.tsx",
+  "src/mobile/settings/S3SettingsSection.tsx",
   "src/mobile/settings/BasicSettingsSections.tsx",
 ];
 
