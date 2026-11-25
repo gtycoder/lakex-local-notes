@@ -24,7 +24,7 @@ import {
 } from "../../core/duplicateNotes.js";
 import { prepareDuplicateBody } from "../../core/lakeBodyRewrite.js";
 import { runPool } from "../../core/asyncPool.js";
-import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb.js";
+import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./dbPortTypes.js";
 import { createNote } from "./noteRepository.js";
 import { deleteNoteBodies, readNoteBody } from "./noteBodies.js";
 import {

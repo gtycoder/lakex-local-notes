@@ -91,7 +91,7 @@ vi.mock("../data/v3StateRepository", () => ({
 
 vi.mock("../data/derivedSearchCache", () => ({ clearSearchDerivedCache: async () => undefined }));
 vi.mock("../data/searchIndex", () => ({ reconcileIndex: async () => undefined }));
-vi.mock("../data/sqliteDb", () => ({
+vi.mock("../data/dbPortTypes", () => ({
   executeBatch: async (_db: unknown, statements: Array<{ statement: string; values: unknown[] }>) => {
     state.batches.push(...statements);
   },

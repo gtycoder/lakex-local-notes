@@ -8,9 +8,10 @@ import { pickLocalFile } from "../ui/pickFile";
 import { showToast } from "../ui/toastBus";
 import { createMobileS3v3Remote } from "../v3/s3v3Remote";
 import { probeCloudTarget, s3SettingsChanged } from "../../core/firstEncounter.js";
+import { resolveSecretField, S3_SECRET_MASK } from "../../core/s3SecretPolicy.js";
 
-/** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
-export const S3_SECRET_MASK = "********";
+/** 掩码与「掩码/留空 = 沿用已保存值」裁决同源 = core/s3SecretPolicy（M-10，与桌面 registerSync 同一份）；此处只留导出。 */
+export { S3_SECRET_MASK };
 
 export interface S3FormValues {
   endpoint: string;
@@ -90,9 +91,8 @@ export function useS3SettingsForm(open: boolean) {
     // 261123（E2E S3 表单水合修复）：**留空 = 沿用已保存值**——与桌面 Secret Key「留空或保持 ******** = 沿用」同口径，
     // 扩展到全部连接字段；无已存值时留空照旧交给 validateS3Settings 拦截（全新配置仍必填）。
     const keep = (draft: string, savedValue: string | undefined) => (draft.trim() ? draft : (savedValue ?? draft));
-    const secret = form.secretAccessKey === S3_SECRET_MASK || !form.secretAccessKey.trim()
-      ? (prev?.secretAccessKey ?? form.secretAccessKey)
-      : form.secretAccessKey;
+    // Secret 裁决同源 core/s3SecretPolicy（M-10）：掩码/留空 = 未改密钥 ⇒ 沿用已保存值。
+    const secret = resolveSecretField(form.secretAccessKey, prev?.secretAccessKey);
     // D2 261017：移动端只支持虚拟托管（阿里云/腾讯云/AWS/七牛）。
     const cfg: S3Settings = {
       endpoint: keep(form.endpoint, prev?.endpoint),

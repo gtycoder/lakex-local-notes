@@ -10,7 +10,7 @@
  * 映射纯逻辑在 ./portableMapping.ts；原生边界在 ../native/portablePackage.ts。
  */
 import { isMobileSnapshotManifest, parsePortableManifest, type PortableCounts, type PortableManifest } from "../../core/portable/portableFormat";
-import { executeBatch, type MobileBatchStatement, type MobileDb } from "../data/sqliteDb";
+import { executeBatch, type MobileBatchStatement, type MobileDb } from "../data/dbPortTypes";
 import { closeDbForPortableImport, ensureDb, reopenDbForPortableImport } from "../bridge/context";
 import { ensureV3StateTable, saveV3State, EMPTY_MOBILE_V3_STATE } from "../data/v3StateRepository";
 import { clearSearchDerivedCache } from "../data/derivedSearchCache";

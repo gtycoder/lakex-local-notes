@@ -25,7 +25,7 @@ import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { nextSortOrder } from "../../core/treeRules.js";
 import { reportDiaryWarning } from "../lib/diaryWarnLog.js";
 import { createNote } from "../data/noteRepository.js";
-import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "../data/sqliteDb.js";
+import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "../data/dbPortTypes.js";
 
 /**
  * 日记本名（两端首次打开时各自建，名称必须一致才能被 wire 合并成同一本）。

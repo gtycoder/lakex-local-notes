@@ -3,7 +3,7 @@ import path from "node:path";
 import { vi } from "vitest";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") }));
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { EMPTY_MOBILE_V3_STATE, clearV3State, ensureV3StateTable, loadV3State, saveV3State, type MobileV3State } from "./v3StateRepository.js";
 import { readBaselineFile } from "./v3BaselineFile.js";

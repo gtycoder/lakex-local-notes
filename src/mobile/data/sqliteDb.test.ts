@@ -5,7 +5,7 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
   default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"),
 }));
 
-import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsDb } from "./sqliteDbWeb.js";
 
 describe("SqlJsDb statement run result", () => {
   it("returns real change count and insert rowid", async () => {

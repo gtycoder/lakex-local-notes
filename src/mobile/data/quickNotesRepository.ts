@@ -10,7 +10,7 @@ import {
 } from "../../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 import {
   deleteDraftJournal,
   deleteQuickNoteBody,

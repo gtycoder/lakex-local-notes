@@ -11,7 +11,7 @@
  * - 只调用既有 bridge.cleanupHistory()（写域，内部按设置做分层保留），不新增原生 API。
  * - 读设置/开库失败由调用方静默（后台维护不弹提示）。
  */
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
 
 const DB_KEY = "history_cleanup_at";

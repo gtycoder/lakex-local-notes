@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { indexNote, reconcileIndex, searchNotes, RECONCILE_BATCH_SIZE } from "./searchIndex.js";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { writeNoteBody } from "./noteBodies.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";

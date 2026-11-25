@@ -1,5 +1,5 @@
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
-import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
+import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./dbPortTypes";
 import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
 import { removeNoteAssetsDirFs } from "../native/assetFs";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";

@@ -1,7 +1,7 @@
 import type { LakeIndex, QuickNotesIndex } from "../../core/s3v3/protocol/s3v3Index.js";
 import type { DeletionIntent } from "../../core/s3v3Intent.js";
 import type { PendingDelete } from "../../core/s3v3Gate.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import type { PendingAssetRetry } from "../../core/s3v3DeviceStore.js";
 import { fromPersistedState, migratePersisted, type IntentLogStateV3, type IntentRecord } from "../../core/s3v3/state/intentLogState.js";
 import { deleteBaselineFile, isPlausibleBaseline, readBaselineFile, writeBaselineFile } from "./v3BaselineFile.js";

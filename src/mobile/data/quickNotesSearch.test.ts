@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyMobileSchema } from "./schema.js";
 import { searchQuickNotes } from "./quickNotesSearch.js";
 import { listQuickNotePage } from "./quickNotesRepository.js";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 import { writeQuickNoteBody } from "./noteBodies.js";
 import { normalizeQuickNoteContent, serializeQuickNoteContent } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";

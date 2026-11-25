@@ -89,12 +89,14 @@ class PortablePackagePlugin : Plugin() {
 
     private fun pendingFile(): File = File(importRoot(), PENDING_FILE)
 
-    /** 目录围栏：pending/rollback 里读到的路径必须先证明在 portable-import/ 下，才允许递归删除。 */
-    private fun isInsideImportRoot(file: File): Boolean {
+    /**
+     * 目录围栏（M-16① 收口：本文件 5 处 canonicalPath + startsWith(root+separator) 路径包含检查同源）：
+     * canonical 后必须**严格落在 root 之下**，防 "../" 越界；异常一律判 false（不放行）。
+     * pending/rollback/staging 里读到的路径必须先过这一关，才允许读取或递归删除。
+     */
+    private fun isInside(root: File, file: File): Boolean {
         return try {
-            val root = importRoot().canonicalPath
-            val canonical = file.canonicalFile.path
-            canonical == root || canonical.startsWith(root + File.separator)
+            file.canonicalFile.path.startsWith(root.canonicalPath + File.separator)
         } catch (e: Exception) {
             false
         }
@@ -294,9 +296,8 @@ class PortablePackagePlugin : Plugin() {
 
     private fun deleteStagingDir(stagingPath: String) {
         if (stagingPath.isEmpty()) return
-        val root = importRoot().canonicalPath
         val dir = File(stagingPath).canonicalFile
-        if (!dir.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
+        if (!isInside(importRoot(), dir)) throw IOException("staging 路径越界")
         dir.deleteRecursively()
     }
 
@@ -339,8 +340,7 @@ class PortablePackagePlugin : Plugin() {
 
     private fun stagingDbFile(stagingPath: String, dbKey: String): File {
         val stage = File(stagingPath).canonicalFile
-        val root = importRoot().canonicalPath
-        if (!stage.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
+        if (!isInside(importRoot(), stage)) throw IOException("staging 路径越界")
         val rel = if (dbKey == "main") "desktop/metadata.sqlite3" else "desktop/quick-notes/metadata.sqlite3"
         val file = File(stage, rel)
         if (!file.isFile) throw IOException("包内数据库缺失: " + rel)
@@ -367,8 +367,7 @@ class PortablePackagePlugin : Plugin() {
         val stagingPath = call.getString("stagingPath") ?: ""
         try {
             val stage = File(stagingPath).canonicalFile
-            val root = importRoot().canonicalPath
-            if (!stage.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
+            if (!isInside(importRoot(), stage)) throw IOException("staging 路径越界")
             val file = File(stage, "desktop/sync-v3/baseline.json")
             if (!file.isFile) throw IOException("便携包缺少同步基线文件")
             if (file.length() > 64L * 1024 * 1024) throw IOException("同步基线文件过大")
@@ -388,15 +387,14 @@ class PortablePackagePlugin : Plugin() {
             try {
                 val stage = File(stagingPath).canonicalFile
                 val filesRoot = context.filesDir.canonicalFile
-                val root = importRoot().canonicalPath
-                if (!stage.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
+                if (!isInside(importRoot(), stage)) throw IOException("staging 路径越界")
                 var files = 0L
                 var bytes = 0L
                 for (relative in PAYLOAD_DIRS) {
                     val source = File(stage, "desktop/" + relative)
                     if (!source.isDirectory) continue
                     val target = File(filesRoot, relative).canonicalFile
-                    if (!target.path.startsWith(filesRoot.path + File.separator)) throw IOException("目标路径越界")
+                    if (!isInside(filesRoot, target)) throw IOException("目标路径越界")
                     val counted = copyDirectory(source, target)
                     files += counted.first
                     bytes += counted.second
@@ -514,9 +512,8 @@ class PortablePackagePlugin : Plugin() {
         obj.put("dbDir", dbDir.absolutePath)
         obj.put("dbFiles", JSONArray(dbFiles))
         obj.put("movedDirs", JSONArray(movedDirs))
-        val temp = File(importRoot(), PENDING_FILE + ".tmp")
-        temp.writeText(obj.toString(), Charsets.UTF_8)
-        if (!temp.renameTo(pendingFile())) throw IOException("写 pending 标记失败")
+        // M-03：原子写收口 [AtomicFiles]（tmp 命名 / fsync / rename 重试同源；旧 "pending.json.tmp" 残留由 isTemp 兼容）。
+        AtomicFiles.writeAtomic(pendingFile(), obj.toString().toByteArray(Charsets.UTF_8))
     }
 
     @PluginMethod
@@ -537,11 +534,12 @@ class PortablePackagePlugin : Plugin() {
         val pending = readPending()
         if (pending != null) {
             val rollbackDir = File(pending.optString("rollbackDir"))
-            if (isInsideImportRoot(rollbackDir)) rollbackDir.deleteRecursively()
+            if (isInside(importRoot(), rollbackDir)) rollbackDir.deleteRecursively()
             deleteStagingDir(pending.optString("stagingPath"))
         }
         pendingFile().delete()
-        File(importRoot(), PENDING_FILE + ".tmp").delete()
+        // M-03：清原子写临时残留（含历史 "pending.json.tmp" 与 ".tmp-*" 命名，isTemp 双判前/后缀）。
+        for (f in importRoot().listFiles() ?: emptyArray()) if (f.isFile && AtomicFiles.isTemp(f.name)) f.delete()
     }
 
     @PluginMethod
@@ -593,7 +591,7 @@ class PortablePackagePlugin : Plugin() {
 
     /** 恢复现场：删 live 残留 → 把 DB 备份拷回原位 → 把正文/资产目录移回。 */
     private fun restoreFrom(rollbackDir: File, dbDir: File, dbFiles: List<String>, movedDirs: List<String>) {
-        if (!isInsideImportRoot(rollbackDir)) throw IOException("rollback 目录越界")
+        if (!isInside(importRoot(), rollbackDir)) throw IOException("rollback 目录越界")
         dbDir.mkdirs()
         for (name in listOf(MOBILE_DB_FILE, MOBILE_DB_FILE + "-wal", MOBILE_DB_FILE + "-shm", MOBILE_DB_FILE + "-journal")) {
             val live = File(dbDir, name)

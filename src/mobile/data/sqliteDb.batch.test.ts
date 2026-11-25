@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeBatch, executeBatchInTransaction, type MobileDb } from "./sqliteDb";
+import { executeBatch, executeBatchInTransaction, type MobileDb } from "./dbPortTypes";
 
 function baseDb(overrides: Partial<MobileDb> = {}): MobileDb {
   return {

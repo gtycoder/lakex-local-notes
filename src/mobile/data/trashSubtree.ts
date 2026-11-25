@@ -5,11 +5,11 @@
  * 桌面 trashLifecycle.deleteTreeNode 是级联；移动端旧实现只动被点的单个 note，
  * 文档下的子文档/子分组会变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
  *
- * 收集口径与 purge/restore 共用：
+ * 收集口径与 purge/restore 共用（判据数据单一来源 = src/core/trashSubtreeScenarios.ts，M-02 对拍）：
  *  - ① parent_id 边（常规未扁平化子树）；
  *  - ② deleted_from_parent_id + trashed_at 边（被同步扁平化成回收站容器后的原始父链）。
  */
-import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
+import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./dbPortTypes";
 import { hasSearchIndex } from "./searchIndex.js";
 
 export interface ParentedNode {

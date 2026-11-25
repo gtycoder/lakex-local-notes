@@ -14,7 +14,7 @@ import { indexNote, searchDocsByScope } from "./searchIndex.js";
 import { searchQuickNotesByScope } from "./quickNotesSearch.js";
 import { searchNotes } from "./noteRepository.js";
 import { writeQuickNoteBody } from "./noteBodies.js";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 
 const T = "2026-11-05T00:00:00.000Z";

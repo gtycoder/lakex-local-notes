@@ -7,7 +7,7 @@
  * 为什么重要：恢复原路返回、跨端恢复位置、以及回收站行接收远端正文后的父归一都依赖它。
  */
 import { describe, expect, it } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { createNote, trashNote } from "./noteRepository.js";
 import { restoreTreeItem, trashTreeItem } from "./trashRepository.js";

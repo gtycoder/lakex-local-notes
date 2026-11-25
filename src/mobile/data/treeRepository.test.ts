@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { moveTreeNodeOrdered, reorderSiblings } from "./treeRepository.js";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({

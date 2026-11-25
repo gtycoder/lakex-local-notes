@@ -13,7 +13,7 @@ import {
   removeS3GcPending,
 } from "./gcRepository.js";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 
 async function createDb(): Promise<SqlJsAsyncDb> {
   const db = await SqlJsDb.open();

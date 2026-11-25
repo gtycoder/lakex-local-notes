@@ -10,7 +10,7 @@
  * 明确不清：notes/quick_notes 行、正文文件、历史快照、回收站、已下载附件、tag 目录/关联。
  * 表可能不存在（老库/初始化失败）⇒ 跳过，不抛。
  */
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import {
   NOTES_FTS_TABLE,
   NOTES_SEARCH_LEDGER_TABLE,

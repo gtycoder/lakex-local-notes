@@ -121,7 +121,8 @@ class AssetSyncPlugin : Plugin() {
                 var copied = 0
                 var bytes = 0L
                 sourceDir.listFiles()?.sortedBy { it.name }?.forEach { file ->
-                    if (!file.isFile || file.name.endsWith(".tmp")) return@forEach
+                    // M-03：残留过滤统一 AtomicFiles.isTemp（原只判 ".tmp" 结尾，认不出 ".tmp-*" 前缀残留）
+                    if (!file.isFile || AtomicFiles.isTemp(file.name)) return@forEach
                     val destination = File(targetDir, file.name)
                     FileInputStream(file).use { input ->
                         FileOutputStream(destination).use { output -> input.copyTo(output, 64 * 1024) }
@@ -254,12 +255,15 @@ class AssetSyncPlugin : Plugin() {
                 return
             }
             dest.parentFile?.mkdirs()
-            val temp = File(dest.parentFile, ".tmp-" + dest.name)
             val digest = MessageDigest.getInstance("SHA-256")
             var total = 0L
+            var sha = ""
             try {
-                conn.inputStream.use { input ->
-                    FileOutputStream(temp).use { output ->
+                // M-03：原子收尾收口 [AtomicFiles]（tmp 命名 / rename 重试 / 中断清理同源）。
+                // 期望校验（可选）必须在收尾前做：不符抛 AbortWrite ⇒ 临时文件被清理、正式路径不动，
+                // 绝不把坏字节落到正式路径。
+                AtomicFiles.streamAtomic(dest, sync = false) { output ->
+                    conn.inputStream.use { input ->
                         val buf = ByteArray(64 * 1024)
                         var n = input.read(buf)
                         while (n > 0) {
@@ -270,25 +274,16 @@ class AssetSyncPlugin : Plugin() {
                             n = input.read(buf)
                         }
                     }
+                    sha = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+                    val sizeMismatch = expectedSize != null && expectedSize != total
+                    val hashMismatch = expectedSha256 != null && !expectedSha256.equals(sha, ignoreCase = true)
+                    if (sizeMismatch || hashMismatch) throw AtomicFiles.AbortWrite("corrupt")
                 }
-            } catch (e: Exception) {
-                temp.delete()
-                throw e
-            } finally {
-                conn.disconnect()
-            }
-            val sha = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-            // 期望校验（可选）：不符则丢弃临时文件、返回 corrupt，绝不把坏字节落到正式路径。
-            val sizeMismatch = expectedSize != null && expectedSize != total
-            val hashMismatch = expectedSha256 != null && !expectedSha256.equals(sha, ignoreCase = true)
-            if (sizeMismatch || hashMismatch) {
-                temp.delete()
+            } catch (corrupt: AtomicFiles.AbortWrite) {
                 call.resolve(JSObject().put("status", "corrupt").put("size", total).put("sha256", sha))
                 return
-            }
-            if (!temp.renameTo(dest)) {
-                temp.copyTo(dest, overwrite = true)
-                temp.delete()
+            } finally {
+                conn.disconnect()
             }
             call.resolve(JSObject().put("status", "ok").put("size", total).put("sha256", sha))
         } catch (e: Exception) {
@@ -339,7 +334,7 @@ class AssetSyncPlugin : Plugin() {
                 for (dir in noteRoot.listFiles() ?: emptyArray()) {
                     if (!dir.isDirectory) continue
                     val arr = JSArray()
-                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !AtomicFiles.isTemp(f.name)) arr.put(f.name)
                     notes.put(dir.name, arr)
                 }
                 val quick = JSObject()
@@ -347,7 +342,7 @@ class AssetSyncPlugin : Plugin() {
                 for (dir in quickRoot.listFiles() ?: emptyArray()) {
                     if (!dir.isDirectory) continue
                     val arr = JSArray()
-                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                    for (f in dir.listFiles() ?: emptyArray()) if (f.isFile && !AtomicFiles.isTemp(f.name)) arr.put(f.name)
                     quick.put(dir.name, arr)
                 }
                 call.resolve(JSObject().put("notes", notes).put("quickNotes", quick))
@@ -375,7 +370,7 @@ class AssetSyncPlugin : Plugin() {
                 if (dir.isDirectory) {
                     for (f in dir.listFiles() ?: emptyArray()) {
                         if (!f.isFile) continue
-                        if (f.name.startsWith(".tmp-")) continue
+                        if (AtomicFiles.isTemp(f.name)) continue
                         arr.put(JSObject().put("name", f.name).put("size", f.length()))
                     }
                 }
@@ -401,22 +396,7 @@ class AssetSyncPlugin : Plugin() {
         }
     }
 
-    private fun atomicWriteBytes(target: File, bytes: ByteArray) {
-        val parent = target.parentFile ?: throw Exception("资产父目录无效")
-        if (!parent.exists() && !parent.mkdirs()) throw Exception("资产目录创建失败")
-        val tmp = File(parent, target.name + ".tmp-" + java.util.UUID.randomUUID())
-        try {
-            java.io.FileOutputStream(tmp).use { out ->
-                out.write(bytes)
-                out.flush()
-                out.fd.sync()
-            }
-            if (!tmp.renameTo(target)) {
-                if (target.exists() && !target.delete()) throw Exception("旧资产删除失败")
-                if (!tmp.renameTo(target)) throw Exception("资产 rename 失败")
-            }
-        } finally { if (tmp.exists()) tmp.delete() }
-    }
+    // 原子写（tmp 命名 / fsync / rename 重试 / 中断清理）收口到 [AtomicFiles]（M-03，审计 03-mobile）。
 
     @PluginMethod
     fun writeLocal(call: PluginCall) {
@@ -425,7 +405,7 @@ class AssetSyncPlugin : Plugin() {
         ioPool.execute {
             try {
                 val bytes = android.util.Base64.decode(data, android.util.Base64.DEFAULT)
-                atomicWriteBytes(target, bytes)
+                AtomicFiles.writeAtomic(target, bytes)
                 call.resolve(JSObject().put("size", target.length()))
             } catch (e: Exception) {
                 Log.e(TAG, "writeLocal failed: " + e.message, e)
@@ -473,7 +453,7 @@ class AssetSyncPlugin : Plugin() {
         ioPool.execute {
             try {
                 val arr = JSArray()
-                if (target.isDirectory) for (f in target.listFiles() ?: emptyArray()) if (f.isFile && !f.name.startsWith(".tmp-")) arr.put(f.name)
+                if (target.isDirectory) for (f in target.listFiles() ?: emptyArray()) if (f.isFile && !AtomicFiles.isTemp(f.name)) arr.put(f.name)
                 call.resolve(JSObject().put("files", arr))
             } catch (e: Exception) {
                 call.reject("listLocal failed: " + e.message)
@@ -624,36 +604,34 @@ class AssetSyncPlugin : Plugin() {
                 val dir = AssetPaths.resolveAsset(getContext().filesDir, dirKey + "/__probe__", AssetPaths.Mode.WRITE).parentFile
                     ?: throw Exception("资产目录无效")
                 if (!dir.exists() && !dir.mkdirs()) throw Exception("资产目录创建失败")
-                val temp = File(dir, ".tmp-download-" + java.util.UUID.randomUUID())
-                try {
-                    var total = 0L
-                    conn.inputStream.use { input ->
-                        FileOutputStream(temp).use { output ->
-                            val buf = ByteArray(64 * 1024)
-                            var n = input.read(buf)
-                            while (n > 0) {
-                                total += n
-                                if (total > RemoteAssetRules.MAX_BYTES) throw PermanentFetchException("图片超过 25 MiB")
-                                output.write(buf, 0, n)
-                                n = input.read(buf)
-                            }
-                        }
-                    }
-                    if (total <= 0L) throw Exception("响应无内容")
+                conn.inputStream.use { input ->
+                    // M-03：先嗅探头部再定文件名（命名由内容决定），原子收尾收口 [AtomicFiles]。
                     val head = ByteArray(16)
-                    FileInputStream(temp).use { it.read(head) }
+                    var headLen = 0
+                    while (headLen < head.size) {
+                        val n = input.read(head, headLen, head.size - headLen)
+                        if (n <= 0) break
+                        headLen += n
+                    }
+                    if (headLen <= 0) throw Exception("响应无内容")
                     val sniffed = RemoteAssetRules.sniffMagic(head)
                         ?: throw PermanentFetchException("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片")
                     val filename = RemoteAssetRules.assetFilename(sniffed.extension, RemoteAssetRules.randomHex4())
                     val target = AssetPaths.resolveAsset(getContext().filesDir, dirKey + "/" + filename, AssetPaths.Mode.WRITE)
-                    if (!temp.renameTo(target)) {
-                        temp.copyTo(target, overwrite = true)
-                        temp.delete()
+                    var total = 0L
+                    AtomicFiles.streamAtomic(target, sync = false) { output ->
+                        output.write(head, 0, headLen)
+                        total = headLen.toLong()
+                        val buf = ByteArray(64 * 1024)
+                        var n = input.read(buf)
+                        while (n > 0) {
+                            total += n
+                            if (total > RemoteAssetRules.MAX_BYTES) throw PermanentFetchException("图片超过 25 MiB")
+                            output.write(buf, 0, n)
+                            n = input.read(buf)
+                        }
                     }
                     return JSObject().put("filename", filename).put("size", total).put("mimeType", sniffed.mimeType)
-                } catch (e: Exception) {
-                    temp.delete()
-                    throw e
                 }
             } finally {
                 conn.disconnect()

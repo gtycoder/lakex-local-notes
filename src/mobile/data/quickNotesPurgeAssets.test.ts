@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 import { purgeQuickNote } from "./quickNotesRepository";
 
 /**

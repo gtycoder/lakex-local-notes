@@ -6,7 +6,7 @@
  * 判据：persistQuickNoteContent 写入前检查 deleted_at / 墓碑，命中即抛明确文案；显式 restoreQuickNote 不受影响。
  */
 import { describe, expect, it } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { deleteQuickNote, readQuickNote, restoreQuickNote, saveQuickNote, saveQuickNoteContent } from "./quickNotesRepository.js";
 

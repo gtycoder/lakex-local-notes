@@ -31,7 +31,7 @@ vi.mock("./sync", () => ({
   syncDomain: {},
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { notesDomain } from "./notes";
 

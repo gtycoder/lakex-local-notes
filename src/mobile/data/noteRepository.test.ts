@@ -16,7 +16,7 @@ vi.mock("../native/assetFs", () => ({
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
 import { createNote, detectOrphans, isTombstoned, noteGoneState, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";

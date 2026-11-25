@@ -12,7 +12,7 @@ vi.mock("../native/assetFs", () => ({
   listAssetKeysFs: async () => [...assetStore.keys()],
 }));
 import { gunzipSync, gzipSync } from "node:zlib";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, saveNote } from "../data/noteRepository.js";
 import { writeQuickNoteBody } from "../data/noteBodies.js";

@@ -27,7 +27,7 @@ import {
   type BatchNotesResult,
   type BatchNotesSpace,
 } from "../../core/batchNotes";
-import type { MobileDb } from "../data/sqliteDb";
+import type { MobileDb } from "../data/dbPortTypes";
 import { ensureDb, runWrite } from "./context";
 import * as noteRepository from "../data/noteRepository.js";
 import * as noteTagLinksRepository from "../data/noteTagLinksRepository.js";

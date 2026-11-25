@@ -1,7 +1,7 @@
 /**
  * 移动端恢复缺口（261112 task-53）：显式恢复不得被用户保存守卫挡住。
  *
- * 背景（审计 13-write-guard-sweep §0.1 / §2 G8）：`restoreHistory` / `restoreSyncConflict` 曾复用
+ * 背景（SYNC-PROTOCOL §9.6 G8 越界清单，261112）：`restoreHistory` / `restoreSyncConflict` 曾复用
  * `notesDomain.saveNote` 的用户保存守卫 ⇒ 目标行已在回收站时恢复直接失败（桌面可恢复）。
  * 本用例在真实 sql.js 库 + 内存正文后端上锁三条：
  *  ① 目标在回收站 ⇒ 恢复成功、**只写内容**（trashed_at/parent/restore_pending 原样；用户裁决：恢复历史不改生命周期）；

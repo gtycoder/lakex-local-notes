@@ -7,7 +7,7 @@ import type {
   NoteSearchCaches, PlatformDataPort, PurgedTombstoneRow, QuickAssetWrite, QuickDeletedRow, QuickNoteSyncRow,
   QuickNoteWrite, QuickPurgeRow, QuickTagRow, SyncFolderRow, SyncNoteMetaRow, SyncNoteWrite,
 } from "../../core/s3v3/state/platformPort.js";
-import { executeBatch, type MobileDb } from "../data/sqliteDb.js";
+import { executeBatch, type MobileDb } from "../data/dbPortTypes.js";
 import { trashSubtree } from "../data/trashSubtree.js";
 import {
   deleteNoteBodies, deleteQuickNoteBody, moveStagedBodyFiles as moveStagedBodyFilesFs, readNoteBody, readQuickNoteBody,

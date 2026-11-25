@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { S3Client } from "@aws-sdk/client-s3";
-import { SqlJsAsyncDb, SqlJsDb } from "../mobile/data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../mobile/data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../mobile/data/schema.js";
 import { createNote, listTrashed, readNote } from "../mobile/data/noteRepository.js";
 import { listQuickNoteTrash, readQuickNote, saveQuickNote } from "../mobile/data/quickNotesRepository.js";

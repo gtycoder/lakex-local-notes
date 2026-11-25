@@ -3,7 +3,7 @@
  * 页面只消费这里的结果（不在 UI 里再写一套判据）。
  */
 import { describe, expect, it } from "vitest";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import { checkMobileDbHealth, classifyDbOpenError, describeDbHealth } from "./dbHealth.js";
 
 function fakeDb(opts: { quickCheck?: string; fkRows?: unknown[]; throwOnQuick?: boolean }): MobileDb {

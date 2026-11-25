@@ -26,7 +26,7 @@ import { MemoryRemote } from "./deviceConformance.js";
 import { Store } from "../store.js";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";
 import { S3v3SyncEngine } from "../../src/core/s3v3Engine.js";
-import { SqlJsAsyncDb, SqlJsDb } from "../../src/mobile/data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../../src/mobile/data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../../src/mobile/data/schema.js";
 import { createNote, readNote, saveNote } from "../../src/mobile/data/noteRepository.js";
 import { setBodyStoreBackendForTest, type BodyStoreBackend } from "../../src/mobile/native/bodyStore.js";

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import path from "node:path";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") }));
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { SYNC_V3_REPORTS_KEY, appendSyncDiagnostic, readSyncDiagnostics } from "./syncDiagnosticsStore.js";
 import { buildS3v3DiagnosticReport } from "../../core/s3v3Report.js";

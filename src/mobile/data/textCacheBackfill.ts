@@ -10,7 +10,7 @@
 import { normalizeNoteKind } from "../../core/noteKind.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import { readNoteBodiesBatch } from "./noteBodies.js";
-import { executeBatch, type MobileDb } from "./sqliteDb.js";
+import { executeBatch, type MobileDb } from "./dbPortTypes.js";
 
 export async function backfillTextCache(db: MobileDb, batchSize = 50): Promise<{ filled: number; batches: number }> {
   const size = Number.isSafeInteger(batchSize) && batchSize > 0 ? batchSize : 50;

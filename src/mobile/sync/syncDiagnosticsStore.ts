@@ -5,7 +5,7 @@
  * localStorage 仅作迁移/浏览器预览兜底。写入点唯一 = `bridge.syncNow()`（成功与失败各写一轮）。
  * 结构/格式化与桌面共用 `core/s3v3Report`，不另造口径。
  */
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import { parseS3v3DiagnosticReports, pushS3v3DiagnosticReport, type S3v3DiagnosticReport } from "../../core/s3v3Report";
 
 export const SYNC_V3_REPORTS_KEY = "sync_v3_reports";

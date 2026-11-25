@@ -11,7 +11,7 @@ import {
   deleteOrphanAsset,
   listOrphanAssets,
 } from "./orphanAssetRepository.js";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 
 async function createDbWithOrphans(): Promise<SqlJsAsyncDb> {
   const db = await SqlJsDb.open();

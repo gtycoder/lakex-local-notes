@@ -11,7 +11,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "./data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./data/sqliteDbWeb.js";
 import { applyMobileSchema } from "./data/schema.js";
 import {
   listTrashTree,

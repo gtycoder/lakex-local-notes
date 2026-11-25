@@ -12,7 +12,7 @@
  *
  * 内核静态化会让启动回退，故用源码级断言卡住（vitest node 环境起不了内核）。
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
@@ -84,5 +84,66 @@ describe("移动端入口不静态引入 Lake 内核", () => {
     for (const name of names) {
       expect(["mobile-bridge-data", "mobile-entry-icons", "mobile-ui-shared"]).toContain(name);
     }
+  });
+
+  // ── M-01（审计 03-mobile）：sql.js 是**测试后端**（生产 Android 用原生 SQLite），wasm 约 685KB。
+  // 静态进入口图 = 进首屏 chunk + 随 APK 分发；只允许 data/sqliteDbWeb.ts 动态 import（测试 mock/浏览器兜底）。
+  // 探针自证（AGENTS §7#21）：提取器先用已知命中样本验证，不能只看「跑通了、结果是 0」。
+  const stripComments = (src: string) => src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  /** 提取**静态** import/export 说明符；动态 import() 是懒边界，不算入口静态图。 */
+  const staticImportSpecifiers = (src: string): string[] => {
+    const code = stripComments(src);
+    const specs: string[] = [];
+    for (const m of code.matchAll(/(?:^|[\n;])[ \t]*(?:import|export)\b[^;]*?from\s*["']([^"']+)["']/g)) specs.push(m[1]);
+    for (const m of code.matchAll(/(?:^|[\n;])[ \t]*import\s*["']([^"']+)["']/g)) specs.push(m[1]);
+    return specs;
+  };
+  /** 相对说明符 → 源文件（.ts/.tsx/.js）；裸说明符与资源不入图（sql.js 家族在图外单独判）。 */
+  const resolveModuleFile = (fromFile: string, spec: string): string | null => {
+    if (!spec.startsWith(".")) return null;
+    const target = decodeURIComponent(new URL(spec, new URL("file://" + fromFile)).pathname);
+    const base = target.replace(/\.jsx?$/, "");
+    for (const candidate of [target, base + ".ts", base + ".tsx", base + ".js"]) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return null;
+  };
+  /** 从入口走静态 import 图（BFS，去重），返回可达源码文件集与 sql.js 违规清单。 */
+  const staticImportGraph = (entry: URL): { files: Set<string>; violations: string[] } => {
+    const files = new Set<string>();
+    const violations: string[] = [];
+    const queue: string[] = [decodeURIComponent(entry.pathname)];
+    while (queue.length > 0) {
+      const file = queue.pop() as string;
+      if (files.has(file)) continue;
+      files.add(file);
+      for (const spec of staticImportSpecifiers(readFileSync(file, "utf8"))) {
+        if (spec === "sql.js" || spec.startsWith("sql.js/")) {
+          violations.push(file + " -> " + spec);
+          continue;
+        }
+        const resolved = resolveModuleFile(file, spec);
+        if (resolved != null && /\.tsx?$/.test(resolved)) queue.push(resolved);
+      }
+    }
+    return { files, violations };
+  };
+
+  it("静态 import 提取器自证（已知样本必须命中、注释不得误报）", () => {
+    expect(staticImportSpecifiers('import initSqlJs from "sql.js";')).toEqual(["sql.js"]);
+    expect(staticImportSpecifiers('import { executeBatch } from "./data/dbPortTypes.js";')).toEqual(["./data/dbPortTypes.js"]);
+    expect(staticImportSpecifiers('export type { MobileDb } from "./data/dbPortTypes.js";')).toEqual(["./data/dbPortTypes.js"]);
+    // 动态 import 是懒边界（wasm 随 lazy chunk 走）——不得计入静态图
+    expect(staticImportSpecifiers('const m = await import("sql.js");')).toEqual([]);
+    // 注释里的 import 不算
+    expect(staticImportSpecifiers('// import initSqlJs from "sql.js";')).toEqual([]);
+    expect(staticImportSpecifiers('/*\n * import x from "sql.js";\n */\nimport { y } from "./a";')).toEqual(["./a"]);
+  });
+
+  it("入口静态图不得出现 sql.js（M-01：wasm 不进首屏 chunk 与 APK）", () => {
+    const { files, violations } = staticImportGraph(new URL("./main.tsx", import.meta.url));
+    expect(violations).toEqual([]);
+    // sql.js 后端（data/sqliteDbWeb.ts）只许测试 mock / 浏览器兜底动态 import，入口可达集里不得出现
+    for (const file of files) expect(file.endsWith("sqliteDbWeb.ts")).toBe(false);
   });
 });

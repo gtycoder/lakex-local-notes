@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { listNotebookTree } from "./notebookTreeRepository";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
   default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"),

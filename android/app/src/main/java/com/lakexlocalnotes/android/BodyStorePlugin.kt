@@ -8,9 +8,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.util.UUID
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -57,28 +55,7 @@ class BodyStorePlugin : Plugin() {
         return file
     }
 
-    /** 原子写：同目录临时文件 → fsync → rename。失败清理临时文件。 */
-    private fun atomicWrite(target: File, sync: Boolean = true, writeBody: (FileOutputStream) -> Unit) {
-        val parent = target.parentFile ?: throw IOException("正文父目录无效")
-        if (!parent.exists() && !parent.mkdirs()) throw IOException("正文目录创建失败")
-        val tmp = File(parent, target.name + ".tmp-" + UUID.randomUUID())
-        try {
-            FileOutputStream(tmp).use { out ->
-                writeBody(out)
-                out.flush()
-                // sync=false（批量导入）：原子 rename 仍在，只是不逐文件 fsync —— 进程被杀不会丢
-                // （页缓存在），断电可能丢最近写入；正文在云端有同内容副本，下轮按 hash 自愈。
-                if (sync) out.fd.sync()
-            }
-            if (!tmp.renameTo(target)) {
-                // 某些文件系统 rename 目标存在会失败：先删再 rename（同目录下仍是原子的）。
-                if (target.exists() && !target.delete()) throw IOException("旧正文删除失败")
-                if (!tmp.renameTo(target)) throw IOException("正文 rename 失败")
-            }
-        } finally {
-            if (tmp.exists()) tmp.delete()
-        }
-    }
+    // 原子写（tmp 命名 / fsync / rename 重试 / 中断清理）收口到 [AtomicFiles]（M-03，审计 03-mobile）。
 
     private fun readTextFile(file: File): String? {
         if (!file.isFile) return null
@@ -90,7 +67,7 @@ class BodyStorePlugin : Plugin() {
         val file = resolveOrReject(call) ?: return
         val data = call.getString("data") ?: run { call.reject("data 必填"); return }
         try {
-            atomicWrite(file) { out -> out.write(data.toByteArray(Charsets.UTF_8)) }
+            AtomicFiles.streamAtomic(file) { out -> out.write(data.toByteArray(Charsets.UTF_8)) }
             val res = JSObject()
             res.put("size", file.length())
             call.resolve(res)
@@ -107,7 +84,7 @@ class BodyStorePlugin : Plugin() {
     @PluginMethod
     fun writeMany(call: PluginCall) {
         val items = call.getArray("items") ?: run { call.reject("items 必填"); return }
-        // 同步批量导入默认 durable=false（见 atomicWrite 注释）；单写/用户保存仍逐文件 fsync。
+        // 同步批量导入默认 durable=false（见 AtomicFiles.streamAtomic 注释）；单写/用户保存仍逐文件 fsync。
         val durable = call.getBoolean("durable", true) ?: true
         var written = 0
         var bytes = 0L
@@ -116,7 +93,7 @@ class BodyStorePlugin : Plugin() {
                 val item = items.getJSONObject(i)
                 val file = resolve(item.optString("path", "")) ?: throw IOException("非法正文路径: " + item.optString("path", ""))
                 val data = item.optString("data", "")
-                atomicWrite(file, durable) { out -> out.write(data.toByteArray(Charsets.UTF_8)) }
+                AtomicFiles.streamAtomic(file, durable) { out -> out.write(data.toByteArray(Charsets.UTF_8)) }
                 written += 1
                 bytes += file.length()
             }
@@ -277,8 +254,8 @@ class BodyStorePlugin : Plugin() {
         val file = resolveOrReject(call) ?: return
         val data = call.getString("data") ?: run { call.reject("data 必填"); return }
         try {
-            atomicWrite(file) { out ->
-                // 只 finish、不能 close：close 会连带关掉外层 FileOutputStream，atomicWrite 随后还要 fd.sync()。
+            AtomicFiles.streamAtomic(file) { out ->
+                // 只 finish、不能 close：close 会连带关掉外层 FileOutputStream，streamAtomic 随后还要 fd.sync()。
                 val gz = GZIPOutputStream(out)
                 gz.write(data.toByteArray(Charsets.UTF_8))
                 gz.finish()

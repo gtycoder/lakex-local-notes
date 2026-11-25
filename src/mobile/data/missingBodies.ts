@@ -38,7 +38,7 @@ import {
 import { loadV3State } from "./v3StateRepository.js";
 import { indexNote } from "./searchIndex.js";
 import { indexQuickNote } from "./quickNotesSearch.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 
 /**
  * 每次批量 stat 的条数。原生 BodyStore.statMany 一次桥往返可带很多路径，但：

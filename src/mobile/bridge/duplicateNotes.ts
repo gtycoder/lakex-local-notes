@@ -19,7 +19,7 @@ import {
   summarizeDuplicateResults,
   type DuplicateNotesItemResult,
 } from "../../core/duplicateNotes";
-import type { MobileDb } from "../data/sqliteDb";
+import type { MobileDb } from "../data/dbPortTypes";
 import { duplicateNote } from "../data/duplicateNotes";
 import { ensureDb, runWrite } from "./context";
 

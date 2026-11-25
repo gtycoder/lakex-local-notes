@@ -9,7 +9,7 @@
  *  - 打开成功但 quick_check 报错 ⇒ checkMobileDbHealth。
  * 页面只消费这里的结果，别在 UI 里再写一套判据。
  */
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 
 export interface MobileDbHealth {
   ok: boolean;

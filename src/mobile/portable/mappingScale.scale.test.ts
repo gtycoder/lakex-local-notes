@@ -106,7 +106,7 @@ vi.mock("../data/v3StateRepository", () => ({
 }));
 vi.mock("../data/derivedSearchCache", () => ({ clearSearchDerivedCache: async () => undefined }));
 vi.mock("../data/searchIndex", () => ({ reconcileIndex: async () => undefined }));
-vi.mock("../data/sqliteDb", () => ({ executeBatch: async () => undefined }));
+vi.mock("../data/dbPortTypes", () => ({ executeBatch: async () => undefined }));
 
 describe.skipIf(!SCALE)("移动导入桥往返（审计⑥）", () => {
   it("runPortableImport 读 5000 note 行：nativeReadPortableRows 桥调用 = ceil(5000/500) 桌面布局路", async () => {

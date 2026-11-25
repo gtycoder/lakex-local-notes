@@ -11,7 +11,7 @@
  *  ③ 正文全程可读（副本可恢复）。
  */
 import { describe, expect, it, vi } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote } from "../data/noteRepository.js";
 import { listTrashed } from "../data/noteRepository.js";

@@ -120,7 +120,7 @@ export async function closeDbForPortableImport(): Promise<void> {
   db = null;
   dbInitialization = null;
   if (!current) return;
-  // 261117 恢复演练实锤（design-plans/device-debt-261117 §2.1）：原生快照只复制**主库文件**，
+  // 261117 恢复演练实锤（docs/DEVICE-DEBT.md §2.1）：原生快照只复制**主库文件**，
   // 未合 WAL 的陈旧主库会让导出自检把「已删行」误判成缺正文、拒绝导出（资源管理又是空的 = 用户死胡同）。
   // 关闭前显式 wal_checkpoint(TRUNCATE) 把 WAL 合回主库并清掉 —— 本函数契约就是「关闭后 DB/WAL 一致」，
   // 导出/导入两条路径都必须先经过它；关不掉也继续的分支同样受益（checkpoint 已在关闭前完成）。

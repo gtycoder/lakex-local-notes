@@ -8,7 +8,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") }));
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createMobilePlatformPort } from "./mobilePlatformPort.js";
 

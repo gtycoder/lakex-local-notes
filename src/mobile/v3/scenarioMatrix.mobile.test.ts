@@ -26,7 +26,7 @@ vi.mock("../native/assetFs", () => ({
   removeQuickNoteAssetsDirFs: async (id: string) => { for (const key of [...assetState.current.keys()]) if (key.startsWith("quick-notes/" + id + "/")) assetState.current.delete(key); },
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, listTrashed, readNote, saveNote, trashNote } from "../data/noteRepository.js";
 import { setBodyStoreBackendForTest, type BodyStoreBackend } from "../native/bodyStore.js";

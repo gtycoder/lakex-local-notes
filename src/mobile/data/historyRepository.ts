@@ -4,7 +4,7 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { selectHistoryDrops } from "../../core/storeUtils.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
 import { historySnapshotRelativePath } from "../../core/noteBodyPaths.js";
-import { executeBatch, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
+import { executeBatch, type MobileBatchStatement, type MobileDb } from "./dbPortTypes";
 import { readNoteBody, readHistorySnapshot, writeHistorySnapshot, deleteHistorySnapshot } from "./noteBodies.js";
 
 /**

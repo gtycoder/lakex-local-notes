@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { S3Settings } from "../../lib/types";
+import { resolveSecretField, S3_SECRET_MASK as CORE_S3_SECRET_MASK } from "../../core/s3SecretPolicy.js";
 
 const mocks = vi.hoisted(() => ({
   getS3Settings: vi.fn(),
@@ -232,5 +233,20 @@ describe("useS3SettingsForm", () => {
   it("接线钉：SettingsDrawer 用页面级 open 水合 S3 表单（open && view === \"s3\"）", () => {
     const src = readFileSync(`${process.cwd()}/src/mobile/settings/SettingsDrawer.tsx`, "utf8");
     expect(src).toContain('useS3SettingsForm(open && view === "s3")');
+  });
+});
+
+describe("M-10 Secret 策略同源（core/s3SecretPolicy）", () => {
+  it("导出的 S3_SECRET_MASK 与 core 是同一份（掩码字面量只允许在 core 定义）", () => {
+    expect(S3_SECRET_MASK).toBe(CORE_S3_SECRET_MASK);
+  });
+
+  it("三态裁决与 core resolveSecretField 同源（掩码/留空沿用、新值覆盖）", () => {
+    expect(resolveSecretField(S3_SECRET_MASK, "saved-sk")).toBe("saved-sk");
+    expect(resolveSecretField("", "saved-sk")).toBe("saved-sk");
+    expect(resolveSecretField("  ", "saved-sk")).toBe("saved-sk");
+    expect(resolveSecretField("new-sk", "saved-sk")).toBe("new-sk");
+    // 无已存值时保持空（掩码不当密钥写入），交给校验拦截
+    expect(resolveSecretField(S3_SECRET_MASK, undefined)).toBe("");
   });
 });

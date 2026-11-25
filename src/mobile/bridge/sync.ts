@@ -231,7 +231,7 @@ export async function pushSingleQuickNote(id: string, deps: { cfg?: S3Settings }
 /** 派生搜索索引的后台重建（去抖、串行、失败静默；P0-5）。 */
 let searchReconcileTimer: ReturnType<typeof setTimeout> | null = null;
 let searchReconcileRunning = false;
-function scheduleSearchReconcile(db: import("../data/sqliteDb.js").MobileDb): void {
+function scheduleSearchReconcile(db: import("../data/dbPortTypes.js").MobileDb): void {
   if (searchReconcileTimer) clearTimeout(searchReconcileTimer);
   searchReconcileTimer = setTimeout(() => {
     searchReconcileTimer = null;

@@ -13,6 +13,7 @@
  *
  * 红线边界（lake-core）：纯逻辑，不碰 DOM / node:。WebCrypto 是两端（Chromium / Node 24）都有的标准能力。
  */
+import { S3_SECRET_MASK } from "./s3SecretPolicy.js";
 import { normalizeEndpoint, validateS3Settings, type S3Settings } from "./syncUtils.js";
 
 /** 迁移码前缀（版本化；解码只认这个前缀，便于把「贴错内容」与「码损坏」分开报错）。 */
@@ -75,10 +76,10 @@ function transferKey(): Promise<CryptoKey> {
   return cachedKey;
 }
 
-/** AK 打码：保留首尾各 4 位，中间省略；短于 12 位一律全打码。 */
+/** AK 打码：保留首尾各 4 位，中间省略；短于 12 位一律全打码（掩码常量同源 core/s3SecretPolicy，M-10）。 */
 export function maskAccessKeyId(accessKeyId: string): string {
   const key = accessKeyId.trim();
-  if (key.length < 12) return "********";
+  if (key.length < 12) return S3_SECRET_MASK;
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
 }
 

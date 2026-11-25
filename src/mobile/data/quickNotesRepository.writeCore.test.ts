@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes";
 
 vi.mock("./noteBodies.js", () => ({
   readQuickNoteBody: vi.fn(async () => null),

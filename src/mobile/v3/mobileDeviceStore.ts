@@ -1,7 +1,7 @@
 import { HISTORY_SNAPSHOT_PROTECT_DAYS, type DeviceBaseline, type DeviceState, type S3v3DeviceStore } from "../../core/s3v3DeviceStore.js";
 import type { QuickPushSnapshot } from "../../core/s3v3/quickPush/types.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import {
   clearStagingBodies, readBodyStaging, readBodyStagingMany,
   readNoteBody, readNoteBodiesBatch, readQuickNoteBody, removeBodyStaging, statBodyStagingMany, statNoteBodiesBatch,

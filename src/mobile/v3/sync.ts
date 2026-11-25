@@ -2,7 +2,7 @@ import { consumePendingFirstEncounterMode, targetKeyOf } from "../../core/firstE
 import { S3v3SyncEngine, type QuickNotePushResult, type S3v3DeepCleanupResult, type S3v3SyncReport } from "../../core/s3v3Engine.js";
 import type { S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
 import type { S3v3DeviceStore } from "../../core/s3v3DeviceStore.js";
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { createMobileS3v3Remote, getMobileS3v3RemoteCached, invalidateMobileS3v3RemoteCache } from "./s3v3Remote.js";

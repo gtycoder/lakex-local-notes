@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { S3Client } from "@aws-sdk/client-s3";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { setBaselineFileForDbForTest } from "../data/v3BaselineFile.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, readNote } from "../data/noteRepository.js";

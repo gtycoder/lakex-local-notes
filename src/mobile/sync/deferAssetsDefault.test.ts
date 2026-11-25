@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { saveV3State, ensureV3StateTable, EMPTY_MOBILE_V3_STATE, type MobileV3State } from "../data/v3StateRepository.js";
 import { SYNC_STORAGE_KEY } from "../bridge/context.js";

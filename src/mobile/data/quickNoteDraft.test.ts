@@ -7,8 +7,8 @@
 import { describe, expect, it, vi } from "vitest";
 import path from "node:path";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
-import type { MobileDb } from "./sqliteDb";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
+import type { MobileDb } from "./dbPortTypes";
 import { clearQuickNoteDraft, readQuickNoteDraft, writeQuickNoteDraft } from "./quickNotesRepository";
 import { readDraftJournal, writeDraftJournal } from "./noteBodies.js";
 

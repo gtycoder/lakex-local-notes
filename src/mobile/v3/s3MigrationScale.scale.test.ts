@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { S3Client } from "@aws-sdk/client-s3";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, listTrashed, readNote, saveNote, trashNote } from "../data/noteRepository.js";
 import { readQuickNote, saveQuickNote } from "../data/quickNotesRepository.js";

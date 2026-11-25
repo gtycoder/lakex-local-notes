@@ -9,7 +9,7 @@
  * - 未手动排序：默认「新的在前（created_at DESC）→ 名称」；手动拖拽后按本机 sort_order，新增追加末尾。
  */
 import { normalizeQuickNoteTag, quickNoteTagId, type QuickNoteTag } from "../../core/quickNoteTags.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import { listQuickNoteIdsForTags, removeQuickNoteTagLinksInTransaction } from "./quickNoteTagLinksRepository.js";
 import { removeNoteTagLinksInTransaction } from "./noteTagLinksRepository.js";
 

@@ -24,9 +24,11 @@ const MAX_S3_KEY_LENGTH = 512;
 /**
  * W-14：S3 Secret 掩码。get_s3_settings 不再把解密后的明文 Secret 返回渲染层
  * （渲染层所有 console 输出会经 console-message 转发落盘）。设置面板显示掩码；
- * 保存时若 secretAccessKey 仍为掩码则保留已存储密钥，否则按新值覆盖。
+ * 保存时若 secretAccessKey 仍为掩码（或留空）则保留已存储密钥，否则按新值覆盖。
+ * 掩码与裁决同源 = src/core/s3SecretPolicy.ts（M-10），此处只留导出供既有调用方使用。
  */
-export const S3_SECRET_MASK = "********";
+import { resolveSecretField, S3_SECRET_MASK } from "../../src/core/s3SecretPolicy.js";
+export { S3_SECRET_MASK };
 
 interface ValidatedS3Settings {
   endpoint: string;
@@ -113,12 +115,15 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     }
   });
   ipc.handle("save_s3_settings", (settings: unknown) => {
-    assertS3Settings(settings);
-    const next = { ...(settings as Parameters<Store["saveS3Settings"]>[0]) };
-    // 掩码回传 = 用户未修改密钥 → 保留存储中的原值（含未配置时保持空）
-    if (next.secretAccessKey === S3_SECRET_MASK) {
-      next.secretAccessKey = store.getS3Settings()?.secretAccessKey ?? "";
-    }
+    const raw = (settings ?? {}) as Record<string, unknown>;
+    // M-10（裁决同源 core/s3SecretPolicy）：掩码/留空 = 用户未改密钥 → 保留存储中的原值（含未配置时保持空）。
+    // 必须**先裁决再校验**：validateS3Settings 拒空值，裁决放校验后「留空沿用」永远走不到
+    // （移动表单同口径：过桥前已裁决）。仅对字符串草稿裁决，类型错误原样交回校验拒绝。
+    const prepared: Record<string, unknown> = typeof raw.secretAccessKey === "string"
+      ? { ...raw, secretAccessKey: resolveSecretField(raw.secretAccessKey, store.getS3Settings()?.secretAccessKey) }
+      : raw;
+    assertS3Settings(prepared);
+    const next = { ...(prepared as Parameters<Store["saveS3Settings"]>[0]) };
     const previous = store.getS3Settings();
     store.saveS3Settings(next);
     // SEC-02：同步目标被改向时只记一条 warn（不弹窗打扰用户），事后能对账"什么时候传到哪儿去了"。

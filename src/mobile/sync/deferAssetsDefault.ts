@@ -8,7 +8,7 @@
  *  - 没存过 + 账本为空 ⇒ **全新设备**（本机从未同步过），默认开，并固化进设置，
  *    避免出现「首次按需、下一次同步又全量下载」的抖动。
  */
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import { ensureV3StateTable, loadV3State, type MobileV3State } from "../data/v3StateRepository.js";
 import { hasStoredSyncSettings, readSyncSettings } from "../bridge/context";
 

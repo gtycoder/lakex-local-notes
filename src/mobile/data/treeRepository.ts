@@ -1,4 +1,4 @@
-import { executeBatch, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
+import { executeBatch, type MobileBatchStatement, type MobileDb } from "./dbPortTypes";
 import type { TreeNode, TreeNodeType } from "../../lib/types";
 import {
   assertMoveTarget,

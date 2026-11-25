@@ -1,7 +1,7 @@
 import { nextSortOrder } from "../../core/treeRules.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
 import { withWriteLock } from "../sync/maintenanceLocks";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import { readNoteBody } from "./noteBodies.js";
 
 /**

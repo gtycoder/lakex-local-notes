@@ -14,8 +14,8 @@ import {
   listNoteHistory,
   readHistory,
 } from "./historyRepository.js";
-import { SqlJsDb } from "./sqliteDb.js";
-import { SqlJsAsyncDb } from "./sqliteDb.js";
+import { SqlJsDb } from "./sqliteDbWeb.js";
+import { SqlJsAsyncDb } from "./sqliteDbWeb.js";
 
 describe("mobile history repository", () => {
   it("快照正文写 *.body.gz 文件，DB 只存 file_path；readHistory 能解压回原文", async () => {

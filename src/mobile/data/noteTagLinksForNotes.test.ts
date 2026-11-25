@@ -11,7 +11,7 @@ vi.mock("../native/assetFs", () => ({
   listNoteAssetKeysFs: async () => [], listQuickNoteAssetKeysFs: async () => [], listAssetKeysFs: async () => [],
   removeNoteAssetsDirFs: async () => {}, removeQuickNoteAssetsDirFs: async () => {},
 }));
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { listNoteTagIdsForNotes } from "./noteTagLinksRepository.js";
 

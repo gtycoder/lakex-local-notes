@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { IpcInputError } from "../../src/core/ipcLimits.js";
 import type { S3Settings } from "../../src/core/syncUtils.js";
+import { resolveSecretField, S3_SECRET_MASK as CORE_S3_SECRET_MASK } from "../../src/core/s3SecretPolicy.js";
 import type { IpcRegistrar } from "./registrar.js";
 
 /**
@@ -119,5 +120,27 @@ describe("SEC-02：S3 配置保存前校验", () => {
     expect(h.warn).toHaveBeenCalledTimes(1);
     expect(String(h.warn.mock.calls[0][0])).toContain("https://evil.example");
     expect(h.current()?.endpoint).toBe("https://evil.example");
+  });
+});
+
+describe("M-10 Secret 策略同源（core/s3SecretPolicy）", () => {
+  it("导出的 S3_SECRET_MASK 与 core 是同一份（掩码字面量只允许在 core 定义）", () => {
+    expect(S3_SECRET_MASK).toBe(CORE_S3_SECRET_MASK);
+  });
+
+  it("三态裁决与 core resolveSecretField 同源（掩码/留空沿用、新值覆盖）", () => {
+    expect(resolveSecretField(S3_SECRET_MASK, "sk-old")).toBe("sk-old");
+    expect(resolveSecretField("", "sk-old")).toBe("sk-old");
+    expect(resolveSecretField("sk-new", "sk-old")).toBe("sk-new");
+    expect(resolveSecretField(S3_SECRET_MASK, undefined)).toBe("");
+  });
+
+  it("留空 Secret = 沿用已保存值（与移动表单同口径：先裁决后校验）", () => {
+    const h = harness({ ...VALID });
+    h.call("save_s3_settings", { ...VALID, secretAccessKey: "", bucket: "local-lake-hebei" });
+    expect(h.current()?.secretAccessKey).toBe("sk-test");
+    // 未配置 + 掩码/留空 ⇒ 裁决为空，照旧被非空校验拒（不静默存空密钥）
+    const fresh = harness(null);
+    expect(rejection(() => fresh.call("save_s3_settings", { ...VALID, secretAccessKey: S3_SECRET_MASK }))).toMatch(/不能为空/);
   });
 });

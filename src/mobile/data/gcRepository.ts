@@ -1,5 +1,5 @@
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 
 export interface S3GcPendingKey {
   key: string;

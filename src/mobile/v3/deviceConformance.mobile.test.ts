@@ -21,7 +21,7 @@ vi.mock("../native/assetFs", () => ({
   },
 }));
 import { defineDeviceContract, type ContractHarnessFactory } from "../../../electron/s3v3/deviceConformance.js";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote, listTrashed, saveNote, trashNote } from "../data/noteRepository.js";
 import { trashTreeItem } from "../data/trashRepository.js";

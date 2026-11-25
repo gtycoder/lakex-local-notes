@@ -4,7 +4,7 @@
  * 分工：消息正文 + 资料快照在 `files/ai/conversations/{id}.json`（BodyStore 原子写，≤2MiB/份），
  * 这里只存「列表 / 搜索 / 淘汰」需要的元数据；**不进 S3**。
  */
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 
 export const AI_CONVERSATION_MAX_COUNT = 50;
 export const AI_CONVERSATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;

@@ -21,14 +21,14 @@ vi.mock("../native/assetFs", () => ({
   removeNoteAssetsDirFs: vi.fn(async () => {}),
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { listTrashTree, purgeTreeItem, restoreTreeItem, trashTreeItem } from "./trashRepository.js";
 import { trashSubtree } from "./trashSubtree.js";
 import { indexNote } from "./searchIndex.js";
 import Database from "better-sqlite3";
 import { notesFtsDDL } from "../../core/search/schema.js";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 
 /** better-sqlite3 异步适配器（sql.js 无 FTS5 ⇒ 索引语义用例走生产同款 FTS5；同 searchIndex.test.ts）。 */
 function adapt(raw: Database.Database): MobileDb {

@@ -5,7 +5,7 @@ import { searchTextForKind } from "../../core/noteSearchText.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 import type { MobileSearchResult } from "../search/searchTypes.js";
 import type { SearchScope } from "../search/searchScope.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import { readNoteBody } from "./noteBodies.js";
 
 function hashText(text: string): string {

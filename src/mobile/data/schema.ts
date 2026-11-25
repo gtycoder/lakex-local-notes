@@ -1,4 +1,4 @@
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import {
   NOTES_FTS_TABLE,
   NOTES_SEARCH_LEDGER_ROWID_INDEX,

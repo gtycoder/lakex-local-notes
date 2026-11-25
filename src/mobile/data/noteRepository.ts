@@ -8,7 +8,7 @@ import { hasNoteSaveChanges } from "../../core/noteSaveDecision.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 import { deleteNoteBodies, readNoteBody, writeNoteBody } from "./noteBodies.js";
 import { trashSubtree } from "./trashSubtree.js";
 

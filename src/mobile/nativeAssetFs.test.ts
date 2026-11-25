@@ -7,7 +7,9 @@ describe("移动端资产文件操作原生化（261026）", () => {
     for (const name of ["writeLocal", "readLocal", "removeLocal", "listLocal"]) {
       expect(P).toContain("fun " + name + "(call: PluginCall)");
     }
-    expect(P).toContain("atomicWriteBytes");
+    // M-03：原子写/残留过滤收口到 AtomicFiles（tmp 命名与 rename 重试同源，不再各自手写）
+    expect(P).toContain("AtomicFiles.writeAtomic");
+    expect(P).toContain("AtomicFiles.isTemp");
   });
   it("assetFs 优先走原生，旧 APK/非原生回退 Filesystem", () => {
     expect(F).toContain("nativeAssetFsAvailable");

@@ -5,7 +5,7 @@
  * 与桌面同名语义：集合 + 关系版本 LWW；**保留本机顺序、远端新增插最前**；应用时过滤目录不存在的 id。
  */
 import { normalizeQuickNoteTagIds, shouldSkipEmptyTagDirectoryCleanup } from "../../core/quickNoteTags.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 
 const KIND = "note";
 

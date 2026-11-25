@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyMobileSchema } from "./schema";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb";
 import { listNotebookTree } from "./notebookTreeRepository";
 import { listNotes } from "./noteRepository";
 import { listQuickNotePage } from "./quickNotesRepository";

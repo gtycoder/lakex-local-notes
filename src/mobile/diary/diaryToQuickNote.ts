@@ -21,7 +21,7 @@ import {
   type StoredQuickNoteImage,
 } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import { readNote } from "../data/noteRepository.js";
 import { removeUnsyncedQuickNote, saveQuickNoteContent } from "../data/quickNotesRepository.js";
 import * as trashRepository from "../data/trashRepository.js";

@@ -7,7 +7,7 @@ import {
   unackedConflictCount,
   type SyncConflictEvent,
 } from "../../core/syncConflictLog.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 
 export interface MobileSyncConflictRow {
   id: string;

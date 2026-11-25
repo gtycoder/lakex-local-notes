@@ -9,7 +9,7 @@
  *  - 失败只 warn、不阻断启动（欢迎页不是核心数据）。
  */
 import { WELCOME_QUICK_NOTE_ID, welcomeLakeBody, welcomeQuickNoteText } from "../../core/lakeDocForm.js";
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 import { saveQuickNoteContent } from "./quickNotesRepository";
 
 export const WELCOME_QUICK_NOTE_FLAG = "welcome_quick_note_initialized";

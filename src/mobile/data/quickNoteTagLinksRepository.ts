@@ -3,7 +3,7 @@
  * 表：tag_links(target_kind,target_id,tag_id,position) + tag_link_versions(每目标关系版本)。
  */
 import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 
 const KIND = "quickNote";
 

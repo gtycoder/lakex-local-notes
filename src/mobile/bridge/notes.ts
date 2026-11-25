@@ -25,7 +25,7 @@ import { noteBodyPath } from "../data/noteBodies.js";
 import { applyRestoredNoteBody, scanMissingBodies, type MissingBodiesSnapshot } from "../data/missingBodies.js";
 import { mobileReadonlyReason } from "../lib/readonlyText.js";
 import type { LocalNote } from "../data/noteRepository.js";
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";

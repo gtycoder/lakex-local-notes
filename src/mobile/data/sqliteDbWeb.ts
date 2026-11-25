@@ -1,75 +1,23 @@
 /**
  * 测试专用移动 SQLite：sql.js（WASM，同步 API）—— 生产端是 Android 原生 SQLite（nativeSqliteDb.ts）。
  *
- * - 与桌面 `electron/dbLike.ts`（V5 Phase 2）的接口形态对齐：
- *   prepare / exec / transaction 全同步（better-sqlite3 风格）。
- * - 历史遗留的 sql.js 持久化已移除；现在只保留同步 API 形态供测试和一次性迁移验证使用。
+ * M-01（审计 03-mobile）拆分：本文件只放 sql.js 后端（SqlJsDb/SqlJsAsyncDb），**仅测试 mock
+ * （native/nativeSqliteDbTestMock.ts）与浏览器兜底使用**；接口与批量工具在 data/dbPortTypes.ts。
+ * sql.js 与 wasm 在本文件内**静态 import**——本文件自身不在生产可达图（生产只 import dbPortTypes）
+ * ⇒ 整个模块连同 sql.js/wasm 不进任何生产 chunk 与 APK；护栏 = mobileLazyChunks.test.ts。
+ * （261125 回归修复：曾改动态 import("…?url")，vitest 下 ?url 动态解析路径错误 + 全库未处理拒绝；
+ *   静态 ?url 是旧实现验证过的形态，模块边界已由拆分保证，无需再靠动态 import 隔离。）
+ *
  * - POC 结论（见 docs/MOBILE-TECH-STACK.md）：
  *   wa-sqlite 官方包 JS 层硬编码 Asyncify（async=true），无法直接同步调用；
  *   sql.js 提供现成同步 API，作为 WASM 路线的 DbLike 实现。
+ * - 历史遗留的 sql.js 持久化已移除；现在只保留同步 API 形态供测试和一次性迁移验证使用。
  */
 import initSqlJs, { type Database, type Statement, type SqlJsStatic } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import type { DbLike, DbLikeStatement, MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 
-export interface DbLikeStatement {
-  get(...params: unknown[]): Record<string, unknown> | undefined;
-  all(...params: unknown[]): Record<string, unknown>[];
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
-}
-
-export interface DbLike {
-  prepare(sql: string): DbLikeStatement;
-  transaction<T extends (...args: never[]) => unknown>(fn: T): T;
-  pragma(source: string, options?: unknown): unknown;
-  exec(sql: string): void;
-  close(): void;
-}
-
-export interface MobileDbStatement {
-  get(...params: unknown[]): Promise<Record<string, unknown> | undefined>;
-  all(...params: unknown[]): Promise<Record<string, unknown>[]>;
-  run(...params: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
-}
-
-export interface MobileDb {
-  prepare(sql: string): MobileDbStatement;
-  /**
-   * 可选：N 条语句一次下发（原生一次桥往返）。默认由原生包一层事务；
-   * **已在事务内**时调用方必须传 `{ transaction: false }`（否则原生会重复 BEGIN）。
-   */
-  executeSet?(set: Array<{ statement: string; values: unknown[] }>, options?: { transaction?: boolean }): Promise<void>;
-  transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<Awaited<ReturnType<T>>>;
-  pragma(source: string): Promise<unknown>;
-  exec(sql: string): Promise<void>;
-  databaseSizeBytes(): Promise<number>;
-  close(): Promise<void>;
-}
-
-export interface MobileBatchStatement {
-  statement: string;
-  values: unknown[];
-}
-
-/** 一个用户动作 = 一个事务/一次桥往返；executeSet 失败直接抛，不逐条重放造成部分成功。 */
-export async function executeBatch(d: MobileDb, statements: MobileBatchStatement[]): Promise<void> {
-  if (statements.length === 0) return;
-  if (d.executeSet) {
-    await d.executeSet(statements);
-    return;
-  }
-  await d.transaction(async () => executeBatchInTransaction(d, statements));
-}
-
-/** 已在事务内时使用：有 executeSet 走单次下发，否则逐条执行（绝不再开嵌套事务）。 */
-export async function executeBatchInTransaction(d: MobileDb, statements: MobileBatchStatement[]): Promise<void> {
-  if (statements.length === 0) return;
-  if (d.executeSet) {
-    // 已经在外层事务里：不能再让原生开一次事务（否则 "Already in transaction"）。
-    await d.executeSet(statements, { transaction: false });
-    return;
-  }
-  for (const item of statements) await d.prepare(item.statement).run(...item.values);
-}
+export type { DbLike, DbLikeStatement, MobileDb, MobileDbStatement } from "./dbPortTypes.js";
 
 let SQL: SqlJsStatic | null = null;
 

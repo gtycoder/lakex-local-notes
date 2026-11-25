@@ -1,4 +1,4 @@
-import type { MobileDb, MobileDbStatement } from "../data/sqliteDb.js";
+import type { MobileDb, MobileDbStatement } from "../data/dbPortTypes.js";
 import { loadCapacitorSqlite } from "./sqlitePlugin";
 
 type MobileRow = Record<string, unknown>;

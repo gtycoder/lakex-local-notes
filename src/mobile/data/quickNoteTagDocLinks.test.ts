@@ -25,7 +25,7 @@ vi.mock("../native/assetFs", () => ({
   removeQuickNoteAssetsDirFs: async () => {},
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { createQuickNoteTag } from "./quickNoteTagsRepository.js";
 import { listQuickNoteTagIds } from "./quickNoteTagLinksRepository.js";

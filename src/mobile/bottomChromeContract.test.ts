@@ -108,7 +108,7 @@ const BOTTOM_SAFE_ALLOWLIST: { file: string; selectorIncludes: string; why: stri
   // ── 内部装饰/卡内定位（非屏底表面）──
   { file: "bitable/mobileBitable.css", selectorIncludes: ".mbt-viewrow.is-drop-after::after", why: "拖拽落点线（行内装饰伪元素）" },
   // （261119 移动端禁拖拽缩放：把手族规则整族删除 ⇒ 对应 2 条允许条目按「只减不增」摘除。）
-  // ── 待设备实测登记（审计 B-12/B-13，报告 mobile-button-boundary-audit-261119）──
+  // ── 待设备实测登记（B-12/B-13，261119 按钮边界审计，报告已删 git 可查）──
   { file: "editor/editor-dock.css", selectorIncludes: ".mobile-editor-dock", why: "B-12 登记：编辑 dock 族不消费底部安全区，需手势条 AVD 实测定级后统一修" },
   { file: "editor/editor-dock.css", selectorIncludes: ".med-toolbar", why: "B-12 登记：编辑 dock 底条（bottom 只吃 --kb-offset、无 safe）" },
   { file: "editor/editor-dock.css", selectorIncludes: ".med-panel", why: "B-12 登记：dock 二级面板（同 --kb-offset 族）" },

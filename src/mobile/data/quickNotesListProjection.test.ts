@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MobileDb, MobileDbStatement } from "./sqliteDb";
+import type { MobileDb, MobileDbStatement } from "./dbPortTypes";
 
 const bodyMocks = vi.hoisted(() => ({
   read: vi.fn(),

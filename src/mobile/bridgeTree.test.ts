@@ -28,7 +28,7 @@ vi.mock("./native/secretStore.js", () => ({
 }));
 
 import { bridge } from "./bridge.js";
-import { SqlJsAsyncDb } from "./data/sqliteDb.js";
+import { SqlJsAsyncDb } from "./data/sqliteDbWeb.js";
 
 const sqlJsPrepare = SqlJsAsyncDb.prototype.prepare;
 SqlJsAsyncDb.prototype.prepare = function prepare(sql: string) {

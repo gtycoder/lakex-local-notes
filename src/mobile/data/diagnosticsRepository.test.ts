@@ -7,7 +7,7 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
 
 import { getDiagnostics } from "./diagnosticsRepository.js";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 
 async function createDb(): Promise<{ db: SqlJsDb; mobileDb: SqlJsAsyncDb }> {
   const db = await SqlJsDb.open();

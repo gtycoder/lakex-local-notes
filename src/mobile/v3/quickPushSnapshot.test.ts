@@ -11,7 +11,7 @@ vi.mock("../native/assetFs", () => ({
   listAssetKeysFs: async () => [],
 }));
 
-import { SqlJsAsyncDb, SqlJsDb, type MobileDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb, type MobileDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { ensureV3StateTable, savePersistedV3State } from "../data/v3StateRepository.js";
 import { writeBaselineFile } from "../data/v3BaselineFile.js";

@@ -1,4 +1,4 @@
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 
 /** Bridge tests use the production MobileDb shape without the Android plugin. */
 export async function createNativeSqliteDbMockModule() {

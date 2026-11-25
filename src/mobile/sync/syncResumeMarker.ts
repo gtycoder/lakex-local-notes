@@ -6,7 +6,7 @@
  * 生命周期：syncNow 开始即写、**成功结束才删**；网络失败 / 后台被杀 / 用户退出都保留。
  * 下次冷启动或回到前台，useAutoSync 看到标记就**无条件**补一次（不受 autoMode=manual 限制）。
  */
-import type { MobileDb } from "../data/sqliteDb.js";
+import type { MobileDb } from "../data/dbPortTypes.js";
 
 const DB_KEY = "sync_interrupted_at";
 const LS_KEY = "lakex-local-notes-mobile.syncInterruptedAt";

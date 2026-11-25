@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDbWeb.js";
 import { applyMobileSchema } from "./schema.js";
 import { createNote } from "./noteRepository.js";
 import { backfillTextCache } from "./textCacheBackfill.js";

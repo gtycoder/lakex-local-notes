@@ -16,7 +16,7 @@ vi.mock("../native/assetFs", () => ({
 
 import { gunzipSync, gzipSync } from "node:zlib";
 import { countRemoteOps } from "../../core/s3v3/remoteStats.js";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { saveQuickNote } from "../data/quickNotesRepository.js";
 import { loadV3State } from "../data/v3StateRepository.js";

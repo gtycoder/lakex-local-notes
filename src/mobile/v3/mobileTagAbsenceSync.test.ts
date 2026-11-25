@@ -12,7 +12,7 @@ vi.mock("../native/assetFs", () => ({
   removeNoteAssetsDirFs: async () => {}, removeQuickNoteAssetsDirFs: async () => {},
 }));
 import { gunzipSync, gzipSync } from "node:zlib";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { writeQuickNoteBody } from "../data/noteBodies.js";
 import { sha256Sync } from "../../core/sha256Sync.js";

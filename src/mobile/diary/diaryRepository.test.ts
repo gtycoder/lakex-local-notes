@@ -26,7 +26,7 @@ vi.mock("../native/assetFs", () => ({
 const diaryWarn = vi.hoisted(() => ({ reportDiaryWarning: vi.fn() }));
 vi.mock("../lib/diaryWarnLog.js", () => diaryWarn);
 
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema, MOBILE_SCHEMA_VERSION, readMobileSchemaVersion } from "../data/schema.js";
 import { ensureDiaryNote, DIARY_NOTEBOOK_TITLE } from "./diaryRepository.js";
 import { readNote } from "../data/noteRepository.js";

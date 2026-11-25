@@ -1,4 +1,4 @@
-import type { MobileDb } from "./sqliteDb";
+import type { MobileDb } from "./dbPortTypes";
 
 export interface MobileDiagnostics {
   noteCount: number;

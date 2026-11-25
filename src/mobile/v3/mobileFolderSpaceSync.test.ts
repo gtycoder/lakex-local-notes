@@ -20,7 +20,7 @@ vi.mock("../native/assetFs", () => ({
   removeQuickNoteAssetsDirFs: async () => {},
 }));
 
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createMobilePlatformPort } from "./mobilePlatformPort.js";
 import type { SyncFolderRow } from "../../core/s3v3/state/platformPort.js";

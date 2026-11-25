@@ -14,7 +14,7 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
   default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"),
 }));
 import { gunzipSync, gzipSync } from "node:zlib";
-import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDbWeb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { createNote } from "../data/noteRepository.js";
 import { runMobileV3Sync, runMobileV3DeepCleanup } from "./sync.js";

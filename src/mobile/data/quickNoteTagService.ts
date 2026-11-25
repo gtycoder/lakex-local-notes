@@ -6,7 +6,7 @@
  * 旧实现 `reindexAll` 每次改名/删除/合并都把全部小记逐条重建（目标量级 2 万），属过度重建。
  */
 import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
-import type { MobileDb } from "./sqliteDb.js";
+import type { MobileDb } from "./dbPortTypes.js";
 import {
   addPendingTagDeletes,
   assertQuickNoteTagsExist,
