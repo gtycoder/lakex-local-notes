@@ -37,7 +37,7 @@ import { notesDomain } from "./notes";
 
 const TA = "t_aaaaaaaaaaaaaaaa";
 const TB = "t_bbbbbbbbbbbbbbbb";
-const TC = "t_cccccccccccccccc"; // 墓碑标签
+const TC = "t_cccccccccccccccc"; // 用例内物理删行（删除 = 缺席）后按「不存在」拒绝
 
 let db: SqlJsAsyncDb;
 
@@ -45,10 +45,10 @@ async function freshDb(): Promise<SqlJsAsyncDb> {
   const opened = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(opened);
   await opened.prepare("INSERT INTO notes (id,title,parent_id,sort_order,updated_at,content_hash) VALUES ('n1','文档',NULL,0,'2026-11-05T00:00:00.000Z','h1')").run();
-  const insertTag = opened.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,'2026-11-01T00:00:00.000Z','2026-11-01T00:00:00.000Z',?)");
-  await insertTag.run(TA, "A", null);
-  await insertTag.run(TB, "B", null);
-  await insertTag.run(TC, "C", "2026-11-02T00:00:00.000Z");
+  const insertTag = opened.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,'2026-11-01T00:00:00.000Z','2026-11-01T00:00:00.000Z')");
+  await insertTag.run(TA, "A");
+  await insertTag.run(TB, "B");
+  await insertTag.run(TC, "C");
   // 小记的关联不应当出现在文档标签里
   await opened.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q1',?,0)").run(TA);
   return opened;
@@ -90,9 +90,11 @@ describe("setNoteTags（单库写关系 + bump 版本）", () => {
     expect(await versionOf("n1")).not.toBe(v1);
   });
 
-  it("未知文档 / 未知标签 / 墓碑标签都拒绝（不写半截关系）", async () => {
+  it("未知文档 / 未知标签 / 已删（缺席）标签都拒绝（不写半截关系）", async () => {
     await expect(notesDomain.setNoteTags("missing", [TA])).rejects.toThrow("笔记不存在");
     await expect(notesDomain.setNoteTags("n1", ["t_ffffffffffffffff"])).rejects.toThrow("标签不存在或已删除");
+    // 删除 = 缺席（物理删行、无墓碑）：已删标签按「不存在」拒绝
+    await db.prepare("DELETE FROM tags WHERE id=?").run(TC);
     await expect(notesDomain.setNoteTags("n1", [TC])).rejects.toThrow("标签不存在或已删除");
     expect(await linksOf("n1")).toEqual([]);
   });

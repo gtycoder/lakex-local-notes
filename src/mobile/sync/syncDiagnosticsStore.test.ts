@@ -27,7 +27,7 @@ describe("移动端同步诊断存储（SD-13）", () => {
     await db.close();
   });
 
-  it("损坏 JSON 当空列表；无 db 时走 localStorage 兜底（此处为空）", async () => {
+  it("损坏 JSON 当空列表；无 db 时返回空（localStorage 兜底已删，261125 裁决）", async () => {
     const db = await freshDb();
     await db.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(SYNC_V3_REPORTS_KEY, "{bad");
     expect(await readSyncDiagnostics(db)).toEqual([]);

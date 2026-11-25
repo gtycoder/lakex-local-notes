@@ -2,11 +2,10 @@
  * 小记独立库的 **DDL 与一次性迁移**（261112 从 electron/quickNotes.ts 拆出）。
  *
  * 顺序不变量（**不要重排**）：
- *  1. 建表（quick_notes / assets / sync_base / deleted / conversions / file_ops）
+ *  1. 建表（quick_notes / assets / deleted / conversions / file_ops）
  *  2. 建 FTS（quickNotesFtsDDL）+ 搜索账本（searchLedgerDDL; 与桌面文档账本、移动端同一份 DDL 来源）
- *  3. quick_note_deleted 补列 purged_at → 建 device_state → 水线回填（COALESCE(MAX(published_at))）→ 删旧列
+ *  3. quick_note_deleted 补列 purged_at → 建 device_state → 水线键缺失写 "0"（不回查历史列）
  *  4. quick_notes 补列 restore_pending_at / is_dirty / cloud_deleted；quick_note_deleted 补 cloud_deleted
- *  5. 删遗留列 sync_state
  *
  * 全部用 `IF NOT EXISTS` / `PRAGMA table_info` 探测 ⇒ 可反复执行（每次启动都跑一遍）。
  */
@@ -45,10 +44,6 @@ export function migrateQuickNotesSchema(db: DbLike): void {
         FOREIGN KEY (quick_note_id) REFERENCES quick_notes(id) ON DELETE CASCADE
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_note_assets_file ON quick_note_assets(quick_note_id, filename);
-      CREATE TABLE IF NOT EXISTS quick_note_sync_base (
-        quick_note_id TEXT PRIMARY KEY,
-        content_hash TEXT NOT NULL
-      );
       CREATE TABLE IF NOT EXISTS quick_note_deleted (
         id TEXT PRIMARY KEY,
         created_at TEXT NOT NULL,
@@ -103,20 +98,16 @@ export function migrateQuickNotesSchema(db: DbLike): void {
   if (!deletedCols.some((c) => c.name === "purged_at")) {
     db.exec("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
   }
-  // Del-6（261029）：墓碑发布记账从「逐行 published_at」改为**水线**（设备级标量）：
+  // Del-6（261029）：墓碑发布记账 = **水线**（设备级标量）：
   //   小记库没有 device_state ⇒ 补建同形表；键 quick_tombstones_published_at = 上次成功同步完成时间；
-  //   待同步判据 = deleted_at > 水线；首次升级 = COALESCE(MAX(published_at),'0')，随后删列。
+  //   待同步判据 = deleted_at > 水线；水线键缺失直接写 "0"——不回查历史列、不写回填/清列迁移
+  //   （AGENTS §3#7 不为历史数据写代码；旧库残留列/旧行无害，旧行全部计待同步、幂等重发一轮）。
   // 记录本身仍保留（供下载方向 LWW：墓碑 vs 远端恢复判定）。
   db.exec("CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
-  const hasPublishedAt = deletedCols.some((c) => c.name === "published_at");
   const waterline = db.prepare("SELECT value FROM device_state WHERE key='quick_tombstones_published_at'").get() as { value: string } | undefined;
   if (!waterline) {
-    const legacy = hasPublishedAt
-      ? (db.prepare("SELECT COALESCE(MAX(published_at),'0') AS m FROM quick_note_deleted").get() as { m: string | null })
-      : undefined;
-    db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at',?)").run(legacy?.m || "0");
+    db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at','0')").run();
   }
-  if (hasPublishedAt) db.exec("ALTER TABLE quick_note_deleted DROP COLUMN published_at");
   // 恢复标记（墓碑权威的显式例外）：restoreQuickNote 写入，markSynced 清除。
   const quickCols = db.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>;
   if (!quickCols.some((c) => c.name === "restore_pending_at")) {
@@ -132,8 +123,5 @@ export function migrateQuickNotesSchema(db: DbLike): void {
   }
   if (!deletedCols.some((c) => c.name === "cloud_deleted")) {
     db.exec("ALTER TABLE quick_note_deleted ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0");
-  }
-  if (quickCols.some((c) => c.name === "sync_state")) {
-    db.exec("ALTER TABLE quick_notes DROP COLUMN sync_state");
   }
 }

@@ -6,6 +6,7 @@
  * - 目录顺序是**设备本地视图**（不参与同步；置顶功能已删除）；
  * - **删除 = 缺席**：删除标签 = 物理删行 + 清关联/版本，云端 `tags[]` 只出现 active 标签。
  *   跨端传播靠「基线有 / 远端缺席」判定（删除压编辑），离线期间的抑制靠 device_state 的 `tag_deleted`；
+ *   表里没有墓碑列（旧「deleted_at 墓碑」一次性迁移已删，261125 裁决；旧库残留列/行不清理，AGENTS §3#7）；
  * - 未手动排序：默认「新的在前（created_at DESC）→ 名称」；手动拖拽后按本机 sort_order，新增追加末尾。
  */
 import { normalizeQuickNoteTag, quickNoteTagId, type QuickNoteTag } from "../../core/quickNoteTags.js";
@@ -24,8 +25,6 @@ type QuickNoteTagRow = {
 const MANUAL_ORDER_KEY = "quick_tags_manual_order";
 /** 本机待删标签 id（JSON 数组）：离线删过、还没被远端确认缺席；**不上传**、随 App 数据本机持久。 */
 export const PENDING_TAG_DELETES_KEY = "tag_deleted";
-/** 一次性迁移标记：旧库的 `deleted_at` 墓碑已转成「缺席」。 */
-export const TAG_ABSENCE_MIGRATED_KEY = "tag_absent_migrated";
 
 function mapRow(row: QuickNoteTagRow): QuickNoteTag {
   return {
@@ -96,10 +95,10 @@ export async function settlePendingTagDeletes(d: MobileDb, ids: readonly string[
 
 /**
  * 目录列表（本地展示顺序）：手动排序过按 sort_order，否则新→旧 → 名称。
- * 删除 = 缺席 ⇒ 行本来就不该在；仍保留 `deleted_at IS NULL` 过滤，兼容未跑迁移的旧库。
+ * 删除 = 缺席 ⇒ 表里只有 active 行（无墓碑列/墓碑过滤；一次性迁移已删，261125 裁决）。
  */
 export async function listQuickNoteTags(d: MobileDb): Promise<QuickNoteTag[]> {
-  const rows = await d.prepare("SELECT * FROM tags WHERE deleted_at IS NULL").all() as QuickNoteTagRow[];
+  const rows = await d.prepare("SELECT * FROM tags").all() as QuickNoteTagRow[];
   const manual = await isQuickNoteTagManualOrder(d);
   rows.sort(manual
     ? (a, b) => (Number(a.sort_order) - Number(b.sort_order)) || byName(a, b)
@@ -112,22 +111,21 @@ export async function quickNoteTagNames(d: MobileDb): Promise<Map<string, string
 }
 
 async function active(d: MobileDb, id: string): Promise<QuickNoteTagRow | null> {
-  const row = await d.prepare("SELECT * FROM tags WHERE id=? AND deleted_at IS NULL").get(id) as QuickNoteTagRow | undefined;
+  const row = await d.prepare("SELECT * FROM tags WHERE id=?").get(id) as QuickNoteTagRow | undefined;
   return row ?? null;
 }
 
 /**
- * 幂等创建：同名 active 直接返回；同 id 的旧墓碑行**就地复活**（upsert，不会撞主键）。
+ * 幂等创建：同名 active 直接返回；同 id 行**就地更新**（upsert，同名重建不撞主键）。
  * 新标签默认追加到末尾（手动排序生效时）。
  */
 export async function ensureQuickNoteTag(d: MobileDb, rawName: string, at = new Date().toISOString()): Promise<QuickNoteTag> {
   const name = normalizeQuickNoteTag(rawName);
-  const existing = await d.prepare("SELECT * FROM tags WHERE name=? AND deleted_at IS NULL ORDER BY created_at LIMIT 1").get(name) as QuickNoteTagRow | undefined;
+  const existing = await d.prepare("SELECT * FROM tags WHERE name=? ORDER BY created_at LIMIT 1").get(name) as QuickNoteTagRow | undefined;
   if (existing) return mapRow(existing);
   const id = quickNoteTagId(name);
-  // 旧库可能还留着同 id 的墓碑行（迁移未跑/迁移失败）：按 id upsert 复活，绝不写墓碑、绝不撞主键。
   const previous = await d.prepare("SELECT * FROM tags WHERE id=?").get(id) as QuickNoteTagRow | undefined;
-  const maxRow = await d.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM tags WHERE deleted_at IS NULL").get() as { m: number };
+  const maxRow = await d.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM tags").get() as { m: number };
   const tag: QuickNoteTag = {
     id,
     name,
@@ -135,8 +133,8 @@ export async function ensureQuickNoteTag(d: MobileDb, rawName: string, at = new 
     updatedAt: at,
   };
   await d.prepare(
-    "INSERT INTO tags(id,name,sort_order,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,NULL) "
-    + "ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, created_at=excluded.created_at, updated_at=excluded.updated_at, deleted_at=NULL"
+    "INSERT INTO tags(id,name,sort_order,created_at,updated_at) VALUES(?,?,?,?,?) "
+    + "ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, created_at=excluded.created_at, updated_at=excluded.updated_at"
   ).run(tag.id, tag.name, Number(maxRow.m) + 1, tag.createdAt, tag.updatedAt);
   return tag;
 }
@@ -153,7 +151,7 @@ export async function updateQuickNoteTag(d: MobileDb, id: string, patch: { name?
   if (patch.name !== undefined) {
     name = normalizeQuickNoteTag(patch.name);
     if (name !== row.name) {
-      const clash = await d.prepare("SELECT id FROM tags WHERE name=? AND deleted_at IS NULL AND id<>?").get(name, id) as { id: string } | undefined;
+      const clash = await d.prepare("SELECT id FROM tags WHERE name=? AND id<>?").get(name, id) as { id: string } | undefined;
       if (clash) throw new Error(`已存在同名标签“${name}”，请改用合并`);
     }
   }
@@ -171,7 +169,7 @@ export async function updateQuickNoteTag(d: MobileDb, id: string, patch: { name?
 export async function reorderQuickNoteTags(d: MobileDb, orderedIds: readonly string[]): Promise<QuickNoteTag[]> {
   await d.transaction(async () => {
     for (let index = 0; index < orderedIds.length; index += 1) {
-      await d.prepare("UPDATE tags SET sort_order=? WHERE id=? AND deleted_at IS NULL").run(index, orderedIds[index]);
+      await d.prepare("UPDATE tags SET sort_order=? WHERE id=?").run(index, orderedIds[index]);
     }
     await markManualOrder(d);
   });
@@ -203,14 +201,14 @@ export async function applyQuickTagDirectory(
   const existingRows = await d.prepare("SELECT id FROM tags").all() as Array<{ id: string }>;
   const existing = new Set(existingRows.map((row) => String(row.id)));
   await d.transaction(async () => {
-    const maxRow = await d.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM tags WHERE deleted_at IS NULL").get() as { m: number };
+    const maxRow = await d.prepare("SELECT IFNULL(MAX(sort_order), -1) AS m FROM tags").get() as { m: number };
     let nextSortOrder = Number(maxRow.m) + 1;
     for (const tag of remote) {
       if (existing.has(tag.id)) {
-        await d.prepare("UPDATE tags SET name=?, created_at=?, updated_at=?, deleted_at=NULL WHERE id=?").run(tag.name, tag.createdAt, tag.updatedAt, tag.id);
+        await d.prepare("UPDATE tags SET name=?, created_at=?, updated_at=? WHERE id=?").run(tag.name, tag.createdAt, tag.updatedAt, tag.id);
         continue;
       }
-      await d.prepare("INSERT INTO tags(id,name,sort_order,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,NULL)")
+      await d.prepare("INSERT INTO tags(id,name,sort_order,created_at,updated_at) VALUES(?,?,?,?,?)")
         .run(tag.id, tag.name, nextSortOrder, tag.createdAt, tag.updatedAt);
       existing.add(tag.id);
       nextSortOrder += 1;
@@ -227,31 +225,10 @@ export async function applyQuickTagDirectory(
   return { removedNoteIds: [...removedNoteIds] };
 }
 
-/**
- * 一次性迁移（261105 删除 = 缺席）：旧库把 `deleted_at` 当墓碑，新口径要求这些行**不存在**。
- * 把墓碑 id 并入本机待删 → 物理删行 + 清关联/版本 → 置 `tag_absent_migrated=1`。
- * **必须在第一次同步前跑**（bridge 开库时）；失败不置标记、事务回滚，下次开库重试。
- */
-export async function migrateTagAbsence(d: MobileDb): Promise<{ migrated: string[]; noteIds: string[] }> {
-  if ((await readDeviceValue(d, TAG_ABSENCE_MIGRATED_KEY)) === "1") return { migrated: [], noteIds: [] };
-  const rows = await d.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
-  const migrated = rows.map((row) => String(row.id));
-  const noteIds = new Set<string>();
-  await d.transaction(async () => {
-    for (const id of migrated) {
-      for (const noteId of await listQuickNoteIdsForTags(d, [id])) noteIds.add(noteId);
-      await removeQuickNoteTagLinksInTransaction(d, id);
-      await d.prepare("DELETE FROM tags WHERE id=?").run(id);
-    }
-    if (migrated.length > 0) await writePendingTagDeletes(d, [...(await listPendingTagDeletes(d)), ...migrated]);
-    await writeDeviceValue(d, TAG_ABSENCE_MIGRATED_KEY, "1");
-  });
-  return { migrated, noteIds: [...noteIds] };
-}
 
 export async function assertQuickNoteTagsExist(d: MobileDb, tagIds: readonly string[]): Promise<void> {
   const unique = [...new Set(tagIds)];
   if (unique.length === 0) return;
-  const rows = await d.prepare(`SELECT id FROM tags WHERE deleted_at IS NULL AND id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
+  const rows = await d.prepare(`SELECT id FROM tags WHERE id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
   if (rows.length !== unique.length) throw new Error("标签不存在或已删除");
 }

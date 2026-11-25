@@ -179,10 +179,14 @@ export async function syncWithV3(
     try {
       for (const folder of store.listFoldersForSync()) store.markFolderSynced(folder.id, folder.updatedAt);
     } catch { /* 归位失败不影响同步结果；下一轮再补 */ }
-    // SD-03（261027）：把已发布到云端的文档 id 回填给 Store（供给「缺正文」的「可云恢复」判据）。
+    // SD-03（261027）：把已发布到云端的文档/小记 id 回填（供给「缺正文 / 缺小记」的「可云恢复」判据；
+    // Del-6：v2 的 sync_base 账本已删，v3 基线是唯一事实）。
     try {
       const baseline = await device.loadBaseline();
-      if (baseline) store.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
+      if (baseline) {
+        store.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
+        quickNotes?.markRemoteQuickNoteIds(baseline.quickNotes.items.map((q) => q.id));
+      }
     } catch { /* 读基线失败时保持上一轮集合 */ }
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);
     // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告，不再只留在日志里。

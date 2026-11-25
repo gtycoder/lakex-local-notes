@@ -118,6 +118,8 @@ export class QuickNotesStore {
   private readonly saveDeps!: QuickNoteSaveDeps;
   private readonly trashDeps!: QuickNoteTrashDeps;
   private readonly missingDeps!: QuickNoteMissingBodyDeps;
+  /** v3 事实：上一轮成功同步的云端小记 id 集合（「缺小记 · 可云恢复」判据；desktopSync 成功后回填）。 */
+  private remoteQuickNoteIds = new Set<string>();
 
   constructor(workspaceRoot: string, logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.logScopes = logScopes;
@@ -269,7 +271,13 @@ export class QuickNotesStore {
   // ===== 缺正文（委托 missingBody） =====
 
   listMissingQuickNotes(options: { cloudConfigured: boolean }): MissingQuickNoteDoc[] {
-    return listMissingQuickNotes(this.missingDeps, options);
+    // 「可云恢复」判据 = v3 事实（上一轮成功同步的云端小记集合，desktopSync → markRemoteQuickNoteIds；
+    // 与文档侧 store.markRemoteNoteIds / 移动端 cloudIds 同口径，Del-6：sync_base 账本已删）。
+    return listMissingQuickNotes(this.missingDeps, { ...options, remoteQuickNoteIds: this.remoteQuickNoteIds });
+  }
+  /** v3 同步成功后回填：这批小记在云端有副本（缺正文时可尝试从云端拉回）。内存态，重启后由下一次同步回填。 */
+  markRemoteQuickNoteIds(ids: string[]): void {
+    this.remoteQuickNoteIds = new Set(ids);
   }
   recoverQuickNoteFromText(id: string): QuickNoteDocument { return recoverQuickNoteFromText(this.missingDeps, id); }
   applyRecoveredQuickNoteFromCloud(id: string, rawContent: unknown, options: { updatedAt: string }): QuickNoteDocument {
@@ -380,13 +388,6 @@ export class QuickNotesStore {
   listMissingQuickNoteIds(): string[] { return this.queries.listMissingItemIds(); }
   quickNotePathFor(id: string): string { return itemPathOf(this.paths, id); }
   quickNoteAssetsPathFor(id: string): string { return assetDirOf(this.paths, id); }
-  baseHash(id: string): string | null {
-    const row = this.db.prepare("SELECT content_hash FROM quick_note_sync_base WHERE quick_note_id=?").get(id) as { content_hash: string } | undefined;
-    return row?.content_hash ?? null;
-  }
-  setBaseHash(id: string, contentHash: string): void {
-    this.db.prepare("INSERT INTO quick_note_sync_base(quick_note_id,content_hash) VALUES(?,?) ON CONFLICT(quick_note_id) DO UPDATE SET content_hash=excluded.content_hash").run(id, contentHash);
-  }
   markSynced(id: string): void {
     // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
     this.db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=?").run(id);

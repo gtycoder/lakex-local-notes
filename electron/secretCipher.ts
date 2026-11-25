@@ -10,8 +10,9 @@
  * - **machine.key 在 userData 根、不在 workspace** ⇒ 不进整库备份 / 便携包 / 历史快照（只进不出）；
  *   换机/恢复后旧密文解不开 ⇒ 「视为未配置」口径（settingsRepository 既有语义），重新填写即可，
  *   跨机迁移密钥走 S3 配置导出（LLN1 迁移码，另一层加密，语义不变）。
- * - `enc:v1:`（safeStorage 旧密文）**一律按未配置读出**（261204 裁决：不为历史数据写代码，
- *   用户重填即可；不再 import safeStorage、零钥匙串访问）。写路径一律 v2。
+ * - 非 `enc:v2:` 前缀（safeStorage 旧密文 `enc:v1:`、旧明文）**一律按未配置读出**、不写迁移
+ *   （261204 裁决，AGENTS §3#7：不为历史数据写代码）：统一走通用未知前缀分支，用户重填即转 v2，
+ *   不再 import safeStorage、零钥匙串访问。写路径一律 v2。
  * - fail-closed 口径变化（261201）：旧「safeStorage 不可用拒保存」→ 新「本地加密恒可用；
  *   钥匙文件不可写才拒绝保存」——任何情况下都不落明文。
  */
@@ -21,7 +22,6 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "n
 import path from "node:path";
 import type { SecretCipher } from "../src/core/secretCipher.js";
 
-const V1_PREFIX = "enc:v1:";
 const V2_PREFIX = "enc:v2:";
 const KEY_BYTES = 32;
 const NONCE_BYTES = 12;
@@ -72,14 +72,10 @@ export function createLocalSecretCipher(userDataDir: string): SecretCipher {
           decipher.setAuthTag(blob.subarray(NONCE_BYTES, NONCE_BYTES + TAG_BYTES));
           return Buffer.concat([decipher.update(blob.subarray(NONCE_BYTES + TAG_BYTES)), decipher.final()]).toString("utf8");
         }
-        if (value.startsWith(V1_PREFIX)) {
-          // 261204 裁决（AGENTS §3#7 不为历史数据写代码）：旧钥匙串（safeStorage）密文**不迁移、不解密**，
-          // 按未配置处理 —— 用户重填即转 v2。零钥匙串访问。
-          console.warn("[store] 发现旧钥匙串格式密文（enc:v1:），按未配置处理，请重新填写");
-          return "";
-        }
-        // S2：旧明文格式不再放行——返回空串提示重配（既有口径不变）。
-        console.warn("[store] S3 Secret 为非当前加密格式（旧明文），请重新配置");
+        // 非 enc:v2: 前缀一律按未配置读出（261204 裁决，AGENTS §3#7 不为历史数据写代码）：
+        // 旧钥匙串（safeStorage）存量 enc:v1: 与旧明文（S2）都**不迁移、不解密**，统一提示重配；
+        // 用户重填即转 v2。零钥匙串访问。
+        console.warn("[store] S3 Secret 为非当前加密格式（非 enc:v2:，含旧钥匙串存量/旧明文），按未配置处理，请重新填写");
         return "";
       } catch (error) {
         console.warn("[store] 密文解密失败（钥匙丢失/换机/损坏），按未配置处理:", error);

@@ -72,7 +72,7 @@ userData/
 
 - **正文永远在文件**（路径单一来源 `src/core/noteBodyPaths.ts`）；SQLite 只存元数据、hash、账本与派生缓存（`text_cache`/FTS 可重建）。
 - 五种 kind 的落盘路径由 `notes.kind` 决定；**表格/多维表/画板/手写板正文不进 Lake HTML 解析器**，搜索文本各自派生。
-- 小记库（桌面）另有 `quick_notes` / `quick_note_assets` / `quick_note_sync_base` / `quick_note_deleted` / `quick_note_conversions` / `quick_note_file_ops` / `tags` / `tag_links` / `tag_link_versions` / `device_state`；**标签域（目录 + 关系 + 版本）自 261107 起单一归属小记库**，文档标签关系也在其中（见 `TAG-SYSTEM-DESIGN.md`）。
+- 小记库（桌面）另有 `quick_notes` / `quick_note_assets` / `quick_note_deleted` / `quick_note_conversions` / `quick_note_file_ops` / `tags` / `tag_links` / `tag_link_versions` / `device_state`（v2 的 `quick_note_sync_base` 基线账本已删，git 可查）；**标签域（目录 + 关系 + 版本）自 261107 起单一归属小记库**，文档标签关系也在其中（见 `TAG-SYSTEM-DESIGN.md`）。
 - 密钥：**一律自管理（261204 裁决：不进系统钥匙串/Keystore）**。桌面 S3/AI 密钥经 `secretCipher`（AES-256-GCM + `<userData>/machine.key`，防误读、非安全边界）加密落 `settings`，**钥匙损坏/不可写时拒绝保存（绝不落明文）**；旧 safeStorage 密文（`enc:v1:`）**按未配置读出、不写迁移代码**，用户重填即转 `enc:v2:`（`electron/secretCipher.ts`）；移动端 = SecretBox 应用私有密钥文件 + AES-GCM 密文落私有 SharedPreferences，明文不进 WebView 存储。
 
 移动端磁盘（App 私有 `Directory.Data`）：`notes/`、`usheets/`、`bitables/`、`boards/`、`quick-notes/items/`、`quick-notes/assets/`、`note-assets/`、`history/` 与 `databases/` 下的 Capacitor SQLite。正文/快照由原生 **BodyStore** 原子写（gzip 在原生），SQLite 只存元数据/账本/派生 `text_cache`+FTS。旧库「正文在 `notes.content`」升级时**整库重置一次**，不写兼容读取。

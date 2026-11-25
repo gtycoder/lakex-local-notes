@@ -66,7 +66,7 @@ function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
 }
 
 function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
-  // created_at：v13 前的老行由迁移回填 = updated_at；查询未带该列时也回落 updatedAt（防御性，避免空串排序错位）。
+  // created_at：老行的一次性回填已删（261125 裁决，AGENTS §3#7）⇒ 空串时回落 updatedAt（防御性，避免排序错位）。
   return {
     id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at),
     createdAt: String(r.created_at ?? "") || String(r.updated_at),

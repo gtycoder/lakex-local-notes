@@ -42,12 +42,13 @@ describe("createLocalSecretCipher（本机加密 enc:v2，261201 裁决）", () 
     expect(c2.decrypt(out)).toBe("sk-secret"); // 同 userData ⇒ 同钥匙 ⇒ 可解
   });
 
-  it("enc:v1（旧钥匙串）密文一律按未配置读出 —— 零钥匙串访问、不写迁移代码（261204 裁决，重填即转 v2）", () => {
+  it("非 enc:v2: 前缀（enc:v1: 旧钥匙串存量/旧明文）一律按未配置读出 —— 零钥匙串访问、不写迁移代码（261204 裁决，重填即转 v2）", () => {
     const c = createLocalSecretCipher(freshDir());
     const legacy = "enc:v1:" + Buffer.from("enc:sk-legacy").toString("base64");
-    expect(c.decrypt(legacy)).toBe(""); // 旧实现会走 safeStorage 解出「sk-legacy」——已退役
+    expect(c.decrypt(legacy)).toBe(""); // 旧实现会走 safeStorage 解出「sk-legacy」——已退役；v1 分支已并入通用未知前缀分支
     state.available = false; // 即便桩模拟钥匙串不可用，行为也一致（代码里已无 safeStorage 引用）
     expect(c.decrypt(legacy)).toBe("");
+    expect(c.decrypt("plain-old")).toBe(""); // 旧明文同走通用分支（S2：不再放行）
   });
 
   it("S2：旧明文格式不放行，返回空串提示重配", () => {

@@ -6,8 +6,8 @@
  * - **删除 = 缺席**：云端 `tags[]` 只出现 active 标签，**禁止墓碑进索引**（「S3 列表表不得出现
  *   永久存在的条目」）。本机删除 = 物理 DELETE 目录行 + 清关联/版本，**不再写 `deleted_at`**；
  *   离线删过的 id 记进 `device_state.tag_deleted`（JSON 字符串数组），供同步**抑制远端重发**，
- *   远端确认缺席后由引擎结算清空（删除压编辑）。旧库 `deleted_at` 墓碑由一次性迁移
- *   （`tag_absent_migrated`）清掉并并入待删。
+ *   远端确认缺席后由引擎结算清空（删除压编辑）。旧「删除 = 墓碑（deleted_at）」模型的一次性迁移
+ *   已删（261125 裁决，git 可查）：新库 DDL 无墓碑列，旧库残留列/行不清理（AGENTS §3#7）。
  * - **目录顺序是设备本地视图**（不参与同步；置顶功能已删除）：默认「新的在前（created_at DESC）
  *   → 名称」；手动拖拽排序后记本机标记（`quick_tags_manual_order`），按本机 sort_order，
  *   之后新增标签追加到末尾；同步合并只更新名称/时间，**不覆盖本机顺序**。
@@ -33,8 +33,6 @@ interface QuickNoteTagRow {
 const MANUAL_ORDER_KEY = "quick_tags_manual_order";
 /** 本机待删标签 id（JSON 字符串数组）：设备本地记账，**不上传**；同步引擎据此抑制远端重发。 */
 const PENDING_DELETES_KEY = "tag_deleted";
-/** 一次性迁移标记：旧库「删除=墓碑」→ 新语义「删除=缺席」只跑一次。 */
-const ABSENCE_MIGRATED_KEY = "tag_absent_migrated";
 /** 261204：本地标签变动计数（目录增删改名/合并/打标）——云按钮据此显示「待同步」；成功同步清零。 */
 const TAGS_PENDING_KEY = "tags_pending";
 
@@ -88,26 +86,22 @@ function nowIso(): string { return new Date().toISOString(); }
 export class QuickNoteTagsStore {
   constructor(private readonly db: DbLike) {
     this.ensureSchema();
-    // 261105 迁移必须**先于第一次同步**：目录/关联一旦被同步读到，旧墓碑条目会被当成 active 复活。
-    // 本类在 QuickNotesStore / DocumentTagsService 构造（= 打开 DB）时创建，正好赶在同步之前。
-    this.migrateTagAbsence();
   }
 
   private ensureSchema(): void {
-    // `deleted_at` 只为兼容旧库 DDL 保留（迁移读一次后既不再写、也不再有查询依赖它）；
-    // 新库保留同形列，避免「新旧两套建表语句」这种第二来源。
+    // 表里只有 active 行（删除 = 缺席，物理删行）⇒ 无墓碑列。旧库残留的 deleted_at 列不清理
+    // （AGENTS §3#7 不为旧数据写迁移）。
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tags (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
+        updated_at TEXT NOT NULL
       );
     `);
     this.db.exec("CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
-    this.db.exec("CREATE INDEX IF NOT EXISTS idx_tags_local_order ON tags(deleted_at, sort_order, name)");
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_tags_local_order ON tags(sort_order, name)");
   }
 
   /** 是否已在本机手动排序过（设备本地标记，不参与同步）。 */
@@ -262,7 +256,7 @@ export class QuickNoteTagsStore {
     this.writePendingDeletes(kept);
   }
 
-  /** 覆盖写待删集合（仅内部：迁移/重建同名标签/结算用，语义由调用方保证）。 */
+  /** 覆盖写待删集合（仅内部：重建同名标签/结算用，语义由调用方保证）。 */
   private writePendingDeletes(ids: readonly string[]): void {
     const unique = [...new Set(ids.filter((id): id is string => typeof id === "string" && QUICK_NOTE_TAG_ID_RE.test(id)))].toSorted();
     this.saveDeviceValue(PENDING_DELETES_KEY, JSON.stringify(unique));
@@ -273,47 +267,6 @@ export class QuickNoteTagsStore {
     if (unique.length === 0) return;
     const rows = this.db.prepare(`SELECT id FROM tags WHERE id IN (${unique.map(() => "?").join(",")})`).all(...unique) as Array<{ id: string }>;
     if (rows.length !== unique.length) throw new AppError("InvalidInput", "标签不存在或已删除");
-  }
-
-  /**
-   * 一次性迁移（261105）：旧库「删除 = 墓碑（deleted_at 非空）」→「删除 = 缺席」。
-   *
-   * 墓碑行必须**并入本机待删**：旧版把墓碑随索引发布出去，新版协议会把条目的 deletedAt 丢弃
-   * 并当成 active ⇒ 不登记待删就会被远端重发复活（删除压编辑）。
-   * 随后物理删行 + 清关联/版本（含文档标签关联 target_kind='note'），最后置标记。
-   * 整个迁移单事务：中途失败不落标记，下次打开重跑（幂等）。
-   */
-  private migrateTagAbsence(): void {
-    const done = this.db.prepare("SELECT value FROM device_state WHERE key=?").get(ABSENCE_MIGRATED_KEY) as { value?: string } | undefined;
-    if (done?.value === "1") return;
-    this.db.transaction(() => {
-      const tombstones = this.db.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
-      if (tombstones.length > 0) {
-        // 关联/版本表由通用标签层持有；旧库有、全新库可能还没建（本类可能先于 links store 构造）。
-        const hasLinks = this.tableExists("tag_links");
-        const hasVersions = this.tableExists("tag_link_versions");
-        const pending = new Set(this.listPendingDeletes());
-        for (const { id } of tombstones) {
-          pending.add(id);
-          if (hasLinks) {
-            const targets = this.db.prepare("SELECT target_kind, target_id FROM tag_links WHERE tag_id=?").all(id) as Array<{ target_kind: string; target_id: string }>;
-            this.db.prepare("DELETE FROM tag_links WHERE tag_id=?").run(id);
-            if (hasVersions && targets.length > 0) {
-              for (const target of targets) {
-                this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind=? AND target_id=?").run(target.target_kind, target.target_id);
-              }
-            }
-          }
-          this.db.prepare("DELETE FROM tags WHERE id=?").run(id);
-        }
-        this.writePendingDeletes([...pending]);
-      }
-      this.saveDeviceValue(ABSENCE_MIGRATED_KEY, "1");
-    })();
-  }
-
-  private tableExists(name: string): boolean {
-    return !!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
   }
 
   private saveDeviceValue(key: string, value: string): void {

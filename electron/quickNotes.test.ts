@@ -72,7 +72,7 @@ describe("QuickNotesStore", () => {
     expect(quickNotes.getPendingSyncSummary().tags).toBe(0);
   });
 
-  it("Del-6 迁移：旧快速库 quick_note_deleted.published_at 回填水线后删列", () => {
+  it("Del-6：水线键缺失直接写「0」（不回查 published_at 回填、不删旧列）⇒ 旧库墓碑行全部计待同步（幂等重发一轮）", () => {
     const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-quick-del6-"));
     const dbPath = path.join(legacyRoot, "quick-notes", "metadata.sqlite3");
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -84,53 +84,53 @@ describe("QuickNotesStore", () => {
     raw.close();
     const legacy = new QuickNotesStore(legacyRoot);
     try {
-      expect(legacy.getTombstonesWaterline()).toBe("2026-10-02T00:00:00.000Z");
-      expect(legacy.listDeletedForSync().map((item) => item.id)).toEqual(["q-pending"]);
+      // 水线键缺失 = 直接写「0」（AGENTS §3#7：不做 published_at 历史回填）
+      expect(legacy.getTombstonesWaterline()).toBe("0");
+      // 全部旧墓碑行计待同步（幂等重发一轮删除意图，方向安全）
+      expect(legacy.listDeletedForSync().map((item) => item.id).sort()).toEqual(["q-pending", "q-published"]);
       const check = new Database(dbPath, { readonly: true });
       try {
+        // 旧列残留不清理（不写迁移/清理 DDL）
         const cols = check.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
-        expect(cols.some((c) => c.name === "published_at")).toBe(false);
+        expect(cols.some((c) => c.name === "published_at")).toBe(true);
       } finally { check.close(); }
     } finally {
       fs.rmSync(legacyRoot, { recursive: true, force: true });
     }
   });
 
-  it("删除=缺席迁移：旧 deleted_at 墓碑并入本机待删 + 物理删行 + 清关联/版本（只跑一次）", () => {
-    const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-quick-tag-absent-"));
-    const dbPath = path.join(legacyRoot, "quick-notes", "metadata.sqlite3");
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    const at = "2026-10-01T00:00:00.000Z";
-    const keepId = quickNoteTagId("保留");
-    const goneId = quickNoteTagId("已删");
-    const raw = new Database(dbPath);
-    raw.exec(`
-      CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT);
-      CREATE TABLE device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE tag_links (target_kind TEXT NOT NULL, target_id TEXT NOT NULL, tag_id TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(target_kind, target_id, tag_id));
-      CREATE TABLE tag_link_versions (target_kind TEXT NOT NULL, target_id TEXT NOT NULL, links_updated_at TEXT NOT NULL, PRIMARY KEY(target_kind, target_id));
-    `);
-    const insertTag = raw.prepare("INSERT INTO tags(id,name,sort_order,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?)");
-    insertTag.run(keepId, "保留", 0, at, at, null);
-    insertTag.run(goneId, "已删", 1, at, at, at);
-    raw.prepare("INSERT INTO tag_links(target_kind,target_id,tag_id,position) VALUES('quickNote','q1',?,0)").run(goneId);
-    raw.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES('quickNote','q1',?)").run(at);
-    raw.close();
-
-    const migrated = new QuickNotesStore(legacyRoot);
+  it("删除 = 缺席：新库 tags 无墓碑列（deleted_at 一次性迁移已删）、删除物理删行、同名重建不撞主键", () => {
+    // 语义钉（261125 裁决）：不做「删除=墓碑」历史兼容——新库 DDL 无 deleted_at 列；删除 = 物理删行。
+    const check = new Database(path.join(root, "quick-notes", "metadata.sqlite3"), { readonly: true });
     try {
-      // 墓碑行物理删除，只剩 active；墓碑 id 记进待删（旧版已把它发到索引里，不抑制会复活）。
-      expect(migrated.tags.list().map((t) => t.id)).toEqual([keepId]);
-      expect(migrated.tags.listPendingDeletes()).toEqual([goneId]);
-      expect(migrated.links.listFor("q1")).toEqual([]);
-      expect(migrated.links.tagsUpdatedAt("q1")).toBe("");
-      // 迁移标记已落库：再开一次库不会重复迁移，也不会重复并待删。
-      const reopened = new QuickNotesStore(legacyRoot);
-      expect(reopened.tags.list().map((t) => t.id)).toEqual([keepId]);
-      expect(reopened.tags.listPendingDeletes()).toEqual([goneId]);
-    } finally {
-      fs.rmSync(legacyRoot, { recursive: true, force: true });
-    }
+      const cols = check.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
+      expect(cols.some((c) => c.name === "deleted_at")).toBe(false);
+    } finally { check.close(); }
+    const tag = quickNotes.tagService.create("缺席语义");
+    quickNotes.tagService.delete(tag.id);
+    expect(quickNotes.tags.list().map((t) => t.id)).not.toContain(tag.id);
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([tag.id]);
+    // 同名重建：派生 id 相同也不撞主键（行已物理删除，不是墓碑）
+    const again = quickNotes.tagService.create("缺席语义");
+    expect(again.id).toBe(tag.id);
+    expect(quickNotes.tags.list().map((t) => t.name)).toContain("缺席语义");
+  });
+
+  it("Del-6 收敛：新库无 quick_note_sync_base 表；「可云恢复」判据 = v3 云端事实（markRemoteQuickNoteIds）", () => {
+    const check = new Database(path.join(root, "quick-notes", "metadata.sqlite3"), { readonly: true });
+    try {
+      const table = check.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quick_note_sync_base'").get();
+      expect(table).toBeUndefined(); // 表 + 方法 + SQL 已删（261125 收敛，git 可查）
+    } finally { check.close(); }
+    const saved = quickNotes.createQuickNote({ text: "可云恢复", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    fs.rmSync(path.join(root, "quick-notes", "items", `${saved.id}.qnote`));
+    // 无 v3 事实（从未同步过）⇒ 不报「可云恢复」
+    let rows = quickNotes.listMissingQuickNotes({ cloudConfigured: true });
+    expect(rows.find((r) => r.id === saved.id)?.recovery).not.toBe("cloud");
+    // desktopSync 成功后回填云端 id 集合 ⇒ 判为可云恢复（与文档侧 remoteNoteIds 同口径）
+    quickNotes.markRemoteQuickNoteIds([saved.id]);
+    rows = quickNotes.listMissingQuickNotes({ cloudConfigured: true });
+    expect(rows.find((r) => r.id === saved.id)?.recovery).toBe("cloud");
   });
 
   it("本机待删记账：追加幂等、结算只移除已确认缺席（不覆盖写，避免丢掉同步期间的新删除）", () => {

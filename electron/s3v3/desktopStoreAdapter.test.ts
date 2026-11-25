@@ -322,7 +322,7 @@ describe("DesktopStoreDevice：state 信封 v3（E3-1 phase2a）", () => {
     expect(back.lake.notes.find((n) => n.id === "n1")!.assetsHash).toBe("f".repeat(64));
   });
 
-  it("旧 sidecar（无 version）加载 ⇒ 账本重置（Q23）；资产投影与 hashCache 抢救保留，下一次 saveState 写 v3", async () => {
+  it("旧 sidecar（无 version）⇒ 按空账本处理（261125 裁决：不迁移、不抢救）；下一次 saveState 写 v3", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-env-legacy-"));
     const { adapter } = await seed(root);
     await fs.mkdir(path.join(root, "sync-v3"), { recursive: true });
@@ -338,19 +338,17 @@ describe("DesktopStoreDevice：state 信封 v3（E3-1 phase2a）", () => {
       hashCache: { n1: { mtimeMs: 1, size: 2, hash: "b".repeat(64) } },
     }));
     const loaded = (await adapter.loadState())!;
-    // Q23（261112 裁决 B）：旧账本不再迁移 ⇒ 意图/标记重置；但资产投影与 hashCache 必须抢救保留。
+    // 未知信封形态 = 空账本：意图/标记清空，资产投影与 hashCache **不再抢救**
+    // （旧形态迁移/抢救已删，261125 裁决，AGENTS §3#7；现行写入恒为 v3 信封）。
     expect(loaded.intents).toEqual([]);
     expect(loaded.remotePurged).toEqual([]);
     expect(loaded.restorePending).toEqual([]);
-    expect(loaded.lake.notes.find((n) => n.id === "n1")!.assetsHash).toBe("a".repeat(64));
+    expect(loaded.lake.notes.find((n) => n.id === "n1")!.assetsHash).not.toBe("a".repeat(64));
 
     await adapter.saveState(loaded);
     const raw = JSON.parse(await fs.readFile(statePath(root), "utf8")) as Record<string, any>;
     expect(raw.version).toBe(3);
-    expect((raw.records as Array<Record<string, unknown>>).filter((r) => r.kind === "cloud-deleted")).toEqual([]);
     expect(raw.records).toEqual([]);
-    // hashCache 由适配器按真实正文重算（实测值会覆盖旧条目）——这里只要求它**没有被清空**（清空 = 全库重算）。
-    expect(Object.keys(raw.hashCache ?? {}), "重置账本不该清掉 hashCache").toContain("n1");
     expect(raw).not.toHaveProperty("remotePurged");
   });
 });

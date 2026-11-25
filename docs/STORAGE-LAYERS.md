@@ -65,7 +65,7 @@ userData/
 
 ### 2.3 小记库（桌面 `quick-notes/metadata.sqlite3`）
 
-`quick_notes` / `quick_note_assets` / `quick_note_sync_base` / `quick_note_deleted` / `quick_note_conversions` / `quick_note_file_ops`，
+`quick_notes` / `quick_note_assets` / `quick_note_deleted` / `quick_note_conversions` / `quick_note_file_ops`（`quick_note_sync_base` 已随 26125 迁移清理批删除），
 以及 **标签域**：`tags` / `tag_links` / `tag_link_versions` / `device_state`。
 
 - **标签目录 + 所有关系（含桌面文档标签 `target_kind='note'`）+ 版本 单一归属小记库**（261107 迁移，见 `TAG-SYSTEM-DESIGN.md`）。

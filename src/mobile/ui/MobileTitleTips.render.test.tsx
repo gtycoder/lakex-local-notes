@@ -1,42 +1,36 @@
 // @vitest-environment jsdom
 /**
  * 移动端 title 气泡（261115 A04）：
- *  · 薄壳 MobileTitleTips 只调共享 installNativeTitleTips，class 用 mb-tip；
+ *  · 薄壳 installMobileTitleTips 只调共享 installNativeTitleTips，class 用 mb-tip；
  *  · 触屏走长按 450ms，显示/复原 aria-describedby；
  *  · 静态卡住：移动端不 import 桌面组件，MobileApp 挂一次，kit.css 有 mb-tip 自有规则。
  */
 import { readFileSync } from "node:fs";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LONG_PRESS_MS } from "../../lib/nativeTitleTip";
-import { MOBILE_TIP_ID, MobileTitleTips } from "./MobileTitleTips";
+import { MOBILE_TIP_ID, installMobileTitleTips } from "./MobileTitleTips";
 
 const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-let host: HTMLDivElement | null = null;
-let root: Root | null = null;
+let disposeTips: (() => void) | null = null;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers();
-  host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host);
 });
 
 afterEach(() => {
-  if (root) act(() => root!.unmount());
-  root = null;
-  host?.remove();
-  host = null;
+  disposeTips?.();
+  disposeTips = null;
   document.body.innerHTML = "";
   vi.useRealTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", false);
 });
 
 async function renderTips(): Promise<void> {
-  await act(async () => { root!.render(<MobileTitleTips />); });
+  // 旧组件挂法（<MobileTitleTips />）已删（261125 裁决）：宿主直接 installMobileTitleTips()。
+  disposeTips = installMobileTitleTips();
 }
 
 function makeAnchor(attrs: Record<string, string>, text = ""): HTMLButtonElement {

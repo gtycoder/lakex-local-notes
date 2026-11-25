@@ -466,19 +466,17 @@ async function createWindow() {
   // 逐条落盘会把同期真正需要的日志冲掉 ⇒ 折叠成一行汇总（consoleNoise.ts，排查见 TROUBLESHOOTING §M）。
   const consoleNoise = new ConsoleNoiseFilter({ emit: (line) => log.renderer.info(line) });
   win.on("closed", () => consoleNoise.flush());
-  // Electron 33 事件签名：event 对象带 { level, message, lineNumber, sourceId }；
-  // 同时兼容旧式 (event, level, message) 回调。
-  win.webContents.on("console-message" as unknown as "console-message", (event: unknown, ...args: unknown[]) => {
+  // Electron 44 事件签名（electron.d.ts WebContentsConsoleMessageEventParams）：event 对象恒带
+  // { message, level, lineNumber, sourceId }；旧式 (event, level, message) 兜底已删（261125 核实恒为新形状）。
+  win.webContents.on("console-message" as unknown as "console-message", (event: unknown) => {
     const e = event as { message?: unknown };
-    const msg = typeof e?.message === "string"
-      ? e.message
-      : typeof args[1] === "string" ? args[1] : String(args[1] ?? "");
+    const msg = typeof e?.message === "string" ? e.message : "";
     if (!msg) return;
     // 过滤 DevTools 样式占位与空消息
     if (msg.includes("%c") || msg.length > 4000) return;
     if (consoleNoise.observe(msg)) return;
     // 级别映射（261023）：渲染层 error/warn 不能被压成 info；正式环境 debug 不落盘，避免调试噪音把日志冲掉。
-    const rendererLevel = mapRendererConsoleLevel(event as { level?: unknown }, args);
+    const rendererLevel = mapRendererConsoleLevel(event as { level?: unknown });
     if (!isLevelEnabled(currentLogLevels().renderer, rendererLevel)) return;
     if (rendererLevel === "error") log.renderer.error(msg);
     else if (rendererLevel === "warn") log.renderer.warn(msg);
@@ -774,7 +772,7 @@ if (!app.requestSingleInstanceLock()) {
     startFileReconciler();
     restartFileScanReconciler = startFileReconciler;
     // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
-    // 原样写回新库再删除——secretAccessKey 保持密文形态（绝不明文落盘）；enc:v1: 旧钥匙串存量按未配置读出（261204），用户重填即转 v2。
+    // 原样写回新库再删除——secretAccessKey 保持密文形态（绝不明文落盘）；非 enc:v2: 前缀存量（含旧钥匙串 enc:v1:）按未配置读出（261204），用户重填即转 v2。
     try {
       const seed = readAndRemoveS3RestoreSeed(workspaceRoot());
       if (seed && typeof seed === "string" && !store.getS3Settings()) {

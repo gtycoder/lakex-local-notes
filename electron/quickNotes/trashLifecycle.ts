@@ -165,14 +165,13 @@ export function purgeQuickNote(deps: QuickNoteTrashDeps, id: string): void {
   try { fs.rmSync(assetDirOf(deps.paths, id), { force: true, recursive: true }); } catch { /* best effort */ }
 }
 
-/** 软删共用：写墓碑 + 清同步基线/资源行/活动行（单事务），事务后清搜索索引；keepFiles 控制内容文件。 */
+/** 软删共用：写墓碑 + 清资源行/活动行（单事务），事务后清搜索索引；keepFiles 控制内容文件。 */
 function deleteSourceAndRemember(deps: QuickNoteTrashDeps, row: QuickNoteRow, conversionTargetNoteId: string | null, readyToSync: boolean, keepFiles: boolean): void {
   const content = deps.queries.readStoredContent(row.id);
   const deletedAt = nowIso();
   const tx = deps.db.transaction(() => {
     deps.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,?,?)")
       .run(row.id, row.created_at, row.updated_at, deletedAt, conversionTargetNoteId, readyToSync ? 1 : 0);
-    deps.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(row.id);
     deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(row.id);
     deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
     // 普通软删保留关系（回收站恢复要还原标签）；转换成功后源小记不再可恢复 ⇒ 关系随之清掉。
@@ -195,7 +194,6 @@ export function purgeOrphanQuickNote(deps: QuickNoteTrashDeps, id: string): void
   try {
     deps.db.prepare("INSERT INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync,purged_at,cloud_deleted) VALUES(?,?,?,?,NULL,1,?,0) ON CONFLICT(id) DO UPDATE SET deleted_at=excluded.deleted_at, ready_to_sync=1, purged_at=excluded.purged_at, cloud_deleted=0").run(id, now, now, now, now);
     deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
-    deps.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(id);
     deps.links.removeNote(id);
     removeQuickNoteSearchIndex(deps.search, [id]);
     try { fs.rmSync(itemPathOf(deps.paths, id), { force: true }); } catch { /* best effort */ }

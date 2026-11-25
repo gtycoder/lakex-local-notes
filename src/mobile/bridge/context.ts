@@ -8,7 +8,7 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 
 import { applyMobileSchema } from "../data/schema";
-import { listQuickNoteTags, migrateTagAbsence } from "../data/quickNoteTagsRepository";
+import { listQuickNoteTags } from "../data/quickNoteTagsRepository";
 import { cleanupOrphanNoteTagLinks } from "../data/noteTagLinksRepository";
 import { seedWelcomeQuickNote } from "../data/welcomeQuickNote";
 import { ensureV3StateTable } from "../data/v3StateRepository";
@@ -93,10 +93,6 @@ export async function initializeDb(): Promise<NativeSqliteDb> {
   // 261027 真机新装发现：v3 账本表原来只在 MobileDeviceStore.init 里建，而「新设备默认按需」判定/
   // 打开文档补拉（ensureAssetsNative）会在首次同步前读它 ⇒ 全新安装直接报 no such table。统一在开库时建。
   await ensureV3StateTable(openedDb);
-  // 261105 标签「删除 = 缺席」一次性迁移：旧库的 `deleted_at` 墓碑行 → 物理删 + 并入本机待删。
-  // **必须在第一次同步前跑**（同步端口进来时旧墓碑不能还在表里，否则会被当成 active 上传）。
-  // 失败不置标记且事务回滚 ⇒ 下次开库重试；启动不因此中断（旧墓碑仍被 list 过滤掉，不会误发布）。
-  try { await migrateTagAbsence(openedDb); } catch (error) { console.warn("[tags] 标签墓碑迁移失败（下次开库重试）：", error); }
   // 261105 P1：启动自检清理「文档关系指向不存在标签」的孤儿行（目录唯一来源 = tags 表）。
   try {
     const tags = await listQuickNoteTags(openedDb);

@@ -20,7 +20,7 @@ const T1 = "2026-11-01T00:00:00.000Z";
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(db);
-  const insertTag = db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)");
+  const insertTag = db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)");
   for (const [id, name] of [["t_work", "工作"], ["t_idea", "灵感"], ["t_life", "生活"]] as const) await insertTag.run(id, name, T1, T1);
   const link = db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES (?,?,?,?)");
   // n1: 灵感(pos0) → 工作(pos1)；n2: 工作；n3: 无标签；quickNote 行必须不串进文档标签

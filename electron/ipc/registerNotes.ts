@@ -240,7 +240,7 @@ export function registerNotesIpc(
   ipc.handle("prepare_cloud_restore", () => {
     // A2 机械安全（审计 §4.5）：隔离备份 → 全新空库 → 只拉不打（重启后首同步语义）→ 显式确认在渲染层。
     // 生产可用性 + 本地安全（审计修复）：S3 凭据随恢复保留——seed 存 settings 表原始行
-    // （secretAccessKey 为 enc:v1: 密文，绝不解密成明文落盘）；重启后 main 原样写回新库。
+    // （secretAccessKey 保持密文形态，绝不解密成明文落盘）；重启后 main 原样写回新库。
     const s3Row = store.exportS3SettingsRow();
     const { quarantinePath } = prepareCloudRestore(workspaceRoot);
     if (s3Row) writeS3RestoreSeed(workspaceRoot, s3Row);

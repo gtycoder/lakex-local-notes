@@ -31,29 +31,26 @@ export function targetKeyOf(s: SyncTargetSettings | null | undefined): string | 
  * 云端目标「数据身份」比较：**忽略 region**（261124 数据事故复盘）。region 只是 S3 签名作用域，
  * 七牛等兼容层不严格校验（cn-north-1 / cn-east-1 都能读写），并不改变 endpoint+bucket+prefix 指向的
  * 同一份数据。两端 region 填得不一致（移动端表单默认 cn-north-1、桌面历史值 cn-east-1）曾把同一个桶
- * 判成两个目标 ⇒ 误触发首次相遇的破坏性改写。比较按字段进行（\u0000 分隔，端点小写、前缀去首尾 /），
- * 兼容旧四段式存储键；缺段的键只比较可得段。相同返回 true。
+ * 判成两个目标 ⇒ 误触发首次相遇的破坏性改写。
+ *
+ * 只认**现行键形**（targetKeyOf 盖章的四段式 [endpoint, region, bucket, prefix]）；旧键形/缺段键的
+ * 容忍分支已删（261125 裁决，AGENTS §3#7 不为历史数据写代码）——非现行键形只在「同一字符串」时判
+ * 同目标（基线盖章/闸门「同 targetKey」自比语义；261124 ⑤P3-1：不同截断键绝不能经缺段对齐互判
+ * 「同目标」，勿回退）。比较按字段进行（\u0000 分隔，端点小写、前缀去首尾 /，与 targetKeyOf 同口径）。
  */
 export function sameSyncTargetKey(a: string | undefined | null, b: string | undefined | null): boolean {
   if (!a || !b) return false;
+  if (a === b) return true;
   const parts = (k: string) => k.split("\u0000").map((x) => x.trim());
   const pa = parts(a);
   const pb = parts(b);
-  // 261124 ⑤P3-1：不足三段的**截断键**只在「同一字符串」时判同目标——pick 对缺段按 undefined
-  // 比较，不同截断键会经缺段对齐互判「同目标」（换桶保护输入被静默放行）。同一字符串恒同目标
-  // （基线盖章/闸门「同 targetKey」自比语义；首轮把短键一律判不等曾打断 ask-once 闸门，勿回退）。
-  if (a === b) return true;
-  if (pa.length < 3 || pb.length < 3) return false;
-  // 四段式 [endpoint, region, bucket, prefix]；三段式无 region。endpoint 小写归一、prefix 去首尾 /（与 targetKeyOf 同口径）。
-  const norm = (v: string | undefined, kind: "ep" | "rest") => {
-    if (v === undefined) return v;
-    const t = v.trim();
-    return kind === "ep" ? t.toLowerCase() : kind === "rest" ? t.replace(/^\/+|\/+$/g, "") : t;
-  };
-  const pick = (p: string[]) => (p.length >= 4 ? [norm(p[0], "ep"), norm(p[2], "rest"), norm(p[3], "rest")] : [norm(p[0], "ep"), norm(p[1], "rest"), norm(p[2], "rest")]);
-  const [ae, ab, ap] = pick(pa);
-  const [be, bb, bp] = pick(pb);
-  return ae === be && ab === bb && ap === bp;
+  // 现行键形 = 四段 [endpoint, region, bucket, prefix]；其余形态一律不互认（键可重建，失配 = 重新询问）。
+  if (pa.length !== 4 || pb.length !== 4) return false;
+  const normEp = (v: string) => v.trim().toLowerCase();
+  const normRest = (v: string) => v.trim().replace(/^\/+|\/+$/g, "");
+  return normEp(pa[0]) === normEp(pb[0])
+    && normRest(pa[2]) === normRest(pb[2])
+    && normRest(pa[3]) === normRest(pb[3]);
 }
 
 /** 功能一：配置探测三态。marker = meta/pointer.json（本产品库标记）。 */

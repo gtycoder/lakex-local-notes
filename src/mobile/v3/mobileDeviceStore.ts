@@ -44,8 +44,6 @@ export class MobileDeviceStore implements S3v3DeviceStore {
    * 不在 JS 内存里攒字节（261027 真机 OOM：增量拉 1852 篇正文时单次 writeMany ~300MB JSON）。
    */
   private stagedBodyIds = new Set<string>();
-  /** 旧路径残留（兼容测试/历史调用）：新代码不再使用。 */
-  private stagedBodies = new Map<string, Uint8Array>();
   private stagedDeletes = new Set<string>();
   private stagedQuickBodies = new Map<string, Uint8Array>();
   private stagedQuickDeletes = new Set<string>();
@@ -81,7 +79,6 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     this.baselineFile = opts.baselineFile ?? baselineFileForDb(db) ?? MOBILE_BASELINE_FILE_PATH;
     this.portCtx = {
       stagedBodyIds: this.stagedBodyIds,
-      stagedBodies: this.stagedBodies,
       remotePurged: new Set<string>(),
       remoteTrashedAt: new Map<string, string>(),
       newlyCloudDeletedQuick: new Set<string>(),
@@ -115,13 +112,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       // 丢失时返回 null（UI/账本投影不因此中断）；**引擎入口的 loadBaseline() 才是硬失败判据**
       // （SyncBaselineLostError），保证基线丢失时绝不进入 pull-all。
       baseline: { load: async () => (await readPersistedBaseline(db, { baselineFile: this.baselineFile })).baseline },
-      // 正文 staging 在文件（stagedBodyIds），旧内存 map 仅兼容；saveState 消费后整份清空（与旧实现一致）。
+      // 正文 staging 在文件（stagedBodyIds；旧内存 map 兼容已删，261125 裁决）；
+      // saveState 消费后整份清空（与旧实现一致）。
       stagedBodies: {
-        get: (id) => this.stagedBodies.get(id),
         has: (id) => this.stagedBodyIds.has(id),
         clear: () => {
           this.stagedBodyIds.clear();
-          this.stagedBodies.clear();
           this.stagedDeletes.clear();
           this.stagedQuickBodies.clear();
           this.stagedQuickDeletes.clear();
@@ -248,8 +244,6 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   async readBody(id: string): Promise<Uint8Array | null> {
     if (this.stagedBodyIds.has(id)) return await readBodyStaging(id);
-    const staged = this.stagedBodies.get(id);
-    if (staged) return staged;
     if (this.stagedDeletes.has(id)) return null;
     const content = await readNoteBody(await this.kindOf(id), id);
     return content == null ? null : new TextEncoder().encode(content);
@@ -272,8 +266,6 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const normalById = new Map(normalIds.map((id, index) => [id, normalTexts[index]] as const));
     return ids.map((id) => {
       if (this.stagedBodyIds.has(id)) return stagedById.get(id) ?? null;
-      const staged = this.stagedBodies.get(id);
-      if (staged) return staged;
       if (this.stagedDeletes.has(id)) return null;
       const text = normalById.get(id) ?? null;
       return text == null ? null : new TextEncoder().encode(text);
@@ -298,7 +290,6 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     const normalById = new Map(normalIds.map((id, index) => [id, normalStats[index]] as const));
     return ids.map((id) => {
       if (this.stagedBodyIds.has(id)) return stagedById.get(id) ?? { exists: false, size: 0 };
-      if (this.stagedBodies.has(id)) return { exists: true, size: this.stagedBodies.get(id)!.length };
       if (this.stagedDeletes.has(id)) return { exists: false, size: 0 };
       return normalById.get(id) ?? { exists: false, size: 0 };
     });
@@ -315,13 +306,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   async writeBody(id: string, bytes: Uint8Array): Promise<void> {
     // 立即写 staging 文件（不占 JS 内存），saveState 时再原子 move 到最终路径。
     this.stagedDeletes.delete(id);
-    this.stagedBodies.delete(id);
     this.stagedBodyIds.add(id);
     await writeBodyStaging(id, new TextDecoder().decode(bytes));
   }
   async deleteBody(id: string): Promise<void> {
     this.stagedBodyIds.delete(id);
-    this.stagedBodies.delete(id);
     this.stagedDeletes.add(id);
     await removeBodyStaging(id).catch(() => undefined);
   }

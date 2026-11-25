@@ -6,23 +6,8 @@
  * 移动端 P0 只做填写：不做表单编辑态 / 分享 / 二维码。
  */
 import { addBitableRecordWithValues } from "../../core/bitableMutations";
-import {
-  bitableFormDraftDefaults,
-  bitableFormFields,
-  bitableFormValues,
-  formableBitableFields,
-  missingRequiredBitableFields,
-} from "../../core/bitableForm";
+import { bitableFormValues } from "../../core/bitableForm";
 import type { BitableDoc } from "../../core/bitableDoc.js";
-
-/** 可填写字段（core 单一来源；保留移动端旧名以少改调用点）。 */
-export const formableFields = formableBitableFields;
-/** 表单题目（core 单一来源：formFieldIds 顺序 → 未配置回落全量）。 */
-export const formFieldsFor = bitableFormFields;
-/** 表单草稿初值（core 单一来源）。 */
-export const formDraftDefaults = bitableFormDraftDefaults;
-/** 必填校验（core 单一来源）。 */
-export const formMissingFields = missingRequiredBitableFields;
 
 /**
  * 提交：把草稿写进表（新增记录）。

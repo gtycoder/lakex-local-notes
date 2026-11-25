@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { installNativeTitleTips } from "../../lib/nativeTitleTip";
 
 /**
@@ -10,7 +9,7 @@ import { installNativeTitleTips } from "../../lib/nativeTitleTip";
  */
 export const MOBILE_TIP_ID = "lake-mobile-title-tip";
 
-/** 安装原生 title → .mb-tip 的拦截器；返回卸载函数。
+/** 安装原生 title → .mb-tip 的拦截器；返回卸载函数。（旧组件挂法已删，261125 裁决）
  *  261116：外壳改为**空闲后再动态加载**本模块（entry 预算 50KB 吃紧，长按提示不是首屏能力）。 */
 export function installMobileTitleTips(): () => void {
   return installNativeTitleTips({
@@ -18,10 +17,4 @@ export function installMobileTitleTips(): () => void {
     tipClassName: "mb-tip",
     wideClassName: "mb-tip--wide",
   });
-}
-
-/** 兼容旧挂法（测试/其它宿主）：挂一次等于 install，卸载时清理。 */
-export function MobileTitleTips() {
-  useEffect(() => installMobileTitleTips(), []);
-  return null;
 }

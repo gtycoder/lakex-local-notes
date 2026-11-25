@@ -1,10 +1,8 @@
 /**
  * 261105 标签「删除 = 缺席」移动端落地：
- * - 删除 = 物理删行 + 清关联/版本 + 记本机待删（**不再写 `deleted_at` 墓碑**）；
- * - 删除后同名重建必须成功（旧墓碑行不能撞主键）；
- * - 旧库一次性迁移：`deleted_at` 墓碑 → 物理删 + 并入待删 + 置 `tag_absent_migrated`。
- *
- * ⚠️ 这份用例里的 `deleted_at` 只模拟「迁移之前的历史行」，正常路径不再产生该字段。
+ * - 删除 = 物理删行 + 清关联/版本 + 记本机待删（**不写 `deleted_at` 墓碑**）；
+ * - 删除后同名重建必须成功（旧行已物理删除，不会撞主键）；
+ * - 新库 tags 表**无墓碑列**（旧「deleted_at 墓碑」一次性迁移已删，261125 裁决）。
  */
 import { describe, expect, it, vi } from "vitest";
 import path from "node:path";
@@ -28,13 +26,11 @@ import { applyMobileSchema } from "./schema.js";
 import { quickNoteTagId } from "../../core/quickNoteTags.js";
 import {
   PENDING_TAG_DELETES_KEY,
-  TAG_ABSENCE_MIGRATED_KEY,
   addPendingTagDeletes,
   createQuickNoteTag,
   ensureQuickNoteTag,
   listPendingTagDeletes,
   listQuickNoteTags,
-  migrateTagAbsence,
   settlePendingTagDeletes,
 } from "./quickNoteTagsRepository.js";
 import { mobileQuickNoteTags } from "./quickNoteTagService.js";
@@ -53,13 +49,21 @@ async function insertQuickNote(db: SqlJsAsyncDb, id: string) {
     .run(id, T1, T1, "hash-" + id);
 }
 
-/** 只用于模拟「迁移前」的历史墓碑行。 */
-async function insertLegacyTombstone(db: SqlJsAsyncDb, id: string, name: string, at: string) {
-  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,?)")
-    .run(id, name, T1, at, at);
+/** 造一行同 id 的残留目录行（只用于「同名重建不撞主键」用例；正常路径由 ensure 自己写入）。 */
+async function insertTagRow(db: SqlJsAsyncDb, id: string, name: string, at: string) {
+  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)")
+    .run(id, name, T1, at);
 }
 
 describe("标签删除 = 缺席（移动端）", () => {
+  it("新库 tags 无墓碑列（deleted_at 一次性迁移已删，261125 裁决）", async () => {
+    const db = await freshDb();
+    try {
+      const cols = await db.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
+      expect(cols.some((c) => c.name === "deleted_at")).toBe(false);
+    } finally { await db.close(); }
+  });
+
   it("删除后同名重建成功（物理删行，不会撞主键）", async () => {
     const db = await freshDb();
     try {
@@ -70,18 +74,18 @@ describe("标签删除 = 缺席（移动端）", () => {
       const again = await createQuickNoteTag(db, "工作");
       expect(again.id).toBe(first.id);
       expect((await listQuickNoteTags(db)).map((tag) => tag.name)).toEqual(["工作"]);
-      expect(await db.prepare("SELECT deleted_at FROM tags WHERE id=?").get(first.id)).toMatchObject({ deleted_at: null });
+      expect(await db.prepare("SELECT name FROM tags WHERE id=?").get(first.id)).toMatchObject({ name: "工作" });
     } finally { await db.close(); }
   });
 
-  it("旧库残留墓碑行（迁移未跑）时同名重建不撞主键（upsert 复活）", async () => {
+  it("同 id 残留行同名重建不撞主键（upsert 就地更新）", async () => {
     const db = await freshDb();
     try {
       const id = quickNoteTagId("工作");
-      await insertLegacyTombstone(db, id, "工作", T2);
+      await insertTagRow(db, id, "残留", T2);
       const tag = await ensureQuickNoteTag(db, "工作", T2);
       expect(tag.id).toBe(id);
-      expect(await db.prepare("SELECT deleted_at FROM tags WHERE id=?").get(id)).toMatchObject({ deleted_at: null });
+      expect(await db.prepare("SELECT name FROM tags WHERE id=?").get(id)).toMatchObject({ name: "工作" });
     } finally { await db.close(); }
   });
 
@@ -117,27 +121,6 @@ describe("标签删除 = 缺席（移动端）", () => {
       const links = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id='q1'").all() as Array<{ tag_id: string }>;
       expect(links.map((row) => row.tag_id)).toEqual([target.id]);
       expect(await listPendingTagDeletes(db)).toEqual([source.id]);
-    } finally { await db.close(); }
-  });
-
-  it("一次性迁移：墓碑行 → 物理删 + 并入待删 + 清关联/版本 + 置标记（幂等）", async () => {
-    const db = await freshDb();
-    try {
-      await insertQuickNote(db, "q1");
-      const active = await createQuickNoteTag(db, "保留");
-      const deadId = quickNoteTagId("已删");
-      await insertLegacyTombstone(db, deadId, "已删", T2);
-      await db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q1',?,0)").run(deadId);
-      const result = await migrateTagAbsence(db);
-      expect(result.migrated).toEqual([deadId]);
-      expect(result.noteIds).toEqual(["q1"]);
-      expect(await db.prepare("SELECT 1 FROM tags WHERE id=?").get(deadId)).toBeUndefined();
-      expect((await listQuickNoteTags(db)).map((tag) => tag.id)).toEqual([active.id]);
-      expect(await db.prepare("SELECT tag_id FROM tag_links WHERE tag_id=?").all(deadId)).toEqual([]);
-      expect(await listPendingTagDeletes(db)).toEqual([deadId]);
-      expect(await db.prepare("SELECT value FROM device_state WHERE key=?").get(TAG_ABSENCE_MIGRATED_KEY)).toMatchObject({ value: "1" });
-      // 幂等：第二次不再迁移（即便又插了墓碑行也不动它 —— 标记已置位）
-      expect(await migrateTagAbsence(db)).toEqual({ migrated: [], noteIds: [] });
     } finally { await db.close(); }
   });
 

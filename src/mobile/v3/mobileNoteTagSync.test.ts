@@ -42,7 +42,7 @@ async function freshPort() {
 }
 
 async function insertTag(db: SqlJsAsyncDb, id: string, name: string) {
-  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)").run(id, name, T1, T1);
+  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)").run(id, name, T1, T1);
 }
 
 async function setNoteTagsRow(db: SqlJsAsyncDb, tagIds: string[], at: string, order?: string[]) {

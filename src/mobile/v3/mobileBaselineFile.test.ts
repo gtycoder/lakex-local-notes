@@ -208,31 +208,17 @@ describe("D1-C：移动端 baseline 落 gzip 文件（不再随 sync_v3_state �
     await db.close();
   }, 30_000);
 
-  it("旧行内嵌 baseline ⇒ 一次性迁移：第一次写文件、第二次只读文件（0 行读 / 0 再写）", async () => {
+  it("旧行内嵌 baseline **不再迁移**（261125 裁决，AGENTS §3#7）：行内值被忽略、不写文件；有 v3 信封却无基线文件 = lost（硬失败）", async () => {
     const backend = useBackend();
     const db = await freshDb();
     const baseline = bigBaseline(50, 5);
-    // 旧落盘形状：信封 + baseline 同 JSON
+    // 旧落盘形状（D1-C 之前）：信封 + baseline 同 JSON —— 一次性迁移已删，行内 baseline 不再提取。
     await db.prepare("INSERT INTO sync_v3_state (id,json) VALUES ('state',?)").run(JSON.stringify({ ...envelope(), baseline }));
 
-    let rowReads = 0;
-    const store = new MobileDeviceStore(countingDb(db, (sql) => {
-      if (/FROM\s+sync_v3_state/i.test(sql)) rowReads += 1;
-    }));
-
-    const first = await store.loadBaseline();
-    expect(first).toEqual(baseline);
-    expect(backend.writes, "第一次加载 = 迁移写一次文件").toBe(1);
-    expect(rowReads).toBe(1);
-    expect((await readBaselineFile()).status).toBe("ok");
-
-    // 模拟「下一次信封写入已剔除行内 baseline」（core saveState 的落盘形状）。
-    await savePersistedV3State(db, envelope() as never);
-    rowReads = 0;
-    const second = await store.loadBaseline();
-    expect(second).toEqual(baseline);
-    expect(backend.writes, "第二次加载不再迁移/不再写文件").toBe(1);
-    expect(rowReads, "文件优先 ⇒ 第二次加载 0 次 state 行读").toBe(0);
+    const store = new MobileDeviceStore(db);
+    await expect(store.loadBaseline()).rejects.toThrow(/基线/);
+    expect(backend.writes, "行内 baseline 不再迁移 ⇒ 绝不写文件").toBe(0);
+    expect((await readBaselineFile()).status).not.toBe("ok");
     await db.close();
   }, 30_000);
 
@@ -274,15 +260,14 @@ describe("D1-C：移动端 baseline 落 gzip 文件（不再随 sync_v3_state �
     await db.close();
   }, 30_000);
 
-  it("损坏文件 + 旧行内嵌 baseline ⇒ 自动修复（迁移写文件），不硬失败", async () => {
+  it("损坏文件 + 旧行内嵌 baseline ⇒ **不再**自动修复（261125 裁决）：仍按 lost 硬失败，行内值不救", async () => {
     const backend = useBackend();
     const db = await freshDb();
     const baseline = bigBaseline(20, 2);
     await db.prepare("INSERT INTO sync_v3_state (id,json) VALUES ('state',?)").run(JSON.stringify({ ...envelope(), baseline }));
     backend.files.set(MOBILE_BASELINE_FILE_PATH, "!!!corrupted!!!");
     const store = new MobileDeviceStore(db);
-    expect(await store.loadBaseline()).toEqual(baseline);
-    expect((await readBaselineFile()).status).toBe("ok");
+    await expect(store.loadBaseline()).rejects.toThrow(/基线/);
     await db.close();
   }, 30_000);
 

@@ -1528,7 +1528,7 @@ describe("S3 配置（本机加密落盘 enc:v2，261201 裁决）", () => {
     expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
   });
 
-  it("enc:v1（旧钥匙串）存量按未配置读出（261204 裁决：不写迁移代码，重填即转 v2）", async () => {
+  it("非 enc:v2:（enc:v1: 旧钥匙串存量）按未配置读出（261204 裁决：不写迁移代码，重填即转 v2）", async () => {
     const { safeStorage } = await import("electron");
     const v1 = "enc:v1:" + safeStorage.encryptString("sk-legacy").toString("base64");
     const legacyRow = JSON.stringify({ ...settings, secretAccessKey: v1 });
@@ -1690,7 +1690,7 @@ describe("同步状态 / 导入", () => {
     expect(store.getTombstonesWaterline() <= new Date(Date.now() + 1000).toISOString()).toBe(true);
   });
 
-  it("Del-6 迁移：旧库 deleted_notes.published_at 回填水线后删列（未发布旧行仍计待同步）", () => {
+  it("Del-6：水线键缺失直接写「0」（不回查 published_at 回填、不删旧列）⇒ 旧库墓碑行全部计待同步（幂等重发一轮）", () => {
     const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-del6-migrate-"));
     const raw = new Database(path.join(legacyRoot, "metadata.sqlite3"));
     raw.exec("CREATE TABLE deleted_notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT NOT NULL, node_type TEXT NOT NULL DEFAULT 'note', published_at TEXT, purged_at TEXT)");
@@ -1700,12 +1700,13 @@ describe("同步状态 / 导入", () => {
     raw.close();
     const migrated = new Store(legacyRoot);
     try {
-      // 水线 = COALESCE(MAX(published_at),0)；列已删
-      expect(migrated.getTombstonesWaterline()).toBe("2026-10-02T00:00:00.000Z");
+      // 水线键缺失 = 直接写「0」：不读 published_at 做历史回填（AGENTS §3#7 不为历史数据写迁移）
+      expect(migrated.getTombstonesWaterline()).toBe("0");
+      // 旧列残留不清理（不写迁移/清理 DDL，AGENTS §3#7）
       const cols = (migrated as unknown as { db: { prepare: (sql: string) => { all: () => Array<{ name: string }> } } }).db.prepare("PRAGMA table_info(deleted_notes)").all();
-      expect(cols.some((c) => c.name === "published_at")).toBe(false);
-      // 未发布旧行 deleted_at 晚于水线 ⇒ 仍算待同步（保留升级前 pending 语义）
-      expect(migrated.pendingSignature().split(":")[2]).toBe("1");
+      expect(cols.some((c) => c.name === "published_at")).toBe(true);
+      // 全部旧墓碑行（含曾发布的）deleted_at > "0" ⇒ 计待同步：幂等重发一轮删除意图，方向安全
+      expect(migrated.pendingSignature().split(":")[2]).toBe("2");
       expect(migrated.listDeletedNotesForSync().map((d) => d.id)).toEqual(expect.arrayContaining(["t-published", "t-pending"]));
     } finally {
       fs.rmSync(legacyRoot, { recursive: true, force: true });

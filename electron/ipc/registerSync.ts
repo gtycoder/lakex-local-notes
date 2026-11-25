@@ -171,7 +171,7 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
   ipc.handle("run_data_health_check", () => store.runDataHealthCheck());
   /** 资源页「缺正文」→ 从云端拉回（显式动作；失败以 reason 回报，不抛）。
-   *  **必须进维护域**：读清单 + 取对象都是出网往返，落地后还要改 sync_base / sync_state
+   *  **必须进维护域**：读清单 + 取对象都是出网往返，落地后还要改同步账本（v3 基线 / 归位记账）
    *  —— 与整轮同步/GC 并发会互踩同一篇的账本（AGENTS §4 互斥域 I3 / 单一队列），故走 enqueueMaintenance。 */
   ipc.handle("restore_missing_body_from_cloud", (id: string) =>
     enqueueMaintenance(() => restoreMissingBodyFromCloud(store, id)));

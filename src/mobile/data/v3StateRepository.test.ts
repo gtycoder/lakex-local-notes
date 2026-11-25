@@ -79,7 +79,7 @@ describe("移动端 v3 同步账本", () => {
     await db.close();
   });
 
-  it("旧格式（无 version 的 MobileV3State）⇒ 账本重置（Q23）：baseline 保留、意图清空、资产投影抢救", async () => {
+  it("未知信封形态（无 version 的旧 MobileV3State）⇒ 整体按空处理（261125 裁决：不迁移、不抢救；行内嵌 baseline 也不迁）", async () => {
     const db = await freshDb();
     const legacy = {
       baseline: { epoch: "e1", generation: 3, lakeCommit: "a".repeat(64), quickNotesCommit: "b".repeat(64), lake: { v: 3, space: "lake", notes: [], folders: [] }, quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] } },
@@ -88,21 +88,17 @@ describe("移动端 v3 同步账本", () => {
     };
     await db.prepare("INSERT INTO sync_v3_state (id, json) VALUES ('state', ?)").run(JSON.stringify(legacy));
     const loaded = await loadV3State(db);
-    // Q23（261112 裁决 B）：v1/v2 不再迁移 ⇒ 旧意图全部重置（用户确认无历史数据）
-    expect(loaded.baseline?.epoch, "baseline 不在信封迁移范围，保留（避免首轮全量重传）").toBe("e1");
-    expect(loaded.remotePurged).toEqual([]);
-    expect(loaded.restorePending).toEqual([]);
-    expect(loaded.quickPurgeTimes).toEqual({});
-    // 资产投影必须抢救（丢了会把「未下载」误判成「删光附件」⇒ 云端误 GC）
-    expect(loaded.assetsHash).toEqual({ n1: "d".repeat(64) });
+    // 未知信封形态 = 空账本：意图/标记/资产投影全空，行内嵌 baseline 的一次性迁移也已删。
+    expect(loaded).toEqual(EMPTY_MOBILE_V3_STATE);
 
+    // 现行写入恒为 v3 信封（下一次 saveState 落 v3）。
     await saveV3State(db, loaded);
     const row = await db.prepare("SELECT json FROM sync_v3_state WHERE id='state'").get() as { json: string };
     expect((JSON.parse(row.json) as { version?: number }).version).toBe(3);
     await db.close();
   });
 
-  it("v2 信封按空间分开的资产投影：加载时合并回内存视图（合并 Map 形状不变）", async () => {
+  it("v2 旧信封 → 空账本（资产投影不再抢救；未知信封形态按空处理）", async () => {
     const db = await freshDb();
     await db.prepare("INSERT INTO sync_v3_state (id, json) VALUES ('state', ?)").run(JSON.stringify({
       version: 2,
@@ -113,7 +109,7 @@ describe("移动端 v3 同步账本", () => {
       assets: { lake: { n1: "a".repeat(64) }, quickNotes: { q1: "b".repeat(64) } },
       baseline: null,
     }));
-    expect((await loadV3State(db)).assetsHash).toEqual({ n1: "a".repeat(64), q1: "b".repeat(64) });
+    expect((await loadV3State(db)).assetsHash).toEqual({});
     await db.close();
   });
 

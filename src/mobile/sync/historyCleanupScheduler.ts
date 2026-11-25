@@ -3,11 +3,12 @@
  *
  * 桌面是主进程常驻 setInterval（electron/main.ts 的 cleanupTimer）；移动端 WebView 没有可靠的
  * 后台常驻定时器 ⇒ 改成**就绪/回前台时检查是否到期**（低频、默认 24h 一次，0 = 不自动清理，
- * 与桌面同一语义）。上次清理时间落 device_state（随 App 数据持久，进程被杀也不丢），
- * localStorage 仅作迁移兜底（与 syncResumeMarker 同一套写法）。
+ * 与桌面同一语义）。上次清理时间落 device_state（随 App 数据持久，进程被杀也不丢）；
+ * 旧 localStorage 迁移兜底已删（261125 裁决，AGENTS §3#7）。
  *
  * 语义约束：
  * - **先记时间再清理**：清理中途被杀也不会每次启动都重跑；失败也等下一个间隔，不打扰用户。
+ *   无 db 时标记不落盘（下次可能多清一次；清理按保留策略幂等，无害）。
  * - 只调用既有 bridge.cleanupHistory()（写域，内部按设置做分层保留），不新增原生 API。
  * - 读设置/开库失败由调用方静默（后台维护不弹提示）。
  */
@@ -15,7 +16,6 @@ import type { MobileDb } from "../data/dbPortTypes.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
 
 const DB_KEY = "history_cleanup_at";
-export const HISTORY_CLEANUP_LS_KEY = "lakex-local-notes-mobile.historyCleanupAt";
 
 /** 是否到了清理时间：intervalHours <= 0 = 关闭；从未清理过 = 到期；否则按间隔比较。 */
 export function shouldRunHistoryCleanup(args: { now: number; lastAt: number | null; intervalHours: number }): boolean {
@@ -30,32 +30,22 @@ function parseAt(raw: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function lsGet(): string | null {
-  try { return globalThis.localStorage?.getItem(HISTORY_CLEANUP_LS_KEY) ?? null; } catch { return null; }
-}
-function lsSet(value: string): void {
-  try { globalThis.localStorage?.setItem(HISTORY_CLEANUP_LS_KEY, value); } catch { /* 隐私模式/无存储 */ }
-}
-
-/** 上次清理时间（device_state 优先，localStorage 兜底）；都没有 = 从未清理。 */
+/** 上次清理时间（device_state）；无 db/无记录 = 从未清理。 */
 export async function readLastHistoryCleanupAt(db: MobileDb | null): Promise<number | null> {
-  if (db) {
-    try {
-      const row = await db.prepare("SELECT value FROM device_state WHERE key=?").get(DB_KEY) as { value?: string } | undefined;
-      if (row?.value) return parseAt(row.value);
-    } catch { /* 回退 localStorage */ }
-  }
-  return parseAt(lsGet());
+  if (!db) return null;
+  try {
+    const row = await db.prepare("SELECT value FROM device_state WHERE key=?").get(DB_KEY) as { value?: string } | undefined;
+    return parseAt(row?.value);
+  } catch { return null; }
 }
 
-/** 记录本次清理时间（device_state 为主 + localStorage 兜底）。 */
+/** 记录本次清理时间（device_state）。 */
 export async function markHistoryCleanupAt(db: MobileDb | null, at: Date = new Date()): Promise<void> {
-  const value = at.toISOString();
-  lsSet(value);
   if (!db) return;
+  const value = at.toISOString();
   try {
     await db.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(DB_KEY, value);
-  } catch { /* 表异常时只留 localStorage */ }
+  } catch { /* 表异常：丢一次清理时间（下次可能多清一次），不抛错 */ }
 }
 
 export interface ScheduledHistoryCleanupDeps {
@@ -63,7 +53,7 @@ export interface ScheduledHistoryCleanupDeps {
   readSettings: () => Promise<HistoryMobileSettings>;
   /** 真正的清理（bridge.cleanupHistory）。 */
   cleanup: () => Promise<{ deleted: number }>;
-  /** 打开主库；失败可返回 null（标记仍能落 localStorage）。 */
+  /** 打开主库；失败可返回 null（标记不落盘，下次可能多清一次）。 */
   db: () => Promise<MobileDb | null>;
   /** 测试注入时钟。 */
   now?: number;

@@ -13,7 +13,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * 密钥材料是**固定派生**的（`lakex-local-notes-mobile.secret-key.v1`）—— 拿到 WebView 存储就能解开，
  * 属于"混淆"而非硬件级保护。这里改为：
  *   · 密钥 = 随机 32 字节，落应用私有密钥文件（SecretBox 管理，0600 尽力收紧；与桌面 machine.key 同语义）；
- *   · **不再使用 Android Keystore / 系统钥匙串**（存量 Keystore 密文一次性迁移后退役，261204）；
+ *   · **不再使用 Android Keystore / 系统钥匙串**（261204）：存量 Keystore 密文**按未配置读出、不写迁移**，重填即转当前加密形态；
  *   · 密文（`base64(iv):base64(ciphertext)`，AES-256-GCM）落 **应用私有 SharedPreferences**；
  *   · 解锁/使用不依赖系统凭据管理。
  *

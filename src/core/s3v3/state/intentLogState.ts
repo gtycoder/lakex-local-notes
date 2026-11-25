@@ -6,13 +6,11 @@
  * 落盘 = `{ version:3, records, assets, hashCache? }`；load 时投影回 DeviceState 的 9 个字段
  * （**引擎一行不改**，仍消费 DeviceState），save 时摊平。基线不在此文件（桌面 baseline.json.gz / 移动同 JSON 的 baseline 字段）。
  *
- * 断代门（用户 261028 / **261112 二次裁决 B：删除 v1/v2 迁移**）：
+ * 断代门（用户 261028 / 261112 裁决 B / **261125 裁决：无历史版本，旧形态迁移与资产抢救整批删除**）：
  * - v3 直读；未知 record kind → 丢弃该条并收 warning（不崩）。
- * - **v1/v2 信封与无 version 的旧 sidecar（含 MobileV3State）不再迁移**：读到旧形状 ⇒ **账本重置**为空 records，
- *   并收一次可读 warning（不崩、不阻断同步）。
- * - 重置时**保留资产投影与 hashCache**（见下「不走账本」一节）：把它们一起丢会让「未下载」被误判成
- *   「删光附件」⇒ 云端误 GC；hashCache 丢失则要全库重算 sha256。这不是兼容读取，只是同 JSON 里的安全投影。
- * - 非账本形状（null / 字符串 / 空对象）→ null（适配器按空账本处理）。
+ * - **其余一切形态**（v1/v2 旧信封、无 version 的旧 sidecar、未知/未来版本）→ **null = 按空账本处理**：
+ *   不迁移、不抢救、不猜测（AGENTS §3#7；读到旧形态在现行数据中不可达——现行写入恒为 v3 信封）。
+ * - 非账本形状（null / 字符串 / 空对象）同上 → null。
  *
  * 不走账本、但必须随信封持久化的两类数据：
  * - `assets`：最后一次声明过的资产 hash 投影（丢了会把「未下载」误判为「删光附件」→ 云端误 GC）；
@@ -129,28 +127,6 @@ export function toPersistedState(state: DeviceState): IntentLogStateV3 {
   };
 }
 
-/**
- * 旧信封（v1/v2）里**必须抢救**的资产投影（Q23 重置账本时保留）：丢了会把「未下载」误判成
- * 「删光附件」⇒ 云端误 GC（见文件头）。v1 形状 = 合并的 assetsHash / quickAssetsHash；
- * v2 形状 = 按空间的 assets.lake / quickNotes。这不是兼容迁移，只取安全投影。
- */
-function salvagedAssetsOf(raw: Record<string, unknown>): { lake: Record<string, string>; quickNotes: Record<string, string> } {
-  if (isRecord(raw.assets)) return assetsOf(raw.assets);
-  return { lake: recordOfStrings(raw.assetsHash), quickNotes: recordOfStrings(raw.quickAssetsHash) };
-}
-
-/** 是否「像一本同步账本」——用于区分「旧格式要重置」与「无关/损坏 JSON（→ null）」。 */
-const LEDGER_KEYS = [
-  "records", "intents", "pending", "quick", "restore", "cloudDeleted", "recovery",
-  "assets", "hashCache", "quickDeletes", "quickPurges", "quickPurgeTimes", "remotePurged",
-  "restorePending", "quickAssetsHash", "assetsHash", "pendingAssets",
-] as const;
-
-function looksLikeLedger(raw: Record<string, unknown>): boolean {
-  if (typeof raw.version === "number") return true;
-  return LEDGER_KEYS.some((key) => key in raw);
-}
-
 /** v3 records 校验/归一：未知 kind 丢弃 + warning（断代门：不猜测旧 kind）。 */
 function normalizeRecords(value: unknown, onWarning?: (message: string) => void): IntentRecord[] {
   if (!Array.isArray(value)) return [];
@@ -205,30 +181,16 @@ function normalizeRecords(value: unknown, onWarning?: (message: string) => void)
 /**
  * 任意落盘 JSON → v3 信封。
  * - **v3**：归一后直读（未知 record kind 丢弃 + warning，不崩）。
- * - **旧格式（v1/v2）或未知版本**：Q23（261112 用户裁决 B）起**不再迁移** ⇒ 账本重置（records 空），
- *   收一次可读 warning；资产投影与 hashCache 抢救保留（理由见文件头，避免云端误 GC / 全库重算）。
- * - **非账本形状**（null / 字符串 / 数字 / 空对象）：null（适配器按空账本处理）。
+ * - **其余一切形态**（v1/v2 旧信封、未知/未来版本、非账本形状）：**null = 按空账本处理**（261125 裁决：
+ *   旧形态迁移/资产抢救已删，AGENTS §3#7；现行写入恒为 v3 信封 ⇒ 旧形态在现行数据中不可达）。
  */
 export function migratePersisted(raw: unknown, onWarning?: (message: string) => void): IntentLogStateV3 | null {
-  if (!isRecord(raw)) return null;
-  if (raw.version === DEVICE_STATE_VERSION) {
-    const hashCache = hashCacheOf(raw.hashCache);
-    return {
-      version: DEVICE_STATE_VERSION,
-      records: normalizeRecords(raw.records, onWarning),
-      assets: assetsOf(raw.assets),
-      ...(hashCache ? { hashCache } : {}),
-    };
-  }
-  if (!looksLikeLedger(raw)) return null;
-  onWarning?.(
-    "同步账本为旧格式（v1/v2）或未知版本：已按裁决重置为空账本（不再迁移；资产投影与 hash 缓存保留）",
-  );
+  if (!isRecord(raw) || raw.version !== DEVICE_STATE_VERSION) return null;
   const hashCache = hashCacheOf(raw.hashCache);
   return {
     version: DEVICE_STATE_VERSION,
-    records: [],
-    assets: salvagedAssetsOf(raw),
+    records: normalizeRecords(raw.records, onWarning),
+    assets: assetsOf(raw.assets),
     ...(hashCache ? { hashCache } : {}),
   };
 }
@@ -262,21 +224,11 @@ export function ledgerOf(persisted: IntentLogStateV3): DeviceLedger {
   return state;
 }
 
-/**
- * Q23（261112 裁决 B）：v1/v2 迁移已删除 ⇒ 已不存在「需要迁移」的落盘。
- * 保留导出只为既有调用点（`deviceStore.loadState` 的日志分支）不被打断，**恒 false**；新代码不要用。
- * 旧账本现在由 `migratePersisted` 直接重置（并给一条 warning），不再有「迁移一次」这回事。
- */
-export function persistedNeedsMigration(_raw?: unknown): boolean {
-  return false;
-}
-
-/** records → 9 本账（引擎继续消费 DeviceState；不动引擎）。 */
-export function fromPersistedState(raw: unknown, onWarning?: (message: string) => void): { state: DeviceLedger; migrated: boolean } | null {
+/** records → 9 本账（引擎继续消费 DeviceState；不动引擎）。非 v3 形态 → null（按空账本处理）。 */
+export function fromPersistedState(raw: unknown, onWarning?: (message: string) => void): { state: DeviceLedger } | null {
   const persisted = migratePersisted(raw, onWarning);
   if (!persisted) return null;
-  // Q23：迁移已删 —— 「migrated」恒 false（字段保留只为既有调用点签名不变）。
-  return { state: ledgerOf(persisted), migrated: persistedNeedsMigration(raw) };
+  return { state: ledgerOf(persisted) };
 }
 
 /** 把 v3 引擎的轻量标记并入信封（persistSyncMarkers 用）：替换 cloud-deleted/restore 两类记录，其余原样。 */

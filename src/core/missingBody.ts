@@ -2,8 +2,8 @@
  * 「缺正文」文档的可恢复性判据（纯函数，261023）。
  *
  * 手动删掉 .lake 后，资源页要能告诉用户"这篇还能怎么救"：
- * - **cloud**：已配置云同步、且本机判定「这篇曾在云端」（v3 事实：上一轮成功同步的云端文档集合 /
- *   小记的 quick_note_sync_base）⇒ 可以尝试从云端拉回正文；
+ * - **cloud**：已配置云同步、且本机判定「这篇曾在云端」（v3 事实：上一轮成功同步的云端文档/小记集合，
+ *   两端同口径；Del-6：v2 的 sync_base 账本已删）⇒ 可以尝试从云端拉回正文；
  * - **history**：没有云端依据，但有历史快照 ⇒ 至少能恢复最新历史版本；
  * - **none**：两边都没有 ⇒ 只能删除。
  *
@@ -51,7 +51,7 @@ export interface MissingQuickNoteDoc {
   previewText: string;
   imageCount: number;
   tags: string;
-  /** 本机 quick_note_sync_base 是否有记录（曾同步过）。 */
+  /** 这篇是否曾同步到云端（v3 事实 = 上一轮成功同步的云端小记集合，与文档侧同口径）。 */
   hasSyncBase: boolean;
   /** 允许出网（已配置 S3 且未关闭云同步）。 */
   cloudConfigured: boolean;

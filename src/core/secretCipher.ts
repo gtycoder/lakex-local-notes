@@ -3,9 +3,9 @@
  * 桌面默认实现 = 本机加密（AES-256-GCM + machine.key，见 electron/secretCipher.ts；261201 裁决、
  * 261204 收尾：safeStorage/系统钥匙串已全退役、零引用）；纯逻辑/测试环境可用明文回退
  * 实现（createPlaintextSecretCipher）。
- * 存储格式约定：`enc:v2:` = 本机加密（nonce|tag|ct）；`enc:v1:` = 旧钥匙串存量，
- * **一律按未配置读出**（261204 裁决：不为历史数据写代码，用户重填即转 v2，零钥匙串访问）；
- * 非 enc: 前缀视为旧明文，decrypt 不再放行、返回空串提示重配（S2）。
+ * 存储格式约定：`enc:v2:` = 本机加密（nonce|tag|ct）；**非 `enc:v2:` 前缀一律按未配置读出**、
+ * 不写迁移（261204 裁决，AGENTS §3#7：不为历史数据写代码）——含旧钥匙串存量（enc:v1:）与
+ * 旧明文（S2），decrypt 一律返回空串提示重配，用户重填即转 v2、零钥匙串访问。
  */
 
 export interface SecretCipher {

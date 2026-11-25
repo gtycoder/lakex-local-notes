@@ -29,7 +29,7 @@ async function freshDb() {
 }
 
 async function insertTag(db: SqlJsAsyncDb, id: string, name: string, createdAt: string) {
-  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)").run(id, name, createdAt, createdAt);
+  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)").run(id, name, createdAt, createdAt);
 }
 
 describe("标签目录顺序（设备本地）", () => {

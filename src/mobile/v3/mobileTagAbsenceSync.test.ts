@@ -56,7 +56,7 @@ describe("标签跨端删除 = 缺席（双移动端，假 S3）", () => {
         .run(T1, T1, sha256Sync(new TextEncoder().encode(body)));
       await a.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote','q1',?)").run(T1);
       await writeQuickNoteBody("q1", body);
-      await a.db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)").run(TAG_ID, "工作", T1, T1);
+      await a.db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)").run(TAG_ID, "工作", T1, T1);
       await a.db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q1',?,0)").run(TAG_ID);
 
       const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });

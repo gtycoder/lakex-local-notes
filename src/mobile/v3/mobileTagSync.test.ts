@@ -1,6 +1,6 @@
 /**
  * 移动端标签同步端口：**删除 = 缺席（261105 定稿）**。
- * - `listQuickTags` 只给 active 行（不含顺序、不含墓碑字段）；旧库残留的 `deleted_at` 行不得上云；
+ * - `listQuickTags` 只给目录行（不含顺序、不含墓碑字段）；目录表无墓碑列（删除 = 缺席，261125 裁决）；
  * - `mergeQuickTags(tags, removedIds)`：upsert active + 对 removedIds **物理删行并清关联/版本**；
  * - `pendingTagDeletes`（device_state `tag_deleted`）：本机待删集合的读、追加（幂等）、结算（移除已确认缺席），供核心抑制远端重发；
  * - `applyQuickNoteTagLinks`：关系顺序是本机视图（远端新增插最前）+ `tagsUpdatedAt` LWW。
@@ -34,14 +34,8 @@ async function freshPort() {
   return { db, port: createMobilePlatformPort(db) };
 }
 
-/** 只给"旧库残留墓碑行"用例用：正常路径不再产生 `deleted_at`。 */
-async function insertLegacyTombstone(db: SqlJsAsyncDb, id: string, name: string, at: string) {
-  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,?)")
-    .run(id, name, T1, at, at);
-}
-
 async function insertTag(db: SqlJsAsyncDb, id: string, name: string, updatedAt: string, sortOrder = 0) {
-  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,?,?,?,NULL)")
+  await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,?,?,?)")
     .run(id, name, sortOrder, T1, updatedAt);
 }
 
@@ -56,11 +50,12 @@ async function insertQuickNote(db: SqlJsAsyncDb, id: string) {
 }
 
 describe("移动端标签同步端口（删除 = 缺席）", () => {
-  it("listQuickTags：只返回 active 行（旧库残留墓碑不上云、不带顺序字段）", async () => {
+  it("listQuickTags：只给目录行（不带顺序/墓碑字段；删除 = 缺席，被删行物理消失）", async () => {
     const { db, port } = await freshPort();
     try {
       await insertTag(db, "t_a", "A", T1);
-      await insertLegacyTombstone(db, "t_del", "D", T2);
+      await insertTag(db, "t_del", "D", T2);
+      await db.prepare("DELETE FROM tags WHERE id=?").run("t_del"); // 删除 = 缺席：物理删行
       const rows = await port.listQuickTags();
       expect(rows.map((row) => row.id)).toEqual(["t_a"]);
       const [first] = rows;
@@ -152,25 +147,22 @@ describe("移动端标签同步端口（删除 = 缺席）", () => {
     } finally { await db.close(); }
   });
 
-  it("applyQuickNoteTagLinks：过滤旧库墓碑/非法 ID/超上限，按 tagsUpdatedAt LWW 落库", async () => {
+  it("applyQuickNoteTagLinks：过滤空 ID/超上限，按 tagsUpdatedAt LWW 落库", async () => {
     const { db, port } = await freshPort();
     try {
       await insertQuickNote(db, "q1");
       const okId = "t_0000000000000001";
-      const delId = "t_0000000000000002";
       await insertTag(db, okId, "OK", T1);
-      // 迁移未跑完的旧库：目录里可能还留着墓碑行，关系应用时不得写入。
-      await insertLegacyTombstone(db, delId, "D", T2);
       const many = Array.from({ length: 25 }, (_, index) => "t_" + "0123456789abcdef".slice(0, 12) + index.toString(16).padStart(4, "0"));
       const valid = many.filter((id) => /^t_[a-f0-9]{16}$/.test(id));
-      // 旧版本/旧索引可能存在非 t_ 形态的 ID：**保留**（按正则过滤会静默丢关联）；只过滤空串/墓碑/重复并截断。
-      await port.applyQuickNoteTagLinks("q1", [okId, delId, "legacy-id", "", ...valid], T2);
+      // 旧版本/旧索引可能存在非 t_ 形态的 ID：**保留**（按正则过滤会静默丢关联）；只过滤空串/重复并截断。
+      await port.applyQuickNoteTagLinks("q1", [okId, "", "legacy-id", ...valid], T2);
       const links = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind=? AND target_id=? ORDER BY position").all("quickNote", "q1") as Array<{ tag_id: string }>;
       expect(links.map((row) => row.tag_id)).toEqual([okId, "legacy-id", ...valid].slice(0, 20));
       const version = await db.prepare("SELECT links_updated_at FROM tag_link_versions WHERE target_kind=? AND target_id=?").get("quickNote", "q1") as { links_updated_at: string };
       expect(version.links_updated_at).toBe(T2);
       // 远端更旧的版本不得覆盖（LWW）
-      await port.applyQuickNoteTagLinks("q1", [delId], T1);
+      await port.applyQuickNoteTagLinks("q1", ["t_0000000000000002"], T1);
       const after = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind=? AND target_id=?").all("quickNote", "q1") as Array<{ tag_id: string }>;
       expect(after.map((row) => row.tag_id)).toContain(okId);
     } finally { await db.close(); }

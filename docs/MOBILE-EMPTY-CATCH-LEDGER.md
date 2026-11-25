@@ -165,7 +165,7 @@
 ### `src/mobile/sync/syncProgressStore.ts`
 - `28` /* 订阅方自行负责 */
 
-### `src/mobile/sync/syncResumeMarker.ts`
+### `src/mobile/sync/syncResumeMarker.ts`（⚠️ 26125 迁移清理批已删 localStorage 兜底，本节行号与现状不符，以源码为准）
 - `18` /* 隐私模式/无存储 */
 - `21` /* 同上 */
 - `29` /* 表异常时退化为 localStorage */

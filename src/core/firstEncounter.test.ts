@@ -73,6 +73,18 @@ describe("目标身份比较 sameSyncTargetKey（261124：忽略 region）", () 
     expect(sameSyncTargetKey("a\u0000b", "a\u0000b\u0000x")).toBe(false);
     expect(sameSyncTargetKey(key("https://s3.x.com", "r", "b", "p"), key("https://s3.x.com", "r", "b", "p"))).toBe(true); // 完整键照常
   });
+
+  it("只认现行键形（targetKeyOf 盖章的四段式）：旧键形/缺段键不与现行键互认（兼容分支已删，261125 裁决）", () => {
+    const full = key("https://s3.x.com", "r", "b", "p");
+    const three = ["https://s3.x.com", "b", "p"].join("\u0000"); // 三段式（无 region）
+    const five = ["https://s3.x.com", "r", "b", "p", "x"].join("\u0000");
+    expect(sameSyncTargetKey(full, three)).toBe(false);
+    expect(sameSyncTargetKey(three, full)).toBe(false);
+    expect(sameSyncTargetKey(full, five)).toBe(false);
+    expect(sameSyncTargetKey(three, three)).toBe(true); // 同一字符串仍自比成立（闸门语义）
+    // 现行键形内部照常：忽略 region、归一化端点/前缀
+    expect(sameSyncTargetKey(full, key("https://S3.x.com", "r2", "b", "/p/"))).toBe(true);
+  });
 });
 
 describe("四选项对文档决策的映射", () => {

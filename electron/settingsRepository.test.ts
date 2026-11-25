@@ -37,8 +37,8 @@ function makeRepo(rows: Map<string, string>): SettingsRepository {
 
 const S3_ROW = JSON.stringify({ endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "b", prefix: "p", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false });
 
-describe("261204 系统钥匙串退役：enc:v1 存量按未配置（不写迁移代码）", () => {
-  // 与生产同款语义的桩：enc:v2: = 本机 machine.key 加密；enc:v1: = 旧钥匙串存量 ⇒ 解不出（未配置）。
+describe("261204 系统钥匙串退役：非 enc:v2: 存量一律按未配置（不写迁移代码）", () => {
+  // 与生产同款语义的桩：enc:v2: = 本机 machine.key 加密；非 enc:v2: 前缀（enc:v1: 旧钥匙串存量等）⇒ 解不出（未配置）。
   const makeCipher = (): SecretCipher => ({
     encrypt: (v) => "enc:v2:" + Buffer.from(v).toString("base64"),
     decrypt: (v) => v.startsWith("enc:v2:") ? Buffer.from(v.slice("enc:v2:".length), "base64").toString() : "",

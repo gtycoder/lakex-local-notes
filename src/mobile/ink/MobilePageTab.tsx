@@ -51,6 +51,3 @@ export function MobilePageTabSheet({ state, open, onClose }: { state: MobilePage
     </MobileSheet>
   );
 }
-
-/** 兼容旧引用：默认导出按钮（Sheet 由宿主另行渲染）。 */
-export default MobilePageTabButton;

@@ -49,20 +49,20 @@ export interface QuickNoteMissingBodyDeps {
   readonly search: QuickNoteSearchDeps;
 }
 
-/** 资源页「缺小记」清单：只 stat 不读正文；带同步基线 / 搜索缓存 / 可恢复性。 */
-export function listMissingQuickNotes(deps: QuickNoteMissingBodyDeps, options: { cloudConfigured: boolean }): MissingQuickNoteDoc[] {
+/** 资源页「缺小记」清单：只 stat 不读正文；带 v3 云端事实 / 搜索缓存 / 可恢复性。 */
+export function listMissingQuickNotes(deps: QuickNoteMissingBodyDeps, options: { cloudConfigured: boolean; remoteQuickNoteIds: ReadonlySet<string> }): MissingQuickNoteDoc[] {
   const rows = deps.db.prepare(
     "SELECT q.id AS id, q.created_at AS created_at, q.updated_at AS updated_at, q.preview_text AS preview_text, q.image_count AS image_count, " +
-    "  (SELECT 1 FROM quick_note_sync_base b WHERE b.quick_note_id=q.id) AS has_sync_base, " +
     "  i.text_cache AS text_cache, i.tags AS tags " +
     "FROM quick_notes q LEFT JOIN quick_notes_search_index i ON i.quick_note_id=q.id"
-  ).all() as Array<{ id: string; created_at: string; updated_at: string; preview_text: string; image_count: number; has_sync_base: number | null; text_cache: string | null; tags: string | null }>;
+  ).all() as Array<{ id: string; created_at: string; updated_at: string; preview_text: string; image_count: number; text_cache: string | null; tags: string | null }>;
   const out: MissingQuickNoteDoc[] = [];
   for (const row of rows) {
     if (fs.existsSync(itemPathOf(deps.paths, row.id))) continue;
     const textCache = typeof row.text_cache === "string" ? row.text_cache : "";
     const hasTextCache = textCache.trim().length > 0;
-    const hasSyncBase = row.has_sync_base === 1;
+    // 「曾在云端」的 v3 事实 = 上一轮成功同步的云端小记集合（Del-6：v2 的 sync_base 账本已删）。
+    const hasSyncBase = options.remoteQuickNoteIds.has(row.id);
     out.push({
       id: row.id,
       createdAt: row.created_at,
@@ -99,7 +99,7 @@ export function recoverQuickNoteFromText(deps: QuickNoteMissingBodyDeps, id: str
   return deps.queries.read(id);
 }
 
-/** 云端正文恢复后落盘（调用方已做 sha256 校验与记账 setBaseHash + markSynced）。 */
+/** 云端正文恢复后落盘（调用方已做 sha256 校验与 markSynced 记账；sync_base 基线账本已删）。 */
 export function applyRecoveredQuickNoteFromCloud(deps: QuickNoteMissingBodyDeps, id: string, rawContent: unknown, options: { updatedAt: string }): QuickNoteDocument {
   deps.queries.readRow(id);
   const content = validateStoredContent(rawContent);
@@ -117,7 +117,6 @@ export function purgeMissingQuickNote(deps: QuickNoteMissingBodyDeps, id: string
   const tx = deps.db.transaction(() => {
     deps.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync,purged_at) VALUES(?,?,?,?,NULL,1,?)")
       .run(row.id, row.created_at, row.updated_at, deletedAt, deletedAt);
-    deps.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(row.id);
     deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(row.id);
     deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
     deps.db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(row.id);

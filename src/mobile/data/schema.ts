@@ -39,7 +39,7 @@ import {
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 13; // 261110 日记排序：notes 加 created_at（同日多篇按真实创建时间倒序；老行回填 = updated_at）。 // v12：folders 加 space 列（日记本标记；wire 镜像 lake 索引 folders[].space）
+export const MOBILE_SCHEMA_VERSION = 13; // 261110 日记排序：notes 加 created_at（同日多篇按真实创建时间倒序；老行回填已删，261125）。 // v12：folders 加 space 列（日记本标记；wire 镜像 lake 索引 folders[].space）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -135,13 +135,13 @@ export function baseSchemaStatements(): SchemaStatement[] {
   )`);
   // 标签（261025 通用化）：目录 + 多态关联 + 每目标关系版本；正文不存标签名。
   // 261105：目录顺序是设备本地视图（sort_order 不外发、不参与同步）；置顶功能已删除。
+  // 删除 = 缺席（物理删行）⇒ 目录表无墓碑列；旧库残留 deleted_at 列/行不清理（AGENTS §3#7）。
   push(`CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT
+    updated_at TEXT NOT NULL
   )`);
   push(`CREATE TABLE IF NOT EXISTS tag_links (
     target_kind TEXT NOT NULL,
@@ -226,11 +226,8 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
     if (!noteColumns.includes(name)) push(`ALTER TABLE notes ADD COLUMN ${name} ${declaration}`);
   };
   addNoteColumn("created_at", "TEXT NOT NULL DEFAULT ''");
-  // 261110：v13 之前没有 created_at ⇒ 老行按 updated_at 回填一次（之后编辑不再改它）。
-  // 放在 ALTER 之后：同一条收集里，新增列才会存在。
-  if (noteColumns.length > 0 && !noteColumns.includes("created_at")) {
-    push("UPDATE notes SET created_at = updated_at WHERE created_at = ''");
-  }
+  // 「老行按 updated_at 回填」的一次性迁移已删（261125 裁决，AGENTS §3#7 不为历史数据写迁移）：
+  // 老行 created_at 保持默认空串，读侧回落 updatedAt（noteRepository）。
   addNoteColumn("parent_id", "TEXT");
   addNoteColumn("sort_order", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("content_hash", "TEXT");
@@ -278,18 +275,12 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!deletedColumns.includes("purged_at")) {
     push("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
   }
-  // Del-6（261029）：旧库若还有 published_at 列则删掉（发布判据改 device_state waterline，不再逐行记账）。
-  // DROP COLUMN 需 SQLite ≥3.35（Android 14 满足）；更老设备 optional 失败时列留着也无害（无人读写）。
-  if (deletedColumns.includes("published_at")) {
-    push("ALTER TABLE deleted_notes DROP COLUMN published_at", { optional: true });
-  }
 
   const folderColumns = (
     (await db.prepare("PRAGMA table_info(folders)").all()) as Array<{ name: string }>
   ).map((column) => column.name);
   if (!folderColumns.includes("is_dirty")) push("ALTER TABLE folders ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
   if (!folderColumns.includes("is_purged")) push("ALTER TABLE folders ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
-  if (folderColumns.includes("sync_state")) push("ALTER TABLE folders DROP COLUMN sync_state", { optional: true });
   // 261109 日记 v1（docs/DIARY.md）：space = 空间标记，只有 nodeType === "notebook" 时有意义；
   // 取值只有 "diary" / NULL（未知值读取时按非日记处理，见 core/diary.normalizeFolderSpace）。
   if (!folderColumns.includes("space")) push("ALTER TABLE folders ADD COLUMN space TEXT");
@@ -298,12 +289,10 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   ).map((column) => column.name);
   if (!noteColumns2.includes("is_dirty")) push("ALTER TABLE notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
   if (!noteColumns2.includes("is_purged")) push("ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
-  if (noteColumns2.includes("sync_state")) push("ALTER TABLE notes DROP COLUMN sync_state", { optional: true });
   const quickColumns = (
     (await db.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>
   ).map((column) => column.name);
   if (!quickColumns.includes("is_dirty")) push("ALTER TABLE quick_notes ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
-  if (quickColumns.includes("sync_state")) push("ALTER TABLE quick_notes DROP COLUMN sync_state", { optional: true });
   // 261026：远端彻底删除、本机仅保留回收站副本的标记（v3 state.remotePurged 的 DB 投影；UI 徽标与
   // 「恢复后清标记」都读它）。三张表都加，列名统一 cloud_deleted。
   for (const [table, columns] of [["notes", noteColumns2], ["folders", folderColumns], ["quick_notes", quickColumns]] as const) {
@@ -329,8 +318,7 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT
+    updated_at TEXT NOT NULL
   )`);
   push(`CREATE TABLE IF NOT EXISTS tag_links (
     target_kind TEXT NOT NULL,

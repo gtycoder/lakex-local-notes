@@ -21,7 +21,7 @@ import {
 } from "../../core/bitableDoc.js";
 import { progressValue, ratingValue, textInputValue } from "./mobileBitableEdit";
 import { BitableSelectControl } from "./BitableSelectControl";
-import { formDraftDefaults, formFieldsFor, formMissingFields, formableFields as formableBitableFields } from "./mobileBitableForm";
+import { bitableFormDraftDefaults, bitableFormFields, formableBitableFields, missingRequiredBitableFields } from "../../core/bitableForm";
 import {
   clearMobileFormDraft,
   mobileFormDraftKey,
@@ -63,8 +63,8 @@ function fieldIcon(field: BitableField) {
 }
 
 export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, editable = false, onUpdateView }: MobileBitableFormViewProps) {
-  const fields = useMemo(() => formFieldsFor(table, view), [table, view]);
-  const defaults = useMemo(() => formDraftDefaults(table), [table]);
+  const fields = useMemo(() => bitableFormFields(table, view), [table, view]);
+  const defaults = useMemo(() => bitableFormDraftDefaults(table), [table]);
   // 261118 P1-5 草稿保护：恢复是**同步**发生在 useState 初始化 —— 不进 effect、不 focus()，
   // 键盘/焦点稳定（不抢焦点）；恢复值盖在默认值上（表默认值不丢）。
   const [draft, setDraft] = useState<Record<string, unknown>>(() => {
@@ -134,7 +134,7 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
   const submit = async () => {
     dismissKeyboard();
     if (busy) return;
-    const missing = formMissingFields(fields, draft, ctx);
+    const missing = missingRequiredBitableFields(fields, draft, ctx);
     if (missing.length > 0) {
       setError("必填项未填写：" + missing.map((field) => field.name).join("、"));
       return;

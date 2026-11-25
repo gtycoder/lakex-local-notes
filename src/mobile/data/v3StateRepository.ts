@@ -4,7 +4,7 @@ import type { PendingDelete } from "../../core/s3v3Gate.js";
 import type { MobileDb } from "./dbPortTypes.js";
 import type { PendingAssetRetry } from "../../core/s3v3DeviceStore.js";
 import { fromPersistedState, migratePersisted, type IntentLogStateV3, type IntentRecord } from "../../core/s3v3/state/intentLogState.js";
-import { deleteBaselineFile, isPlausibleBaseline, readBaselineFile, writeBaselineFile } from "./v3BaselineFile.js";
+import { deleteBaselineFile, readBaselineFile, writeBaselineFile } from "./v3BaselineFile.js";
 
 /** 与 electron/s3v3/deviceStore 的 DeviceBaseline 结构一致；移动端不 import electron。 */
 export interface MobileV3Baseline {
@@ -27,8 +27,8 @@ export interface MobileV3Baseline {
  * **baseline 已搬到独立文件**（`sync-v3/baseline.json.gz.b64`，见 data/v3BaselineFile.ts；桌面同构
  * `sync-v3/baseline.json.gz`）。原因：baseline 是整行 JSON 里最大的一块（5000 文档 ≈2.28MB），
  * 随行读写每次都要整份过 Capacitor 桥（实测 129–207ms/次）；落文件后过桥只剩压缩字节。
- * 本模块负责「信封 ↔ MobileV3State」双向转换与 baseline 的读取优先级（文件 → 旧行内嵌 → 一次性迁移）。
- * 旧格式（无 version 的 MobileV3State JSON）加载时由 core migratePersisted 一次性迁移，下一次写即 v2。
+ * 本模块负责「信封 ↔ MobileV3State」双向转换与 baseline 的读取优先级（文件为唯一来源）。
+ * 旧行内嵌 baseline 的一次性迁移已删（261125 裁决，AGENTS §3#7）；非 v3 信封形态按空账本处理。
  */
 export interface MobileV3State {
   baseline: MobileV3Baseline | null;
@@ -71,40 +71,27 @@ export async function readRawV3State(db: MobileDb): Promise<unknown> {
   try { return JSON.parse(row.json); } catch { return null; }
 }
 
-/** 旧落盘形状（D1-C 之前）里内嵌的 baseline（一次性迁移源）。 */
-function legacyBaselineOf(raw: unknown): MobileV3Baseline | null {
-  if (!raw || typeof raw !== "object") return null;
-  const candidate = (raw as { baseline?: unknown }).baseline;
-  return isPlausibleBaseline(candidate) ? candidate : null;
-}
-
-export type PersistedBaselineStatus = "file" | "migrated" | "absent" | "lost";
+export type PersistedBaselineStatus = "file" | "absent" | "lost";
 
 export interface PersistedBaselineResult {
   baseline: MobileV3Baseline | null;
-  /** file = 文件正常；migrated = 旧行内嵌 → 已一次性迁移；absent = 从未有过基线；lost = 有过但文件坏了/丢了。 */
+  /** file = 文件正常；absent = 从未有过基线（含未知信封形态——旧行内嵌 baseline 的一次性迁移已删，261125 裁决）；
+   *  lost = 有过但文件坏了/丢了。 */
   status: PersistedBaselineStatus;
 }
 
 /**
  * baseline 读取优先级（唯一判据）：
  *  1. 文件正常 ⇒ 用文件（不读行——稳态下每次加载都是 1 次文件读 + 0 次行读）；
- *  2. 文件缺失/损坏，但旧行里还内嵌 baseline ⇒ **一次性迁移**：写出文件并返回行内值
- *     （写失败不阻断，下次加载再试；行内字段会在下一次信封写入时剔除）；
- *  3. 都没有：从未持久化过（无行/认不出的旧格式）⇒ absent；
+ *  2. 都没有：从未持久化过（无行/未知信封形态）⇒ absent；
  *     认得的 v3 信封却没有基线文件 ⇒ lost（同步路径必须硬失败，见 SyncBaselineLostError）。
+ * 旧行内嵌 baseline 的「一次性迁移」已删（261125 裁决，AGENTS §3#7：不为历史数据写代码）。
  */
 export async function readPersistedBaseline(db: MobileDb, opts: { raw?: unknown; baselineFile?: string } = {}): Promise<PersistedBaselineResult> {
   const file = await readBaselineFile(opts.baselineFile);
   if (file.status === "ok") return { baseline: file.baseline, status: "file" };
   let raw = opts.raw;
   if (!("raw" in opts)) raw = await readRawV3State(db);
-  const legacy = legacyBaselineOf(raw);
-  if (legacy) {
-    try { await writeBaselineFile(legacy, opts.baselineFile); }
-    catch (error) { console.warn("[v3] baseline 一次性迁移写文件失败（下次加载再试）: " + (error instanceof Error ? error.message : String(error))); }
-    return { baseline: legacy, status: "migrated" };
-  }
   const knownEnvelope = migratePersisted(raw) !== null;
   return { baseline: null, status: knownEnvelope ? "lost" : "absent" };
 }
@@ -131,8 +118,8 @@ export async function loadV3StateWithRaw(db: MobileDb, baselineFile?: string): P
   const persisted = migratePersisted(raw);
   const ledger = fromPersistedState(raw);
   if (!persisted || !ledger) {
-    // 未知版本/损坏的账本不应让同步中断（与旧口径一致：视为空账本；baseline 丢失由引擎按保守合并处理）。
-    // 但基线本身能救则救（旧行内嵌字段）。
+    // 非 v3 信封/损坏 JSON 不应让同步中断：**按空账本处理**（旧形态迁移已删，261125 裁决）；
+    // 基线只认独立文件（readPersistedBaseline，旧行内嵌字段的迁移已删）。
     const { baseline } = await readPersistedBaseline(db, { raw, baselineFile });
     return { state: { ...EMPTY_MOBILE_V3_STATE, baseline }, raw };
   }
@@ -154,7 +141,7 @@ export async function loadV3StateWithRaw(db: MobileDb, baselineFile?: string): P
 }
 
 /**
- * 写 v2/v3 信封（不含 baseline）：core 的 saveState 落盘唯一入口（`persisted` 由 core toPersistedState 生成）。
+ * 写 v3 信封（不含 baseline）：core 的 saveState 落盘唯一入口（`persisted` 由 core toPersistedState 生成）。
  * baseline 由 saveBaseline / saveV3State 负责落文件（261113 D1-C：行里不再内嵌基线）。
  */
 export async function savePersistedV3State(db: MobileDb, persisted: IntentLogStateV3): Promise<void> {

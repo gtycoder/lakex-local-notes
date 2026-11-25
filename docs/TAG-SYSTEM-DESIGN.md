@@ -6,7 +6,7 @@
 ## 1. 数据模型（两端共用 `src/core/quickNoteTags.ts`）
 
 ```
-tags(id PK, name, sort_order, created_at, updated_at)   -- 无删除标记：删除 = 行不存在（deleted_at 列仅为旧库残留，代码不读不写）
+tags(id PK, name, sort_order, created_at, updated_at)   -- 无删除标记：删除 = 行不存在（旧库残留的 deleted_at 列不清理，代码不读不写）
 tag_links(target_kind, target_id, tag_id, position)  PK(kind,target,tag)
 tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 ```
@@ -14,7 +14,7 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 > **删除 = 缺席（261105 用户定稿）**：删除标签是**物理删除**目录行 + 清 `tag_links`/`tag_link_versions`（桌面还清
 > `target_kind=note` 的文档标签关联）。**云端 `tags[]` 只出现 active 标签**——不允许墓碑进 S3 列表
 > （「S3 列表表不得出现永久存在的条目」）。冲突按**删除压编辑**（与文档 purge 同口径）。
-> 旧库若残留 `deleted_at` 行，启动时一次性迁移：先把 id 写进本机待删，再物理删行，然后置 `device_state.tag_absent_migrated=1`。
+> 旧「deleted_at 墓碑」一次性迁移（`tag_absent_migrated`）**已删**（261125 裁决，git 可查）：新库 DDL 无墓碑列，旧库残留列/行不清理（AGENTS §3#7）。
 > **禁止再引入标签墓碑 / `deletedAt`**（代码默认不读不写 `tags.deleted_at`；新代码加回即违反本条）。
 
 - **正文不存标签名**；目录与关联是唯一事实，搜索索引里的标签名只是派生缓存（可重建）。

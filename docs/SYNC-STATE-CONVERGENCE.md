@@ -155,11 +155,10 @@
 | 账本 | 现状 | 处置 |
 |---|---|---|
 | `declared_assets` | 桌面已删（261029） | 零残留确认 |
-| `sync_base` | 仅 3 处活引用：从云端拉回正文的 `setBaseHash`、`listMissingBodies` 的 legacy OR、diagnostics 的 hash 自查 | ①「可云恢复」只留 `remoteNoteIds`（v3 事实）；②拉回正文不再写 sync_base（不改变合并语义；如需基线一致，更新 v3 baseline 或明确不写）；③diagnostics 改读 v3 baseline/或只查文件存在；④删表 + 方法 + 测试；旧库空表不迁移 |
+| `sync_base` | ✅ 已删（261125 收敛完毕，git 可查） | ①「可云恢复」只留 v3 事实（文档 `remoteNoteIds` / 小记 `remoteQuickNoteIds`，desktopSync 按基线回填，移动端同口径 cloudIds）；②拉回正文不再写 sync_base；③diagnostics 改读 v3 baseline；④表 + 方法 + SQL 已删（含 `quick_note_sync_base`），旧库空表不迁移 |
 | `deleted_notes.published_at` / `quick_note_deleted.published_at` | **两端已删（261029）**：桌面 task-22 改单一水线；移动 schema v10 删 `deleted_notes.published_at`（DDL 去掉 + 旧库 DROP COLUMN 迁移）、删 `localStorePort.markTombstonesPublished`/bridge 方法/契约面登记，pending 判据不再逐行记账 | ✅ 完成（桌面 + 移动） |
 
-**验收**：生产代码 grep `sync_base` = 0；两端 `published_at` = 0（桌面 + 移动 schema v10）；旧库打开不崩（迁移测试：
-`electron/store.test.ts` 旧 DDL 回填水线 + 删列、`electron/quickNotes.test.ts` 小记库同款）；相关测试绿。
+**验收**：生产代码无 `sync_base` 活引用（仅历史注释）；两端 `published_at` 读写 = 0（桌面 + 移动 schema v10；水线键缺失直接写 "0"，published_at 回填/删列迁移已删，261125 裁决）；旧库打开不崩（残留列/空表不清理，AGENTS §3#7）；相关测试绿。
 
 ## 3. E2-4 / E4-1/E4-2 单实现 DeviceStore
 

@@ -23,7 +23,7 @@ import { searchTextForKind } from "../../noteSearchText.js";
 import { sha256Hex } from "../../syncUtils.js";
 import type { FileDriver } from "./ports.js";
 import type { IntentLogStateV3 } from "./intentLogState.js";
-import { ledgerOf, migratePersisted, mergeSyncMarkers, persistedNeedsMigration, toPersistedState } from "./intentLogState.js";
+import { ledgerOf, migratePersisted, mergeSyncMarkers, toPersistedState } from "./intentLogState.js";
 
 /** 信封标记合并的唯一实现（intentLogState.ts）；这里 re-export 保持既有导入点（适配器/测试）。 */
 export { mergeSyncMarkers };
@@ -147,9 +147,10 @@ export interface DeviceStoreMetaDeps {
   state: StateStorePort;
   baseline: BaselineReadPort;
   /** 引擎 writeBody 的正文 staging（saveState 消费并清空）——平台适配器持有。
-   *  桌面 = 内存字节（get 有值）；移动 = staging 文件（只有 has=true，正文由 `moveStagedBodyFiles` 搬）。 */
+   *  桌面 = 内存字节（get 有值）；移动 = staging 文件（只有 has=true，正文由 `moveStagedBodyFiles` 搬，
+   *  旧内存 map 兼容已删，261125 裁决）。 */
   stagedBodies: {
-    get(noteId: string): Uint8Array | undefined;
+    get?(noteId: string): Uint8Array | undefined;
     has?(noteId: string): boolean;
     clear(): void;
   };
@@ -255,12 +256,9 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
 
   async function loadState(): Promise<DeviceState> {
     const rawPersisted = await deps.state.read();
-    // 迁移只做一次：warning 也只收一次；投影走 ledgerOf（不再从原始 JSON 二次 migrate）。
+    // 投影走 ledgerOf（不再从原始 JSON 二次 migrate）；非 v3 形态按空账本处理（旧迁移已删，261125 裁决）。
     const persisted = migratePersisted(rawPersisted, (message) => deps.log?.(message));
     const ledger = persisted ? ledgerOf(persisted) : null;
-    if (persisted && persistedNeedsMigration(rawPersisted)) {
-      deps.log?.("[v3] 同步 state 已从旧格式迁移到 v3 信封（下一轮 saveState 落盘）");
-    }
     // 桌面 hash 缓存由信封携带（跨重启复用，避免全库重算）；移动不传缓存。
     if (deps.hashCache) {
       deps.hashCache.clear();
@@ -670,7 +668,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     );
     const stagedMoves: Array<{ id: string; kind: NoteKind }> = [];
     for (const n of wanted.values()) {
-      const stagedBytes = deps.stagedBodies.get(n.id);
+      const stagedBytes = deps.stagedBodies.get?.(n.id);
       const staged = stagedBytes !== undefined || (deps.stagedBodies.has?.(n.id) ?? false);
       const content = stagedBytes !== undefined ? new TextDecoder().decode(stagedBytes) : null;
       const cur = current.get(n.id);

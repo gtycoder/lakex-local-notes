@@ -46,8 +46,6 @@ import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace } from "../.
 export interface MobilePlatformPortContext {
   /** 引擎 writeBody 落的 staging 正文 id（saveState 的 moveStagedBodyFiles 钩子搬运后清空）。 */
   stagedBodyIds: Set<string>;
-  /** 旧路径内存 staging（移动端正常为空；保留兼容 readBody 语义）。 */
-  stagedBodies: Map<string, Uint8Array>;
   /** 本轮 state.remotePurged（小记/文档「云端已删除·仅本地」副本按此分派）。 */
   remotePurged: Set<string>;
   /** 本轮 state 里文档的远端 trashedAt（回收站时间戳落远端值，而不是本地 now）。 */
@@ -97,7 +95,6 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePlatformPortContext>): PlatformDataPort {
   const ctx: MobilePlatformPortContext = {
     stagedBodyIds: ctxIn?.stagedBodyIds ?? new Set<string>(),
-    stagedBodies: ctxIn?.stagedBodies ?? new Map<string, Uint8Array>(),
     remotePurged: ctxIn?.remotePurged ?? new Set<string>(),
     remoteTrashedAt: ctxIn?.remoteTrashedAt ?? new Map<string, string>(),
     newlyCloudDeletedQuick: ctxIn?.newlyCloudDeletedQuick ?? new Set<string>(),
@@ -256,8 +253,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
       // 只同步名称/时间：**顺序是设备本地视图**、**删除 = 缺席**（云端 tags[] 不放墓碑）。
-      // 仍保留 deleted_at IS NULL：迁移未跑完的旧库不能把墓碑带上云端。
-      const rows = await db.prepare("SELECT id,name,created_at,updated_at FROM tags WHERE deleted_at IS NULL ORDER BY id").all() as Array<Record<string, unknown>>;
+      // 表里只有 active 行（无墓碑列；旧 deleted_at 一次性迁移已删，261125 裁决）。
+      const rows = await db.prepare("SELECT id,name,created_at,updated_at FROM tags ORDER BY id").all() as Array<Record<string, unknown>>;
       return rows.map((r) => ({
         id: String(r.id), name: String(r.name),
         createdAt: String(r.created_at), updatedAt: String(r.updated_at),
@@ -640,17 +637,15 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       return listAllNoteTagsUpdatedAt(db);
     },
     async applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
-      // 与桌面同一套关系 LWW：远端更新才覆盖；过滤墓碑标签（删除的关系不复活）、去重、超上限截断。
+      // 与桌面同一套关系 LWW：远端更新才覆盖；去重、超上限截断（删除 = 缺席：墓碑模型已删，261125 裁决）。
       // **不按 ID 形态过滤**：旧版本/旧索引里可能已有非 `t_` 形态的标签 ID，按正则过滤会静默丢关联（迁移风险）。
       const version = tagsUpdatedAt || ((await db.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(quickNoteId) as { updated_at?: string } | undefined)?.updated_at ?? nowIso());
       const currentVersion = (await db.prepare("SELECT links_updated_at FROM tag_link_versions WHERE target_kind='quickNote' AND target_id=?").get(quickNoteId) as { links_updated_at?: string } | undefined)?.links_updated_at ?? "";
       if (!version || version <= currentVersion) return;
-      const deletedRows = await db.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
-      const deleted = new Set(deletedRows.map((row) => String(row.id)));
       const seen = new Set<string>();
       const remoteIds: string[] = [];
       for (const id of tagIds) {
-        if (typeof id !== "string" || !id.trim() || deleted.has(id) || seen.has(id)) continue;
+        if (typeof id !== "string" || !id.trim() || seen.has(id)) continue;
         seen.add(id);
         remoteIds.push(id);
         if (remoteIds.length >= MAX_QUICK_NOTE_TAGS) break;

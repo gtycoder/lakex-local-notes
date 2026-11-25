@@ -37,7 +37,7 @@ async function freshDb() {
       .run(id, T1, T1, "hash-" + id);
   }
   for (const [id, name] of [[TA, "A"], [TB, "B"]] as const) {
-    await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)").run(id, name, T1, T1);
+    await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES (?,?,0,?,?)").run(id, name, T1, T1);
   }
   const link = db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,0)");
   await link.run("n1", TA);

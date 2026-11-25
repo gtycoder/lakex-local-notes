@@ -33,7 +33,7 @@ describe("mobile schema", () => {
     expect(MOBILE_SCHEMA_VERSION).toBe(13);
   });
 
-  it("261110 v13：旧库（user_version=12、notes 无 created_at）升级补列并用 updated_at 回填", async () => {
+  it("261110 v13：旧库（user_version=12、notes 无 created_at）升级补列、**不回填**（261125 裁决：不为历史数据写迁移）", async () => {
     const raw = await SqlJsDb.open();
     raw.exec("CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, content_hash TEXT, is_dirty INTEGER NOT NULL DEFAULT 0, is_purged INTEGER NOT NULL DEFAULT 0, is_conflict INTEGER NOT NULL DEFAULT 0, deleted_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc', cloud_deleted INTEGER NOT NULL DEFAULT 0);");
     raw.exec("INSERT INTO notes (id,title,updated_at) VALUES ('n-old','老文档','2026-01-01T00:00:00.000Z');");
@@ -42,8 +42,10 @@ describe("mobile schema", () => {
     await applyMobileSchema(db);
     const columns = (await db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>).map((c) => c.name);
     expect(columns).toContain("created_at");
+    // 建表补列机制保留（ALTER ADD COLUMN），但「老行按 updated_at 回填」的一次性迁移已删：
+    // 老行 created_at 保持默认空串（读侧按 updatedAt 兜底，见 noteRepository）。
     const row = await db.prepare("SELECT created_at FROM notes WHERE id='n-old'").get() as { created_at: string };
-    expect(row.created_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(row.created_at).toBe("");
     await db.close();
   });
 

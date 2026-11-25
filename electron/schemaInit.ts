@@ -203,28 +203,16 @@ export class SchemaInit {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);
     }
-    // 迁移：sync_state 已由 is_dirty/is_purged 替代；先删旧触发器再删列（无数据回填）。
-    for (const table of ["notes", "tree_nodes"] as const) {
-      this.ctx.db.exec(`DROP TRIGGER IF EXISTS ${table}_dirty_insert; DROP TRIGGER IF EXISTS ${table}_dirty_update; DROP TRIGGER IF EXISTS ${table}_clean_synced; DROP TRIGGER IF EXISTS ${table}_clean_purged;`);
-      const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
-      if (cols.some((c) => c.name === "sync_state")) this.ctx.db.exec("ALTER TABLE " + table + " DROP COLUMN sync_state");
-    }
-    // Del-6（261029）：墓碑发布记账从「逐行 published_at」改为**单一水线**（device_state）：
+    // Del-6（261029）：墓碑发布记账 = **单一水线**（device_state）：
     //   - 键 tombstones_published_at = 上次成功同步完成时间（desktopSync 成功后写入）；
     //   - 待同步判据 = deleted_at > 水线（见 electron/syncReconciliation.ts）；
-    //   - 首次升级：水线 = COALESCE(MAX(published_at),'0')，保留尚未发布旧行的 pending 语义；
-    //   - 迁移完直接删列（SQLite ≥3.35；Electron 44 / better-sqlite3 13 均满足）。
+    //   - 水线键缺失直接写 "0"：不回查历史列、不写回填/清列迁移（AGENTS §3#7 不为历史数据写代码；
+    //     旧库残留列/旧行无害——旧行全部计待同步，幂等重发一轮删除意图，方向安全）。
     {
-      const tombCols = this.ctx.db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>;
-      const hasPublishedAt = tombCols.some((c) => c.name === "published_at");
       const existing = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='tombstones_published_at'").get() as { value: string } | undefined;
       if (!existing) {
-        const legacyRow = hasPublishedAt
-          ? (this.ctx.db.prepare("SELECT COALESCE(MAX(published_at),'0') AS m FROM deleted_notes").get() as { m: string | null })
-          : undefined;
-        this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('tombstones_published_at',?)").run(legacyRow?.m || "0");
+        this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('tombstones_published_at','0')").run();
       }
-      if (hasPublishedAt) this.ctx.db.exec("ALTER TABLE deleted_notes DROP COLUMN published_at");
     }
 
     const now = nowIso();

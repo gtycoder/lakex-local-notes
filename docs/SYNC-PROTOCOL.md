@@ -723,7 +723,7 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 
 - 小记同口径（`applyQuickEncounterAction`）：所有删除路径都落到**小记回收站或推迟**，`discardQuickNote` 在本机制任何路径不可达。
 - 「以本地为准」的回收站落法：文档 = 远端条目本地化为 trashed（`trashedAt` + 原父入 `deletedFromParentId`）并发布为 trashed 条目；小记 = 下载内容 + `quick-soft-delete` + 发布缺席。**原父取值顺序 = wire 已带 `deletedFromParentId` → `parentId`**（261124：位置合并可能已把 parent 改写成 null（远端 trash 形态 wire parent=null），再拿它当原父会把真原父覆盖成 null ⇒ 回收站恢复永远回不了原位）。
-- **目标身份比较忽略 region**（`core/firstEncounter.sameSyncTargetKey`，261124）：region 只是 S3 签名作用域（七牛等兼容层不严格校验），不改变 endpoint+bucket+prefix 指向的同一份数据；两端 region 填得不一致不得再误触发首次相遇。比较按字段（端点小写、前缀去首尾 /），兼容旧四段式存储键；盖章格式不变（四段式）。
+- **目标身份比较忽略 region**（`core/firstEncounter.sameSyncTargetKey`，261124）：region 只是 S3 签名作用域（七牛等兼容层不严格校验），不改变 endpoint+bucket+prefix 指向的同一份数据；两端 region 填得不一致不得再误触发首次相遇。比较按字段（端点小写、前缀去首尾 /）；盖章格式不变（四段式），旧三段式键形不再互认（26125 迁移清理批删兼容）。
 
 ### 21.3 配置探测（功能一）
 - 用户保存 S3 配置且 **endpoint/region/bucket/prefix 任一变化**（含迁移码导入落库）时，限**前缀**列举一次（ListObjectsV2）：三态 = 前缀下空（静默）/ 有 `meta/pointer.json` 本产品库标记（提示「已有知识库，首次同步将询问合并方式」）/ 有对象但无标记（黄色提醒「非本产品数据，确认前缀是否正确」）。**只提示不提问**。
