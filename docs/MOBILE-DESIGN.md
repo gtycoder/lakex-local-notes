@@ -111,8 +111,7 @@ components:
 | `--mb-radius-dock` / `--mb-radius-capsule` | 26 / 32 | dock / 底部胶囊 |
 | `--mb-shadow-card` | `inset 0 0 0 .5px rgba(16,24,40,.05), 0 1px 2px rgba(16,24,40,.04), 0 10px 24px -18px rgba(16,24,40,.35)`；深换 8% 白边 + 黑阴影 | 卡片 |
 | `--mb-shadow-float` | `inset 0 .5px 0 var(--mb-glass-highlight), 0 8px 20px -10px rgba(16,24,40,.24), 0 24px 48px -24px rgba(16,24,40,.42)` | 胶囊 / dock / FAB |
-| `--mb-dur-fast` / `-mid` / `-page` | 180 / 240 / 320ms | 微交互 / 面板 / 页面转场 |
-| `--mb-ease` | `cubic-bezier(.2,0,0,1)` | 唯一入场曲线 |
+| ~~`--mb-dur-fast` / `-mid` / `-page`、`--mb-ease`~~ | **已废弃（261125 从代码删除，零引用）** | 动效一律用 `--mobile-duration-panel` / `--mobile-ease-panel` / `--mobile-ease-out`；新代码只用 `--mobile-*` |
 | `--mb-font-page` | 28px / 700 / -0.025em | 页面大标题（设置等） |
 | `--mb-font-doc-h1` | 27px / 700 / -0.024em | 文档 H1 覆盖 |
 
@@ -131,7 +130,7 @@ components:
 - **知识库**：**置顶在前、笔记本在后**；置顶行右侧灰色图钉（不占主色）；笔记本卡 2 列、图标 44 圆角 14、卡内光晕随笔记本主色。
 - **深色**：画布 `#0c0d10→#121419`，卡面 `#16181c` + 8% 白描边；**纯黑（OLED）档**：画布 `#000→#050506`、卡面 `#0f0f10`（后续在设置→外观加三档）。
 - **空态/骨架**：空态 = 图标 + 一句说明 + 主 CTA（`mb-empty` 扩展，不改行结构）；骨架沿用 `.mb-skel`。
-- **转场**：首页卡片 → 文档用共享元素（FLIP：卡片克隆放大到屏幕 + 文档淡入，320ms/--mb-ease）；返回直切（反向 morph 可后续补）。不做全站转场改造。
+- **转场**：首页卡片 → 文档用共享元素（FLIP：卡片克隆放大到屏幕 + 文档淡入，320ms；原 `--mb-ease` 令牌已废弃，动效令牌见 0.2 表）；返回直切（反向 morph 可后续补）。不做全站转场改造。
 
 ### 0.4 动态取色（--mb-accent）
 
@@ -494,4 +493,4 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 > 第 4、5 条里的声明数为**当时实测**；当前基线以 `mobileLayers.test.ts` 的 `BASELINE` 为准（261112 核对值见 §Gates 与「分层事实」）。
 7. **P2 a11y 已完成（261107）**：`rowActivation` 接入首页小记卡 + 知识库书架/列表；`TopBarIconButton` 把 4 处非嵌套 `span role=button` 改真 button；目录行内 ⋯/＋ 因嵌套 button 非法保持行语义（已记录）。
-8. **P2 `mobile.css` 域归位（未做，261112 登记）**：移动端 `mobile.css` 仍混入 **bitable / board / editor** 三域规则（约 300 行级；规模以 `docs/audit-261112/04-mobile.md` 为准）。它不是「外壳」职责：应按 `mobileLayers.test.ts` 的逐文件账本迁到 `src/mobile/bitable/mobileBitable.css` / `src/mobile/board/board.css` / `src/mobile/editor/**` 对应文件，迁一域跑一次 `check:mobileui` + 设备 10 态；**不要一次性全搬**（观感回归面大，且与 v2 视觉基线同文件叠改）。
+8. **P2 `mobile.css` 域归位（未做，261112 登记）**：移动端 `mobile.css` 仍混入 **bitable / board / editor** 三域规则（约 300 行级）。**261112 规模结论（原 04-mobile 审计实测，已删 git 可查）**：`mobile.css` 共 1,390 行 / 411 个选择器 / 15 个「=====」段；域外段 = `:839-874` 画板（`.mobile-board-viewer`/`.draw-toolbar`/`.lakex-drawnix-core`）、`:1049-1304` 多维表编辑态 `.mbt-*`（约 250 行）、`:1256` 编辑 dock 的 `:active` 规则（`.med-*`）；同名类在 ≥2 个 CSS 文件出现实测 **69 个**（跨 feature 的 `.mbt-grid*`/`.mbt-attachment`、`.mobile-board-viewer`/`.draw-toolbar`/`.lakex-drawnix-core`/`.is-editing`、`.med-btn`/`.med-ins-item`/`.med-f-btn`/`.med-outline-item`/`.med-doc-item`、`.attachment-preview`）；且 `mobile.css` 由 `MobileApp.tsx` 引入（不在 `main.tsx` 的 CSS 清单里）⇒ 级联顺序由 MobileApp 的 JS 模块图决定，重复声明最终谁生效无法从任何清单读出（改 import 顺序观感会静默变化）。它不是「外壳」职责：应按 `mobileLayers.test.ts` 的逐文件账本迁到 `src/mobile/bitable/mobileBitable.css` / `src/mobile/board/board.css` / `src/mobile/editor/**` 对应文件，迁一域跑一次 `check:mobileui` + 设备 10 态；**不要一次性全搬**（观感回归面大，且与 v2 视觉基线同文件叠改）。

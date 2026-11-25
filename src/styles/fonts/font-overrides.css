@@ -25,7 +25,8 @@ html, body { font-family: var(--lake-font-family); }
 .ne-viewer.ne-paragraph-spacing-relax.ne-typography-classic .ne-viewer-body,
 .ne-paragraph-spacing-relax.ne-typography-classic { font-weight: var(--lake-font-weight-medium); }
 
-/* 画板（drawnix / plait）文本 */
+/* 画板（drawnix / plait）文本。.plait-text-container 与 vendor/drawnix-react-text.css（legacy 层）同名：
+ * 本条在 feature 层、**压 drawnix** 的硬编码字体栈（属「压第三方」例外，vendor 侧不动、故意留双份）。 */
 .plait-text-container,
 .drawnix,
 .drawnix-tutorial { font-family: var(--lake-font-family); }
@@ -56,6 +57,7 @@ html, body { font-family: var(--lake-font-family); }
  * 阅读态代码块正文 `ne-code-content`、公式输入框 `textarea.ne-math-input`、导图代码编辑器、
  * 文本绘图对话框的输入/报错。 */
 pre, code, kbd, samp,
+.ne-code,
 .ne-codeblock,
 .CodeMirror,
 .cm-editor,

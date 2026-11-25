@@ -50,17 +50,8 @@ button { cursor: pointer; }
 :root {
   /* font-family 单一来源：--lake-font-family（见 themes/base.css）*/
   font-optical-sizing: auto;
-  /* 壳层令牌单一来源：一律从 tokens.css 的 --lake-* 派生（深浅主题自动跟随）。
-     历史上这里另写了一套灰/蓝字面值，深色下没有覆盖 → 某些表面会在深底上露出浅灰/深灰文字；
-     与 --lake-* 的差异也只有"是否偏冷"这一点，收敛后观感更统一。 */
-  --shell-accent: var(--lake-accent);
-  --shell-accent-strong: var(--lake-accent);
-  --shell-accent-soft: var(--lake-accent-tint);
-  --shell-text: var(--lake-text-1);
-  --shell-text-secondary: var(--lake-text-2);
-  --shell-text-tertiary: var(--lake-text-3);
-  /* 不透明的冷调表面，保知识库可读 */
-  --shell-ease: var(--lake-ease-standard);
+  /* （原 --shell-* 恒等别名族 7 条已于 261125 审计 T-04 删除：使用点全部恒等替换为 --lake-*，
+     别名定义一并移除；ui-metrics 的 FORBIDDEN 表已补 --shell-* 族防回流。） */
 }
 
 /* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 =====

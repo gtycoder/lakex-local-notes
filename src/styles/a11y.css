@@ -38,8 +38,7 @@
   .tree-row.drop-parent,
   .tab-item .tab-close,
   .dock-filter-row,
-  .dock-icon-btn,
-  .seg__item {
+  .dock-icon-btn {
     animation: none;
     transition: none;
   }

@@ -116,8 +116,7 @@
 .quick-note-index-row.is-selecting .quick-note-index-check,
 .quick-note-index-row.is-checked .quick-note-index-check { opacity: 1; }
 .quick-note-index-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-/* 行标题只显示前几个字（JS 已截断），这里保证不横向滚动、不换行 */
-.quick-note-index-main .ln-list-item__text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* （行文本省略五件套已收进 compat.css 的 .ln-list-item__text 原语，261125 审计 S-06；此处勿再 scoped 重写。） */
 .quick-note-index-main .ln-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,

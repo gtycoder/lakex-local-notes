@@ -19,7 +19,8 @@
 
 .settings-nav-item:hover { background: var(--lake-bg-hover); }
 
-.settings-nav-item.active { background: var(--lake-bg-selected); }
+/* 261125 审计 S-03：删 .settings-nav-item.active 的 background 死规则（同名取值由 components.css / kit 层胜出，
+   选中底色最终取值属裁决点 D，本批不改）。 */
 
 /* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
 

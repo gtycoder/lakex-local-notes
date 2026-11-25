@@ -1,8 +1,11 @@
 /* 自有组件库（kit 层，P4）—— 规格来源：设计包 COMPONENTS.md（14 件 / 六态 / 令牌依据）
  *
- * 命名：ln-* 但**刻意避开 legacy 已占用的名字**（ln-dialog* / ln-tabs* / ln-toolbar* / ln-row2* /
- *       ln-empty* / ln-close / badge / seg / checks / panel-title / config-*），
- *       所以本文件加入时为**零视觉回归**：现有组件不引用任何新类名，P5 才逐屏迁移过来。
+ * 命名：ln-*。早期刻意避开 legacy 已占用的名字（ln-dialog* / ln-tabs* / ln-toolbar* / ln-row2* /
+ *       ln-empty* / ln-close / badge / seg / checks / panel-title / config-*），加入时为**零视觉回归**。
+ *       此后按单一来源逐步收编，与现实一致的归属表（261125 审计 S-04 更新）：
+ *       本文件 = ln-tabs* / ln-toolbar* / ln-empty*（含 --idle，261125 自 components.css 收齐）；
+ *       仍留 legacy = ln-dialog*（dialog.css）、ln-row2* / ln-close / badge / checks / panel-title（components.css）、
+ *       config-*（compat.css）；seg 已随死实现删除（261125 S-05，现役段控件 = 本文件 .ln-segment）。
  * 颜色一律走令牌（硬指标：颜色字面量只允许出现在 themes/*.css）。
  * 焦点环统一：2px solid --lake-accent + offset 0（贴边单环）。动效只动 color/background/border-color/opacity/transform。
  */
@@ -770,14 +773,22 @@
 .ln-toolbar { gap: var(--lake-space-md); padding: var(--lake-space-sm) var(--lake-space-xl) 0; }
 .ln-toolbar__info { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 
+/* 空态（搜索 / 历史 / 回收站 / 设置通用）。261125 审计 S-04：components.css 的半定义（display/对齐 +
+   --idle 变体 + 图标尺寸）收进本块单一来源，.ln-empty* 全家族只此一处。 */
 .ln-empty {
+  display: grid;
+  justify-items: center;
+  text-align: center;
   gap: var(--lake-space-sm);
   padding: var(--lake-space-huge) var(--lake-space-lg);
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-small);
 }
+.ln-empty--idle { padding: 56px 20px; }
+/* 261110 spike 第二批：空态图标统一 28（调用点此前 24/28 混用；CSS 覆盖 SVG 的 presentation 属性）。 */
+.ln-empty--idle svg { color: var(--lake-text-4); width: 28px; height: 28px; }
 /* 261110 spike 第二批（借 Astryx EmptyState 的三级层级）：标题升到 body(14)、说明升到 tiny(12)，
-   标题与说明之间的间距 = sm(6)；图标尺寸统一在 components.css 的 .ln-empty--idle svg（28）。 */
+   标题与说明之间的间距 = sm(6)。 */
 .ln-empty strong { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); }
 .ln-empty small { font-size: var(--lake-font-size-tiny); }
 

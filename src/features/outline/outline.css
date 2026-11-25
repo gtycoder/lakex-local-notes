@@ -148,12 +148,12 @@
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .outline-sidebar__activity-button:hover {
-  color: var(--shell-accent-strong);
+  color: var(--lake-accent);
   background: var(--lake-accent-tint);
 }
 .outline-sidebar__activity-button.active {
-  color: var(--shell-accent-strong);
-  background: var(--shell-accent-soft);
+  color: var(--lake-accent);
+  background: var(--lake-accent-tint);
   box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
 }
 .outline-sidebar__activity-button:active { transform: scale(.965); }
@@ -186,7 +186,7 @@
   box-shadow: none;
   opacity: 1;
   transform: translateX(0);
-  transition: opacity var(--lake-motion-slow) var(--shell-ease), transform var(--lake-motion-slow) var(--shell-ease), visibility var(--lake-motion-slow), box-shadow var(--lake-motion-slow) ease-out, border-radius var(--lake-motion-slow) var(--shell-ease);
+  transition: opacity var(--lake-motion-slow) var(--lake-ease-standard), transform var(--lake-motion-slow) var(--lake-ease-standard), visibility var(--lake-motion-slow), box-shadow var(--lake-motion-slow) ease-out, border-radius var(--lake-motion-slow) var(--lake-ease-standard);
 }
 
 /* 收起：悬停整条 rail 后才以浮层方式预览，不挤压正文。 */
@@ -280,7 +280,7 @@
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-medium);
-  transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
+  /* 按 DESIGN Motion「不做装饰性过渡」删颜色/边框渐变，hover/选中改瞬时切换（261125 审计 R-02）。 */
 }
 /* 只用 background-color，避免盖掉内联的引导线（background-image）；C 微卡片 */
 .outline-item:hover {
@@ -303,7 +303,7 @@
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--shell-text-tertiary);
+  color: var(--lake-text-3);
   cursor: pointer;
   padding: 0;
   transition: transform 0.15s ease;
@@ -367,12 +367,12 @@
   border-radius: 6px;
   text-align: left;
   font-size: var(--lake-font-size-tiny);
-  color: var(--shell-text-secondary);
+  color: var(--lake-text-2);
   background: transparent;
   cursor: pointer;
 }
 .outline-sidebar__level-menu button:hover {
-  color: var(--shell-text);
+  color: var(--lake-text-1);
   background: var(--lake-accent-tint);
 }
 
@@ -416,7 +416,8 @@
    这里只留过渡与「从触发条滑进面板」的走廊（宽窄共用）。 */
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;
+  /* 按 DESIGN Motion 规则 6 去掉 box-shadow 过渡项、时长收进 --lake-motion-fast 档（261125 审计 R-02）。 */
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard), visibility var(--lake-motion-fast) linear;
 }
 .outline-sidebar--collapsed:not(.outline-sidebar--hovered) .outline-sidebar__content {
   pointer-events: none;

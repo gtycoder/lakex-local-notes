@@ -144,7 +144,7 @@ const r = {
   mobileUntouched: { files: mobileCss.length, b3VarRefs: m.b3, important: m.imp },
   fontGuard: { fontSizeLiterals, fontSizeTop: fontSizeTop.sort((a, b) => b[1] - a[1]) },
   mobileFontGuard: { fontSizeLiterals: mobileFontLiterals, baseline: MOBILE_FONT_LITERAL_BASELINE, fontSizeTop: mobileFontTop.sort((a, b) => b[1] - a[1]) },
-  targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 9, b3ImportLines: 0, sameNamePairs: 0 },
+  targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 5, b3ImportLines: 0, sameNamePairs: 0 },
   b3TopTen: d.b3Top.slice(0, 10),
   colorTopTen: d.litTop.slice(0, 10),
   importantSiyuan: siyuanImportant,
@@ -152,7 +152,9 @@ const r = {
   entryB3ImportLines: b3ImportLines,
 };
 // ── 令牌护栏（260923）：① 禁"过渡别名残用" ② var(--lake-*) 必须已定义 ──
-const FORBIDDEN = ['--lake-shell','--lake-panel','--lake-canvas','--lake-surface','--lake-raised','--lake-border','--lake-text','--lake-text-secondary','--lake-text-tertiary','--lake-accent-soft','--lake-accent-soft-strong','--lake-sync-pending','--lake-sync-success','--lake-error','--lake-error-strong','--lake-error-soft','--lake-warning-soft','--lake-success-soft','--lake-shadow-panel','--lake-shadow-soft','--radius-xs','--radius-sm','--radius-md','--radius-xl','--radius-pill','--lake-motion-standard'];
+const FORBIDDEN = ['--lake-shell','--lake-panel','--lake-canvas','--lake-surface','--lake-raised','--lake-border','--lake-text','--lake-text-secondary','--lake-text-tertiary','--lake-accent-soft','--lake-accent-soft-strong','--lake-sync-pending','--lake-sync-success','--lake-error','--lake-error-strong','--lake-error-soft','--lake-warning-soft','--lake-success-soft','--lake-shadow-panel','--lake-shadow-soft','--radius-xs','--radius-sm','--radius-md','--radius-xl','--radius-pill','--lake-motion-standard',
+  // 261125 审计 T-04：--shell-* 恒等别名族已整体删除（使用点直连 --lake-*）；补进禁表防回流。
+  '--shell-accent','--shell-accent-strong','--shell-accent-soft','--shell-text','--shell-text-secondary','--shell-text-tertiary','--shell-ease'];
 const cssAll = [...fontScope, ...mobileCss];
 const definedTokens = new Set();
 for (const p of cssAll) for (const m of readFileSync(p, 'utf8').matchAll(/(--[a-z0-9-]+)\s*:/g)) definedTokens.add(m[1]);
@@ -177,14 +179,19 @@ r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, a
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。
 // 基线 = 首次实测存量，**只许降**（清理时同步调小；清理批次见 CODE-REVIEW §7 的 B2）。
 const BASELINE = {
-  desktopImportant: 9,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
+  desktopImportant: 5,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important（261125 S-05 删 .seg 4 条：9 → 5）
   mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
   mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
-  accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
+  // 261125 T-04 恒等替换 --shell-accent-strong → var(--lake-accent) 后暴露 3 处既有命中（此前被别名掩盖、护栏看不见）：
+  // outline.css 的 .outline-sidebar__activity-button:hover/.active 与 tabs.css 的 .tab-switcher.open。
+  // 三处 color 都画**图标/字形**（rail 图标钮、ChevronDown），无文字 ⇒ 属 AGENTS「--lake-accent 只做图形」的合法用法，
+  // 是护栏口径把一切 color: 当文字色的误报；换 --lake-accent-text 反而是错误语义 + 视觉取值变更（T-04 要求恒等、零视觉变化）。
+  // 暂记 3 处例外；根治 = 门禁口径按「图标色/字形」豁免（M 批），届时回 0。
+  accentTextMisuse: 3,         // 261016 B2 清零（原 36）：文字色一律 --lake-accent-text；261125 见上注（0 → 3，已知误报例外）
   // 261103：统计口径修正（逗号选择器按**单个选择器**拆分后比较，见 splitSelectorList）——
   // 旧口径下「a, b { x }」与「a { x }」不算重复，pad.css ↔ mobile.css 的 9 组双归属全部漏检。
   // 修正后实测 116 组；同日把平板通用几何整体迁进 pad.css（A4 单一归属）后 **105**；此后只许降。
-  crossFileDupGroups: 45,      // 261112 Q1：再删 21 条被上层压死的 legacy 声明后实测 66 → 45（每条被压声明恰好消灭一个跨文件重复组）。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  crossFileDupGroups: 33,      // 261125 样式批：删被压死声明（S-01 misc↔chrome 6 组、S-03 settings↔components 1 组）+ 等宽映射单源化（T-03 feature↔font-overrides 5 组）后实测 45 → 33，按实测收紧。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
   // 261112 Q1：被更高层压掉的 legacy 声明数（同 at-rule 上下文 + 同选择器 + 同属性）。
   // 261112 删 35 条后实测 21（原 58）：feature.css 3（未分层的 bitableEditor/boardEditor 压 feature 层）
   //        + misc.css 4（a11y 已接管 reduced-motion，legacy 副本可下批删）
@@ -197,10 +204,8 @@ const BASELINE = {
 // 唯一允许的例外（AGENTS §3#14）：压内核/第三方写进 element 的 inline style，或压 legacy 层里的 !important。
 // 每条都必须写明"压的是谁"；删掉某条时应同时从本表移除（本脚本会把"清单里但已找不到"的条目列出来提醒）。
 const IMPORTANT_ALLOWLIST = [
-  { file: 'styles/components.css', sel: '.seg__item', prop: 'border', why: '共享层 .seg__item 与 legacy 的 .b3-button--outline 叠用；@layer 里 !important **反转层序** ⇒ legacy 的 !important 必压 kit 的普通声明（260923 W4 实测结论）' },
-  { file: 'styles/components.css', sel: '.seg__item', prop: 'background', why: '同上（分段控件静息态透明）' },
-  { file: 'styles/components.css', sel: '.seg__item', prop: 'color', why: '同上（静息态 text-2）' },
-  { file: 'styles/components.css', sel: '.seg .seg__item:hover', prop: 'color', why: '同上（hover 态 text-1）' },
+  // 261125 审计 S-05：.seg/.seg__item 死实现整块删除（全仓 TSX 零引用，段控件已迁 kit .ln-segment）⇒ 4 条 !important 随之出表（桌面 9 → 5）。
+
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'backdrop-filter', why: 'prefers-reduced-transparency 契约：要压所有浮层的毛玻璃，含第三方/内核浮层' },
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: '-webkit-backdrop-filter', why: '同上（-webkit- 前缀）' },
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'background', why: '同上（改用不透明面板底）' },

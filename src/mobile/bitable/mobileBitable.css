@@ -889,7 +889,7 @@
   max-width: 320px;
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-dialog);
-  animation: mbt-drawer-in 250ms ease-out;
+  animation: mbt-drawer-in var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 @keyframes mbt-drawer-in {
   from { transform: translateX(-12px); opacity: 0.5; }

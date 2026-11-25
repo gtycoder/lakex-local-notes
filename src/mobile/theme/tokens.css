@@ -65,7 +65,7 @@
   --lake-line-height-chat: 1.7;
   /* 动效（261029 收敛）：与桌面同名令牌同值 —— 入场统一 250ms、ease-out 一条曲线；
      移动端实际入场用的是 --mobile-duration-panel / --mobile-ease-panel（下面定义），
-     这两个族保持同值只为「同名令牌不打架」，新代码别再二选一。 */
+     这两个族保持同值只为「同名令牌不打架」。**新代码只用 --mobile-*，不要再二选一**（261125 T-02）。 */
   --lake-motion-instant: 80ms;
   --lake-motion-press: 90ms;
   --lake-motion-fast: 250ms;
@@ -74,11 +74,9 @@
   --lake-ease-standard: ease-out;
   --lake-ease-exit: ease-out;
   --lake-ease-emphasized: ease-out;
-  /* v2 柔光纸面（261107）：动效三档 + 单一入场曲线；模糊两档只给固定功能层 */
-  --mb-dur-fast: 180ms;
-  --mb-dur-mid: 240ms;
-  --mb-dur-page: 320ms;
-  --mb-ease: cubic-bezier(.2, 0, 0, 1);
+  /* v2 柔光纸面（261107）：模糊两档只给固定功能层。
+     （原 --mb-dur-fast/mid/page + --mb-ease 动效三档全仓零引用，261125 审计 T-02 删除；
+     动效一律走 --mobile-duration-panel / --mobile-ease-*，新代码只用 --mobile-*。） */
   --mb-blur-bar: blur(18px) saturate(140%);
   --mb-blur-float: blur(26px) saturate(180%);
   --mb-font-page: 28px;

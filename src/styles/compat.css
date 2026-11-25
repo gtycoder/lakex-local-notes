@@ -98,7 +98,9 @@
 :where(button).ln-list-item { border: 0; background: transparent; text-align: left; }
 .ln-list-item:hover { background: var(--lake-bg-hover); }
 .ln-list-item--focus { background: var(--lake-accent-tint); }
-.ln-list-item__text { flex: 1 1 auto; }
+/* 行文本单行省略（省略五件套）：261125 审计 S-06 从 app/quick-notes.css 的 scoped 规则收进原语内，
+   与 .ln-ellipsis / .ln-row__title 同构——标题超长就地省略，不横向滚动。 */
+.ln-list-item__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ln-list-item__graphic { flex: 0 0 auto; display: inline-flex; align-items: center; }
 .ln-list-item__meta { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .ln-list-item__action {

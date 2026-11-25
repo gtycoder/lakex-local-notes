@@ -57,23 +57,18 @@
   /* .sidebar / .sidebar::before / .sidebar.sidebar-floating / .sidebar.sidebar-collapsed
      已搬到共用作用域（见上方「侧栏卡片几何」，浮动带见 b3/layout.css）。 */
 
+  /* 261125 审计 S-01：删被 shell 层 chrome.css 压死的死规则（.tab-item:focus-visible 的 focus 环、
+     .note-list 行内距、.note-row.active 的 color 与 background/box-shadow、.note-row-copy strong 的 color）——
+     chrome 层恒胜（层序即优先级），这些声明从未生效；取值以 chrome.css 单一来源为准。
+     .note-row/.tree-row 行高档位与 .tree-row.type-notebook 是现役几何（treeRowGeometry.test.ts 钉住），保留。 */
   .icon-button:focus-visible,
-  .tab-item:focus-visible,
   .statusbar button:focus-visible,
   .settings-panel button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint); outline-offset: 2px; }
 
-  .note-list { padding: 0 6px 6px; }
   .note-row,
   .tree-row {
     min-height: 27px;
   }
-  /* 260921 合并：原先这里的 3 条与 src/styles/chrome.css（shell 层）**逐字相同**：
-     .note-row:hover / .tab-item { background: transparent } / .tab-item:hover ——
-     按「同一选择器不要多处重复声明」删掉，观感零变化（chrome 层本就覆盖它们）。 */
-  .note-row.active {
-    color: var(--shell-text);
-  }
-  .note-row-copy strong { color: inherit; }
   .tree-row.type-notebook { min-height: 29px; color: var(--lake-text-1); }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; }
   /* 261122 用户报「目录展开一跳一跳」（录屏逐帧确认：子级容器每次展开都播 250ms 淡入 + 上移 3px，
@@ -100,16 +95,15 @@
 /* @keyframes shell-tree-reveal 已随 .tree-children 入场动效一起删除（261122，见上方注释）。 */
 
 @media (prefers-reduced-motion: reduce) {
-  /* 261112 Q1：.app-shell / .sidebar / .tab-item / .seg__item 的 animation:none 单一来源在 a11y 层
-     （已被其压死，此处不再重复）；下面三个 a11y 层未覆盖，保留。 */
+  /* 261112 Q1：.app-shell / .sidebar / .tab-item 的 animation:none 单一来源在 a11y 层
+     （已被其压死，此处不再重复）；下面两个 a11y 层未覆盖，保留。（261125 S-05：随 .seg 死实现删除 .seg__item 残条。） */
   .tab-switcher,
   .tab-switcher-menu { animation: none; }
   .app-shell,
   .sidebar,
   .tab-item,
   .tab-switcher,
-  .tab-switcher-menu,
-  .seg__item { transition-duration: 1ms; }
+  .tab-switcher-menu { transition-duration: 1ms; }
 }
 
 @media (min-width: 761px) {
@@ -117,12 +111,7 @@
 
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
 
-  /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
-
-  .note-row.active {
-    background: var(--shell-accent-soft);
-    box-shadow: none;
-  }
+  /* （原 .note-row.active 的 background/box-shadow 一组已删：被 shell 层 chrome.css 同名规则压死，261125 审计 S-01。） */
 
   /* 可读性：正文行高/字距/段色，标题收紧字距 */
   .lake-editor-mount .ne-engine,

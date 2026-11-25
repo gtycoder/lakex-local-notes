@@ -179,7 +179,7 @@
 }
 
 .tab-switcher:hover,
-.tab-switcher.open { color: var(--shell-accent-strong); border-color: var(--lake-accent-tint); background: var(--lake-veil-open); }
+.tab-switcher.open { color: var(--lake-accent); border-color: var(--lake-accent-tint); background: var(--lake-veil-open); }
 
 .tab-switcher:active { transform: scale(.94); }
 
@@ -272,7 +272,7 @@
   text-align: left;
 }
 
-.tab-switcher-select:hover { color: var(--shell-text); }
+.tab-switcher-select:hover { color: var(--lake-text-1); }
 
 .tab-switcher-icon {
   display: inline-flex;
