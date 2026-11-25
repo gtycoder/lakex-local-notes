@@ -4,7 +4,7 @@ import type { InkDoc, InkPage } from "../../core/inkDoc.js";
  * 手写板 undo/redo 栈：只存「受影响页」的补丁，不再为每一步复制整篇正文。
  *
  * - 每次提交只把受影响的页序列化成 before/after 片段（深拷贝，天然无别名）；
- * - 完整正文序列化只发生在保存路径（InkPad.commit 每次一次）；
+ * - 完整正文序列化只发生在保存路径（useInkHistory.commit 每次一次，261125 D-06 拆分）；
  * - 预算按补丁内快照字符计（快照是补丁体积的绝对大头），16 MiB：
  *   10 MiB 正文 / 100 页时单步约 2 × 100 KiB，60 步全保留，满足「大正文 ≥30 步」。
  */
@@ -51,6 +51,14 @@ export function inkPageDelta(before: InkPage | null, after: InkPage | null): Ink
 export function inkPagePatch(before: InkPage | null, after: InkPage | null): InkPatch {
   if (!before && !after) return { pages: [] };
   return { pages: [inkPageDelta(before, after)] };
+}
+
+/**
+ * 页级替换（inkPagePatch 的对应写操作）：把 page 按 id 换进 doc，返回新文档。
+ * 261125 D-06 从 InkPad.tsx 搬入本模块（贴图/文字块、笔迹、页导航三个编辑域共用，纯搬移）。
+ */
+export function replacePage(doc: InkDoc, page: InkPage): InkDoc {
+  return { ...doc, pages: doc.pages.map((item) => (item.id === page.id ? page : item)) };
 }
 
 /** 页序无变化返回 null（调用方据此省略 order 字段）。 */

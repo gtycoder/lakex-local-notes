@@ -1,3 +1,15 @@
+/**
+ * 回收站面板（对话框）：回收站树（组树/子树）、条目预览、恢复、彻底删除、清空、剩余天数提示；
+ * 覆盖文档与小记两类条目（TrashItem / QuickNoteTrashItem）。
+ *
+ * 边界（不做什么）：生命周期语义不在本文件（electron/trashLifecycle 动作、core/trashPolicy 判据/天数）；
+ * 预览只读（HistorySnapshotPreview/NoteDocPreview，与 HistoryPanel 共用同一预览口径：不落盘、不标脏）；
+ * gone 判据不在本文件（core/syncDecisions.isGoneNote，任何打开入口先判，AGENTS §3#16）。
+ * 单一来源指针：过期天数 = core/trashPolicy.trashDaysUntilPurge（默认 90 天，cloud_deleted 副本不豁免，
+ * AGENTS §3#5）；浮层 = Overlay(Dialog)、确认 = useConfirm；「云端已删除·仅本地」副本只读、可恢复、
+ * 不参与 S3（AGENTS §3#5）。红线：回收站 ≠ 墓碑（软删不删正文/附件、purge 才是墓碑，AGENTS §3#5/#15）。
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
 import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";

@@ -12,6 +12,9 @@ import { describe, expect, it } from "vitest";
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const APP = read("../../App.tsx");
+// 261125 D-05：8 个 handleDiary* 搬到 hooks/useDiarySpaceHandlers（纯搬家）⇒ 「移动 + 改名」注入面
+// 与执行序引用的断言跟着搬到新家（护栏不因搬家变假红）。
+const DIARY_HANDLERS = read("../../hooks/useDiarySpaceHandlers.ts");
 const TYPES = read("../../desktop/desktopTypes.ts");
 const TOPBAR = read("../../desktop/DesktopTopBar.tsx");
 const WORKSPACE = read("./DiaryWorkspace.tsx");
@@ -157,10 +160,10 @@ describe("日记空间接线", () => {
     expect(OPEN).toContain("diaryOpenDate");
     expect(OPEN).toContain("diary_open_date");
     expect(OPEN).toContain("parseDiaryDateKey");
-    expect(APP).toContain("requestDiaryOpenDate(todayKey)");
-    expect(APP).toContain("planDiaryOpen(treeNodes, todayKey)");
+    expect(DIARY_HANDLERS).toContain("requestDiaryOpenDate(todayKey)");
+    expect(DIARY_HANDLERS).toContain("planDiaryOpen(treeNodes, todayKey)");
     // 渲染层不得直接调建树 IPC 来"顺便"建日记（ensure 在主进程单事务里）
-    expect(APP).not.toMatch(/requestDiaryOpenDate[\s\S]{0,200}createNoteIn/);
+    expect(DIARY_HANDLERS).not.toMatch(/requestDiaryOpenDate[\s\S]{0,200}createNoteIn/);
     expect(WORKSPACE).not.toContain("native.");
   });
 
@@ -187,10 +190,10 @@ describe("日记空间接线", () => {
     // 目录树弹窗仍是侧栏「移动到…」的实现（本次改动不许连带改掉）
     expect(read("../../components/app/Sidebar.tsx")).toContain("MoveTargetTreeDialog");
     // 执行序收口在 features/diary/diaryConvert（先 move 再 rename —— 日记条目不接受改名）
-    expect(APP).toContain("convertDiaryEntryToDocument");
+    expect(DIARY_HANDLERS).toContain("convertDiaryEntryToDocument");
     // App 注入的两个动作就是「移动 + 改名」本身（不是再走一遍侧栏的乐观移动/静默失败）
-    expect(APP).toContain("await native.moveTreeNode(id, targetId, nextOrder)");
-    expect(APP).toContain("await native.renameTreeNode(id, nextTitle)");
-    expect(APP).toContain("previousTitle: plan.entry.title");
+    expect(DIARY_HANDLERS).toContain("await native.moveTreeNode(id, targetId, nextOrder)");
+    expect(DIARY_HANDLERS).toContain("await native.renameTreeNode(id, nextTitle)");
+    expect(DIARY_HANDLERS).toContain("previousTitle: plan.entry.title");
   });
 });

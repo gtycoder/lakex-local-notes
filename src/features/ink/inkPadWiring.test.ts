@@ -19,6 +19,20 @@ const INK_CANVAS = read("./InkCanvas.tsx");
 const INK_TOOLBAR_DESKTOP = read("./InkToolbarDesktop.tsx");
 /** 261112 R2-S10 阶段② 第二步：正文状态 + 保存管线抽到 `useInkDocState.ts`（纯搬移）——文本护栏改指向它。 */
 const INK_DOC_STATE = read("./useInkDocState.ts");
+/** 261125 D-06 拆分：撤销/重做域抽到 `useInkHistory.ts`（纯搬移）——文本护栏改指向它。 */
+const INK_HISTORY = read("./useInkHistory.ts");
+/** 261125 D-06 拆分：页导航域（翻页/页面增删排序/页签/纸张/滑动翻页）抽到 `useInkPageNav.ts`。 */
+const INK_PAGE_NAV = read("./useInkPageNav.ts");
+/** 261125 D-06 拆分：页内对象域（贴图/文字块）抽到 `useInkPageItems.ts`、笔/工具域（工具态 + 落笔指针管线）抽到 `useInkTools.ts`。 */
+const INK_ITEMS = read("./useInkPageItems.ts");
+const INK_TOOLS = read("./useInkTools.ts");
+/** 261125 D-06 拆分：移动端顶部「页面条」（悬浮导航）与底栏（工具坞）抽成子组件。 */
+const INK_NAV = read("./InkNavMobile.tsx");
+const INK_FOOTER = read("./InkFooterMobile.tsx");
+/** 整个共享手写板面（组合根 + 4 hook + 2 子组件）：「旧实现/字面量不得回潮」的负断言对这组文件断言。 */
+const INK_SURFACE = [INK_PAD, INK_HISTORY, INK_PAGE_NAV, INK_ITEMS, INK_TOOLS, INK_NAV, INK_FOOTER].join("\n");
+/** 页级补丁的构建面（三个编辑 hook + 组合根导入管线）：「撤销栈只存页级补丁」对这组文件断言。 */
+const INK_EDITORS = [INK_PAD, INK_PAGE_NAV, INK_ITEMS, INK_TOOLS].join("\n");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
 const INK_PAPER = read("./InkPaper.tsx");
 const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
@@ -52,9 +66,10 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("桌面缩放保持页面比例，并提供放大/缩小/恢复适配控件", () => {
-    expect(INK_PAD).toContain('aria-label="放大"');
-    expect(INK_PAD).toContain('aria-label="缩小"');
-    expect(INK_PAD).toContain('aria-label="恢复为适应页面"');
+    // 261125 D-06：移动端顶部导航抽到 InkNavMobile.tsx（纯搬移）——断言文案不变，只换读取源。
+    expect(INK_NAV).toContain('aria-label="放大"');
+    expect(INK_NAV).toContain('aria-label="缩小"');
+    expect(INK_NAV).toContain('aria-label="恢复为适应页面"');
     expect(INK_CANVAS).toContain("fitSize.width * zoom");
     expect(INK_CANVAS).toContain("fitSize.height * zoom");
   });
@@ -74,11 +89,12 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("撤销栈只存页级补丁，不再把整篇正文压栈", () => {
-    expect(INK_PAD).toContain('applyInkPatch(docRef.current, entry.patch, "undo")');
-    expect(INK_PAD).toContain('applyInkPatch(docRef.current, entry.patch, "redo")');
-    expect(INK_PAD).toContain("inkPagePatch(");
-    expect(INK_PAD).not.toContain("pushBoundedHistory(undoRef.current, inkToBody");
-    expect(INK_PAD).not.toContain("pushBoundedHistory(redoRef.current, inkToBody");
+    // 261125 D-06：撤销/重做域已抽到 useInkHistory.ts（纯搬移）——断言文案不变，只换读取源。
+    expect(INK_HISTORY).toContain('applyInkPatch(docRef.current, entry.patch, "undo")');
+    expect(INK_HISTORY).toContain('applyInkPatch(docRef.current, entry.patch, "redo")');
+    expect(INK_EDITORS).toContain("inkPagePatch(");
+    expect(INK_HISTORY).not.toContain("pushBoundedHistory(undoRef.current, inkToBody");
+    expect(INK_HISTORY).not.toContain("pushBoundedHistory(redoRef.current, inkToBody");
   });
 
   it("纸张底纹使用 SVG 逻辑坐标，缩放页面时密度不漂移", () => {
@@ -91,12 +107,8 @@ describe("手写板正式端到端接线", () => {
    *  现在组件文件本身就是这两段 ⇒ 直接读整文件，断言文案不变。 */
   const desktopBranch = (): string => INK_TOOLBAR_DESKTOP;
 
-  /** 移动端底部工具坞的 JSX 片段（到 `) : null}` 为止；里面含色板/笔宽两个悬浮面板）。 */
-  const mobileDock = (): string => {
-    const start = INK_PAD.indexOf('data-overlay="dock"');
-    const end = INK_PAD.indexOf(") : null}", start);
-    return INK_PAD.slice(start, end);
-  };
+  /** 移动端底部工具坞（261125 D-06 已抽成 InkFooterMobile.tsx）：整文件即坞（含色板/笔宽/插入三个悬浮面板）。 */
+  const mobileDock = (): string => INK_FOOTER;
   /** 工具行片段（toolbar group 内部；不含两个悬浮面板）。 */
   const mobileToolRow = (): string => {
     const dock = mobileDock();
@@ -106,10 +118,10 @@ describe("手写板正式端到端接线", () => {
   };
 
   it("移动端顶部导航是悬浮面（overlay 不占布局）：翻页 / 缩放 / 全局预览，两态同一条", () => {
-    expect(INK_PAD).toContain('aria-label="手写板导航"');
-    expect(INK_PAD).toContain('aria-label="全局预览"');
-    expect(INK_PAD).toContain('data-overlay="nav"');
-    expect(INK_PAD).toContain("aria-expanded={pagesOpen}");
+    expect(INK_NAV).toContain('aria-label="手写板导航"');
+    expect(INK_NAV).toContain('aria-label="全局预览"');
+    expect(INK_NAV).toContain('data-overlay="nav"');
+    expect(INK_NAV).toContain("aria-expanded={pagesOpen}");
     // 悬浮：absolute + 面板底 + 0.5px 边 + popover 阴影；不在布局流里 ⇒ 画布拿到这段高度
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="nav"]');
     expect(MOBILE_INK_CSS).toMatch(/\[data-overlay="nav"\],[\s\S]{0,200}?position: absolute;/);
@@ -125,11 +137,12 @@ describe("手写板正式端到端接线", () => {
 
   it("移动端底部工具坞是悬浮面且只在编辑态出现；颜色/笔宽收成「当前值按钮 + 悬浮面板」", () => {
     expect(INK_PAD).toContain(") : !readOnly ? (");
-    expect(INK_PAD).toContain('role="toolbar" aria-label="手写工具"');
-    expect(INK_PAD).toContain('data-overlay="dock"');
-    expect(INK_PAD).toContain('aria-label="纸张"');
+    // 261125 D-06：底栏（工具坞）抽到 InkFooterMobile.tsx（纯搬移）——断言文案不变，只换读取源。
+    expect(INK_FOOTER).toContain('role="toolbar" aria-label="手写工具"');
+    expect(INK_FOOTER).toContain('data-overlay="dock"');
+    expect(INK_FOOTER).toContain('aria-label="纸张"');
     // 阅读态整行说明删除（不再有「阅读态：点右上角…」）
-    expect(INK_PAD).not.toContain("阅读态：点右上角");
+    expect(INK_SURFACE).not.toContain("阅读态：点右上角");
     expect(MOBILE_INK_CSS).not.toContain(".ink-footer .ink-readonly-hint");
     // 悬浮在画布上：absolute 贴底 + 安全区，不占布局高度
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"]');
@@ -143,12 +156,12 @@ describe("手写板正式端到端接线", () => {
     expect(mobileToolRow()).not.toContain("COLORS.map");
     expect(mobileToolRow()).not.toContain("WIDTHS.map");
     // 第七批的平板内联分支已整体删除：InkPad 无 inlineTools，移动端不再按形态注入
-    expect(INK_PAD).not.toContain("inlineTools");
+    expect(INK_SURFACE).not.toContain("inlineTools");
     expect(MOBILE_INK_PAD).not.toContain("useFormFactor");
     expect(mobileDock()).toContain('data-overlay="palette"');
     expect(mobileDock()).toContain('data-overlay="widths"');
     // 纸张只在编辑态工具坞里可点（阅读态没有 background 按钮渲染路径）
-    expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
+    expect(INK_FOOTER).toContain("onClick={() => setBackground(item.value)}");
   });
 
   it("移动端页面尺寸不被 CSS 夹高：夹高 ⇒ SVG letterbox ⇒ 内容缩到 ~55%、文字编辑框/控制条按 frame 宽定位就错位", () => {
@@ -183,18 +196,18 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("插入菜单：坞上方 8 的悬浮卡（文字 / 贴图两项 44 高）；背景导入已下沉纸张行", () => {
-    expect(INK_PAD).toContain('data-overlay="insert"');
-    expect(INK_PAD).toContain('aria-label="插入"');
-    expect(INK_PAD).toContain("data-popover-trigger=\"insert\"");
+    expect(INK_FOOTER).toContain('data-overlay="insert"');
+    expect(INK_FOOTER).toContain('aria-label="插入"');
+    expect(INK_FOOTER).toContain("data-popover-trigger=\"insert\"");
     // 菜单只剩「文字 / 贴图」：背景导入不在菜单里（261104 用户定稿：放到和背景一栏）
-    expect(INK_PAD).toContain("setInsertOpen(false); insertPageText();");
-    expect(INK_PAD).toContain("setInsertOpen(false); void insertPageImage();");
-    expect(INK_PAD).not.toContain("setInsertOpen(false); void importImages();");
-    expect(INK_PAD).not.toContain("setInsertOpen(false); void importPdf();");
+    expect(INK_FOOTER).toContain("setInsertOpen(false); insertPageText();");
+    expect(INK_FOOTER).toContain("setInsertOpen(false); void insertPageImage();");
+    expect(INK_FOOTER).not.toContain("setInsertOpen(false); void importImages();");
+    expect(INK_FOOTER).not.toContain("setInsertOpen(false); void importPdf();");
     // 插入按钮只在编辑态工具坞里（阅读态无）
     expect(INK_PAD).toContain(") : !readOnly ? (");
     // 全局预览面板里的旧导入行已移除（两个入口不并存）
-    expect(INK_PAD).not.toContain("data-ink-import");
+    expect(INK_SURFACE).not.toContain("data-ink-import");
     expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
     // 面板样式：与色板/笔宽同套卡面，纵向两项
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"]');
@@ -210,12 +223,12 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain("box-shadow: var(--lake-shadow-popover)");
     expect(MOBILE_INK_CSS).not.toContain("backdrop-filter");
     // 色板复用 .ink-color（44 盒 + 28 内圆同一份 CSS）；笔宽复用 .ink-width（44 盒）
-    expect(INK_PAD).toContain("aria-label=\"选择颜色\"");
-    expect(INK_PAD).toContain("aria-label=\"选择笔宽\"");
-    expect(INK_PAD).toContain("data-popover-trigger");
+    expect(INK_FOOTER).toContain("aria-label=\"选择颜色\"");
+    expect(INK_FOOTER).toContain("aria-label=\"选择笔宽\"");
+    expect(INK_FOOTER).toContain("data-popover-trigger");
     // 选值关闭
-    expect(INK_PAD).toContain("setPaletteOpen(false)");
-    expect(INK_PAD).toContain("setWidthsOpen(false)");
+    expect(INK_FOOTER).toContain("setPaletteOpen(false)");
+    expect(INK_FOOTER).toContain("setWidthsOpen(false)");
     // 点「面板/触发按钮」之外关闭（pointerdown 捕获；插入菜单同一条规则）
     expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export]');
   });
@@ -228,9 +241,9 @@ describe("手写板正式端到端接线", () => {
     expect(PALETTE).toContain("COLOR_BOARD_GROUPS");
     expect(PALETTE).toContain("MOBILE_BOARD_SOLID");
     expect(PALETTE).toContain("MOBILE_BOARD_LIGHT");
-    expect(INK_PAD).toContain("INK_STROKE_COLORS.map");
-    expect(INK_PAD).not.toContain("const COLORS =");
-    expect(INK_PAD).toContain("useState(INK_DEFAULT_COLOR)");
+    expect(INK_FOOTER).toContain("INK_STROKE_COLORS.map");
+    expect(INK_SURFACE).not.toContain("const COLORS =");
+    expect(INK_TOOLS).toContain("useState(INK_DEFAULT_COLOR)");
     // 排布语言：移动端色板容器改 2 行 × 7 网格（.ink-color 44 盒不变，触达不降）
     expect(MOBILE_INK_CSS).toContain("grid-template-columns: repeat(" + INK_COLOR_COLUMNS + ", var(--mb-tap-min));");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color {");
@@ -257,26 +270,27 @@ describe("手写板正式端到端接线", () => {
 
   it("切页与缩放是纯视图：阅读态/编辑态都不触发保存（P5）", () => {
     // 顶部条里两组都在（翻页 + 缩放），且不受 readOnly 门控
-    expect(INK_PAD).toContain('aria-label="上一页"');
-    expect(INK_PAD).toContain('aria-label="下一页"');
-    expect(INK_PAD).toContain('className="ink-zoom__value"');
+    expect(INK_NAV).toContain('aria-label="上一页"');
+    expect(INK_NAV).toContain('aria-label="下一页"');
+    expect(INK_NAV).toContain('className="ink-zoom__value"');
     // P5：切页只改内存视图 —— 不序列化、不标脏、不排保存。
     // （旧实现编辑态切页会整篇 inkToBody + 写盘 ⇒ 300 页文档翻 20 页 = 20 次整篇写盘 + 一次 S3 上传。）
-    expect(INK_PAD).toMatch(/const selectPage = useCallback\(\(id: string\) => \{[\s\S]*?docRef\.current = updated;\n\s*setDoc\(updated\);\n\s*\}, \[\]\);/);
-    expect(INK_PAD).not.toContain("scheduleSaveBody");
-    expect(INK_PAD).not.toContain("pendingSaveBodyRef");
+    // 261125 D-06：切页/滑动翻页已抽到 useInkPageNav.ts（纯搬移）——断言文案不变，只换读取源。
+    expect(INK_PAGE_NAV).toMatch(/const selectPage = useCallback\(\(id: string\) => \{[\s\S]*?docRef\.current = updated;\n\s*setDoc\(updated\);\n\s*\}, \[\]\);/);
+    expect(INK_PAGE_NAV).not.toContain("scheduleSaveBody");
+    expect(INK_PAGE_NAV).not.toContain("pendingSaveBodyRef");
   });
 
   it("P5 热路径不序列化整篇：commit/undo/redo 只标脏，落盘时才现算", () => {
     // 序列化函数只在 savePending / capture 里被调用一次
     expect(INK_DOC_STATE).toMatch(/const serializeDoc = useCallback\(\(\): string \| null => \{/);
-    expect(INK_PAD).not.toContain("const nextBody = serializeDoc(next);");
+    expect(INK_SURFACE).not.toContain("const nextBody = serializeDoc(next);");
     expect(INK_DOC_STATE).toContain("createInkSavePipeline(");
     expect(INK_DOC_STATE).toContain("dirtyRef.current = true;");
     // 笔迹轮廓缓存：新笔画只算一条
-    expect(INK_PAD).toContain("renderedStrokesForPage(page, strokePathCacheRef.current)");
+    expect(INK_TOOLS).toContain("renderedStrokesForPage(page, strokePathCacheRef.current)");
     // 擦除被 pointercancel 打断 ⇒ 回滚该页（不回滚就是「笔迹没了还不能撤销」）
-    expect(INK_PAD).toMatch(/const eraseBase = eraseBeforeRef\.current;[\s\S]*?const restored = replacePage\(current, eraseBase\);/);
+    expect(INK_TOOLS).toMatch(/const eraseBase = eraseBeforeRef\.current;[\s\S]*?const restored = replacePage\(current, eraseBase\);/);
   });
 
   it("页面面板：桌面 = 左侧悬浮覆盖「页面」（缩略图/大纲两视图、可拖宽）；移动端全局预览仍是悬浮覆盖", () => {
@@ -302,12 +316,12 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("onReorder={movePageTo}");
     // 移动端页签：InkPad 只留宿主注入点（不发 mb-* 类名），UI 在 mobile/ink 层
     expect(INK_PAD).toContain("renderPageTab?: (state: {");
-    expect(INK_PAD).toContain("renderPageTab({");
+    expect(INK_NAV).toContain("renderPageTab({");
     expect(MOBILE_INK_PAD).toContain("<MobilePageTabButton");
     expect(MOBILE_INK_PAD).toContain("<MobilePageTabSheet");
     expect(MOBILE_INK_PAD).not.toContain("createPortal");
     expect(MOBILE_INK_CSS).toContain(".ink-page-tab-sheet .ink-page-tab__input");
-    expect(INK_PAD).toContain("const movePageTo = useCallback((id: string, toIndex: number) => {");
+    expect(INK_PAGE_NAV).toContain("const movePageTo = useCallback((id: string, toIndex: number) => {");
     expect(PAGES_PANEL).not.toContain("页后移");
     expect(PAGES_PANEL).toContain('aria-label={"删除第 " + (index + 1) + " 页"}');
     expect(PAGES_PANEL).toContain('{view === "list" && (');
@@ -400,7 +414,7 @@ describe("手写板正式端到端接线", () => {
 
   it("v3 当前页 = 设备本地导航（core/inkNav），翻页不写正文；坏页给可见告警", () => {
     expect(INK_DOC_STATE).toContain("readInkNavPage(noteId)");
-    expect(INK_PAD).toContain("writeInkNavPage(noteId, doc.activePageId)");
+    expect(INK_PAGE_NAV).toContain("writeInkNavPage(noteId, doc.activePageId)");
     expect(INK_PAD).toContain("有 {doc.droppedPages} 页数据无法解析");
     expect(DESKTOP_INK).toContain("noteId={noteId}");
     expect(MOBILE_INK_PAD).toContain("noteId={noteId}");
@@ -416,9 +430,9 @@ describe("手写板正式端到端接线", () => {
 
   it("背景导入入口：两端都在纸张同一行（背景图片 / 背景 PDF）；正文只在编辑态写", () => {
     // 移动端：坞内「插入」一个 44 按钮 + 坞上方悬浮菜单（不再藏在全局预览里）
-    expect(INK_PAD).toContain('aria-label="插入"');
-    expect(INK_PAD).toContain('data-overlay="insert"');
-    expect(INK_PAD).not.toContain("data-ink-import");
+    expect(INK_FOOTER).toContain('aria-label="插入"');
+    expect(INK_FOOTER).toContain('data-overlay="insert"');
+    expect(INK_SURFACE).not.toContain("data-ink-import");
     // 两端入口同一份 importImages / importPdf（图片与 PDF 共用 busy 守卫，仅编辑态可写）
     expect(INK_PAD).toMatch(/const importImages = useCallback\(async \(\) => \{\s*const importer = onImportImagesRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
     expect(INK_PAD).toMatch(/const importPdf = useCallback\(async \(\) => \{\s*const importer = onImportPdfRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
@@ -438,7 +452,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_PAD).toContain("onTransientMessage={notifyTransient}");
     expect(MOBILE_INK_PAD).toContain("showToast(text, { type: kind })");
     // 移动端：背景来源按钮在纸张行内（.ink-backgrounds .ink-bg-source），不在 ＋ 菜单
-    expect(INK_PAD).toContain("<InkBackgroundSourceButtons");
+    expect(INK_FOOTER).toContain("<InkBackgroundSourceButtons");
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source');
     expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
   });
@@ -484,7 +498,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain("[data-ink-pdf-progress]");
     // unpdf 动态 import、cMapUrl、WebP 见 pdfRasterDesktop 静态测试；这里钉住文件不被静态引进入口
     expect(PDF_RASTER).toContain('await import("unpdf")');
-    expect(INK_PAD).not.toContain("unpdf");
+    expect(INK_SURFACE).not.toContain("unpdf");
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {
@@ -505,7 +519,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-zoom button");
     expect(MOBILE_INK_CSS).toContain("min-width: var(--mb-tap-min); height: var(--mb-tap-min);");
     // 颜色：按钮盒 44，内圆 = 44 - 16 = 28（内圆在 JSX 里是 <span style={{backgroundColor}}/>）
-    expect(INK_PAD).toContain("<span style={{ backgroundColor: value }} />");
+    expect(INK_FOOTER).toContain("<span style={{ backgroundColor: value }} />");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color > span");
     expect(MOBILE_INK_CSS).toContain("width: calc(var(--mb-tap-min) - var(--lake-space-xl));");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color.is-active > span");
@@ -519,15 +533,15 @@ describe("手写板正式端到端接线", () => {
   it("落笔被异常中断时按已完成部分提交（不再静默丢笔，261103 十批）", () => {
     // 画布上「pointercancel / lostpointercapture ⇒ 直接丢弃当前笔迹」，快速滑行时偶发命中 ⇒ 用户看到笔迹消失。
     // 现在：≥2 点 ⇒ 提交；橡皮仍回滚。旧写法（cancelPointer 里直接 activeStrokeRef=null）不得回潮。
-    expect(INK_PAD).toContain("finalizeInterrupted");
-    expect(INK_PAD).toContain("已按已完成部分提交");
-    expect(INK_PAD).toContain("stroke.points.length >= 2");
+    expect(INK_TOOLS).toContain("finalizeInterrupted");
+    expect(INK_TOOLS).toContain("已按已完成部分提交");
+    expect(INK_TOOLS).toContain("stroke.points.length >= 2");
     expect(INK_CANVAS).toContain("onLostPointerCapture={cancelPointer}");
     // 上一次 up 丢失时 activePointer 会残留：下一次 pointerdown 先收口残留那笔，不让整块画布从此画不上。
-    expect(INK_PAD).toContain('finalizeInterruptedRef.current("missing-pointerup")');
+    expect(INK_TOOLS).toContain('finalizeInterruptedRef.current("missing-pointerup")');
     // 按批渲染：一次 pointermove 只 setActiveStroke 一次 / 一批擦除只 setDoc 一次（防 N 次重渲染把快画压垮）。
-    expect(INK_PAD).toMatch(/if \(appended\) setActiveStroke\(activeStrokeRef\.current\);/);
-    expect(INK_PAD).toMatch(/if \(erased && docRef\.current\) setDoc\(docRef\.current\);/);
+    expect(INK_TOOLS).toMatch(/if \(appended\) setActiveStroke\(activeStrokeRef\.current\);/);
+    expect(INK_TOOLS).toMatch(/if \(erased && docRef\.current\) setDoc\(docRef\.current\);/);
   });
 
   it("纸面在「悬浮导航—悬浮工具坞」之间的可视区居中（stage 上下补出悬浮条高度）", () => {

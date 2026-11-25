@@ -1,3 +1,15 @@
+/**
+ * 复制/粘贴的 HTML 物化管线：DOM Range → 剪贴板两段内容（HTML+纯文本）、粘贴 HTML 归一化/升级
+ * （upgradePastedHtml：语雀书签卡保卡改名等）、本地资产图先取原图物化（?base64=1）。
+ *
+ * 单一来源说明（AGENTS §4 复制/剪切条目）：正文 ⌘C/⌘X 与块菜单「复制」桥都从 `buildClipboardPayload`
+ * 取，保证逐字节一致；桌面 EditorTab 的独立 copy/cut 管线是**有意保留的例外**（外发口径，用户裁决 261125），
+ * 两套 cut 删除同走 selectionClipboard 的内核优先删除。边界（不做什么）：不做选区接管判据
+ * （selectionClipboard 只在选区含 <img> 时接管，表格/画板交回内核 ne-clipboard 语义）；
+ * 不做书签卡降级（normalizeYuqueClipboardCards 保卡，LAKEX-CONTRACT §5.54）。
+ * 坑指针：零宽字符/空块清理只在 normalizeClipboardHtml 做一次；内核隐藏节点（HIDDEN_SELECTORS）一律跳过。
+ */
+
 import { sniffImageFormat } from "./imageFormat";
 import { imageSizeFromDataUrl } from "../../core/editor/imageDimensions";
 import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";

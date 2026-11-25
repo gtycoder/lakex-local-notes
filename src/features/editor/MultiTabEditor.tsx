@@ -1,15 +1,22 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+/**
+ * MultiTabEditor —— 桌面多标签**宿主**（D-10/D-13 头注释，261125）：宿主分派（5 种 kind 各挂各的内核）+ 分屏布局。
+ *
+ * 职责边界：标签条 + 切换器浮层 + 标签右键菜单在 ./TabStrip，拖拽排序 + FLIP 在 hooks/useTabStripDrag
+ * （261125 D-10 纯搬家）；「正文缺失」面板 = 本文件 MissingBodyPanel；本文件只留宿主分派、只读横幅与分屏几何。
+ * 单一来源指针：只读原因/横幅 = core/capabilities/readonlyReason（261112 UI 审计 17 收口，locked 不弹横幅）；
+ * 分屏几何 = splitGeometry.ts（分屏 = 左右两栏、最多两个、临时不持久化，splitView.test 钉死）；
+ * 标签槽位/顺序 = tabOrder.ts；分隔条 = components/ui/SplitHandle（唯一实现，禁第二套）。
+ * 内核边界（P12）：EditorTab/Univer/Bitable/Board/Ink 全部 lazy，禁止静态 import（desktopKernelLazy.test 钉死）。
+ * 已知坑：内核 floating 层被补丁 portal 到 body ⇒ 按当前可见标签收起其它实例浮层（MutationObserver 兜底）；
+ * 分屏组 = Edge 式合并标签（点它回分屏、右键 = 分屏专属两项，不混入单页语义）。
+ */
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { EditorErrorBoundary } from "./EditorErrorBoundary";
-import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { escapeId } from "../../lib/cssEscape";
-import { ChevronDown, Columns2, File, Pin, TriangleAlert, X } from "lucide-react";
-import { Menu } from "../../components/ui/Overlay";
-import { TabContextMenu } from "./TabContextMenu";
-import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
-import { TabItemVisual } from "./TabItemVisual";
+import { File, TriangleAlert } from "lucide-react";
+// D-10（261125）：标签条 + 切换器浮层 + 标签右键菜单在 ./TabStrip，拖拽排序 + FLIP 在 hooks/useTabStripDrag。
+import { TabStrip } from "./TabStrip";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
-import { expandTabSlots, moveSlot } from "./tabOrder";
 // 261111：懒加载兜底 = 编辑器同构骨架（纯静态、无内核依赖，不改变 lazy 边界）。
 import { EditorLoadingSkeleton } from "./EditorLoadingSkeleton";
 /** Lake 文档编辑器（闭源内核，入口里占 ≈1.78MB gz）：**按需加载**。
@@ -175,56 +182,7 @@ export function MultiTabEditor({
   // 审计 §7.3：不再持有第二份可写正文（旧 contentCache/reloadKeysRef 已删）——
   // tab.content 只表示「最后已提交版本」；实时正文由 EditorTab 捕获、保存/草稿/关闭时按需 capture；
   // 外部刷新仍靠 key=noteId-reloadKey 重挂载 + tab.content 提供新正文。
-  const tabItemsRef = useRef<HTMLDivElement>(null);
-  const switcherRef = useRef<HTMLDivElement>(null);
-  /** tab 切换按钮（portal 弹窗的 fixed 定位锚点） */
-  const switcherButtonRef = useRef<HTMLButtonElement>(null);
-  /** portal 弹窗自身（外点关闭判定需要包含它） */
-  const tabMenuRef = useRef<HTMLDivElement>(null);
-  const [tabMenuOpen, setTabMenuOpen] = useState(false);
-  const [tabMenuWidth, setTabMenuWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem("lakex-local-notes-v3.tab-switcher-width"));
-    return Number.isFinite(v) && v >= 160 && v <= 440 ? v : 220;
-  });
-  const tabMenuWidthRef = useRef(tabMenuWidth);
-  const startTabMenuResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startW = tabMenuWidthRef.current;
-    const onMove = (ev: PointerEvent) => {
-      const next = Math.min(440, Math.max(160, startW + (startX - ev.clientX)));
-      tabMenuWidthRef.current = next;
-      setTabMenuWidth(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      writeLocalStorage("lakex-local-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, []);
-
-  /** portal 弹窗锚定在切换按钮正下方（fixed，脱离 .tab-bar 层叠上下文）。 */
-  const tabMenuStyle = useMemo((): React.CSSProperties | undefined => {
-    if (!tabMenuOpen) return undefined;
-    const anchor = switcherButtonRef.current?.getBoundingClientRect();
-    if (!anchor) return undefined;
-    return {
-      position: "fixed",
-      top: anchor.bottom + 8,
-      right: Math.max(8, window.innerWidth - anchor.right),
-      width: tabMenuWidth,
-      maxHeight: `min(470px, calc(100vh - ${anchor.bottom + 8}px - 16px))`,
-    };
-  }, [tabMenuOpen, tabMenuWidth]);
-
-  const tabMenuAnchor = useMemo(
-    () => <span aria-hidden="true" style={{ position: "fixed", left: -9999, top: 0, width: 1, height: 1 }} />,
-    []
-  );
   const pinned = pinnedNoteIds ?? EMPTY_PINNED;
-  const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number; split?: boolean } | null>(null);
 
   // ---- 分屏（261008）：左右两栏、最多两个、不同文档、临时不持久化 ----
   const panelsRef = useRef<HTMLDivElement>(null);
@@ -317,21 +275,6 @@ export function MultiTabEditor({
     if (noteId && noteId !== activeNoteId) onTabChange(noteId);
   }, [splitActive, splitPair, activeNoteId, onTabChange]);
 
-  // ---- 拖拽排序（pointer 事件，无外部依赖）----
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const dragRef = useRef<{ id: string; startX: number; startY: number; active: boolean } | null>(null);
-  const suppressClickRef = useRef(false);
-  const flipRects = useRef<Map<string, number>>(new Map());
-
-  // P2-6：关闭标签时清掉 FLIP 位置记忆，防残留（长会话累积 + 重开同笔记时误播滑入动画）
-  const handleTabClose = useCallback((noteId: string) => {
-    flipRects.current.delete(noteId);
-    onTabClose(noteId);
-  }, [onTabClose]);
-
-  // FLIP：顺序变化时让标签从旧位置滑到新位置（deps 用 memo 化的 orderKey，
-  // tabs 引用不变时跳过拼接与比较）
-  const tabOrderKey = useMemo(() => tabs.map((t) => t.noteId).join("|"), [tabs]);
   // 活动标签的只读原因（261112 UI 审计 17 P1）：判据/文案单一来源 = core/capabilities/readonlyReason。
   // 注意：正文缺失（bodyMissing）由 MissingBodyPanel 整块接管，横幅不重复；面板文案也取自同一来源。
   const activeTab = tabs.find((t) => t.noteId === activeNoteId) ?? null;
@@ -344,78 +287,6 @@ export function MultiTabEditor({
     : null;
   /** 横幅原因：locked 不弹（见 readonlyBannerReason）；其余照旧。 */
   const bannerReadonlyReason = readonlyBannerReason(activeReadonlyReason);
-  useLayoutEffect(() => {
-    const strip = tabItemsRef.current;
-    if (!strip) return;
-    const els = [...strip.querySelectorAll<HTMLElement>(".tab-item")];
-    for (const el of els) {
-      const id = el.dataset.noteId;
-      if (!id) continue;
-      const prev = flipRects.current.get(id);
-      const next = el.getBoundingClientRect().left;
-      flipRects.current.set(id, next);
-      if (prev != null && Math.abs(prev - next) > 1) {
-        el.animate(
-          [{ transform: `translateX(${prev - next}px)` }, { transform: "translateX(0)" }],
-          { duration: 180, easing: "cubic-bezier(.22, 1, .36, 1)" }
-        );
-      }
-    }
-  }, [tabOrderKey]);
-
-  const beginTabDrag = (event: ReactPointerEvent<HTMLButtonElement>, noteId: string) => {
-    // 261012：分屏组期间**也允许拖拽**（合并标签带 data-note-id = 组内靠前那页，整体作为一个槽位移动）。
-    if (event.button !== 0 || !onTabsReorder) return;
-    if ((event.target as HTMLElement).closest(".tab-close")) return;
-    dragRef.current = { id: noteId, startX: event.clientX, startY: event.clientY, active: false };
-  };
-
-  const moveTabDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    if (!drag.active) {
-      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
-      drag.active = true;
-      suppressClickRef.current = true;
-      setDraggingId(drag.id);
-    }
-    const strip = tabItemsRef.current;
-    if (!strip) return;
-    // **槽位** = 标签栏实际渲染出的项（分屏组只占一个槽：合并标签的 data-note-id = 组内靠前那页）。
-    // 先按槽位算移动（用户看到的就是槽位），再展开成真实顺序 —— 组内两页整块落回该槽位（见 tabOrder.ts）。
-    const items = [...strip.querySelectorAll<HTMLElement>(".tab-item")]
-      .map((el) => ({ id: el.dataset.noteId ?? "", el }))
-      .filter((item) => item.id);
-    const slots = items.map((item) => item.id);
-    const from = slots.indexOf(drag.id);
-    if (from < 0) return;
-    // 以指针 x 与各标签中心比较，确定插入位置
-    let to = from;
-    for (let i = 0; i < slots.length; i += 1) {
-      if (i === from) continue;
-      const r = items[i].el.getBoundingClientRect();
-      const center = r.left + r.width / 2;
-      if (i < from && event.clientX < center) { to = i; break; }
-      if (i > from && event.clientX > center) to = i;
-    }
-    const nextSlots = moveSlot(slots, from, to);
-    if (nextSlots === slots) return;
-    const groupMembers = splitPair
-      ? tabs.map((t) => t.noteId).filter((id) => id === splitPair.left || id === splitPair.right)
-      : [];
-    onTabsReorder?.(expandTabSlots(nextSlots, splitFirstNote, groupMembers));
-  };
-
-  const endTabDrag = () => {
-    if (dragRef.current?.active) {
-      // 让 click 事件（切换标签）被抑制一次
-      window.setTimeout(() => { suppressClickRef.current = false; }, 0);
-    } else {
-      suppressClickRef.current = false;
-    }
-    dragRef.current = null;
-    setDraggingId(null);
-  };
 
   const handleChange = useCallback(
     (noteId: string, content?: string) => {
@@ -424,41 +295,6 @@ export function MultiTabEditor({
     [onContentChange]
   );
 
-  useEffect(() => {
-    if (!tabCtx) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement).closest("[data-context-menu]")) setTabCtx(null);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTabCtx(null);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [tabCtx]);
-
-  useEffect(() => {
-    if (!tabMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (switcherRef.current?.contains(target)) return;
-      if (tabMenuRef.current?.contains(target)) return;
-      setTabMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTabMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [tabMenuOpen]);
 
   /** 空闲预热「表格编辑器」模块（Univer 分包）：**纯预取、不渲染**，且**只在 dev 生效**。
    *  实测（261010，隔离实例 + CDP）：首次打开表格的「点击 → 宿主挂载」这段在 dev 要 **1.86s**
@@ -477,195 +313,29 @@ export function MultiTabEditor({
     return () => { if (timerId !== undefined) window.clearTimeout(timerId); };
   }, []);
 
-  useEffect(() => {
-    const strip = tabItemsRef.current;
-    if (!strip) return;
-    const activeTab = strip.querySelector<HTMLElement>(`[data-note-id="${escapeId(activeNoteId ?? "")}"]`)
-      ?? (splitActive ? strip.querySelector<HTMLElement>("[data-split-group]") : null);
-    activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [activeNoteId, tabs.length, splitActive]);
-
-  /** 鼠标没有横向滚轮时，用垂直滚轮驱动顶部 tab 的横向滚动。
-   * 触控板产生的 deltaX 保持原生行为；原生非 passive listener 才能安全 preventDefault。 */
-  const handleTabWheel = useCallback((event: WheelEvent) => {
-    const strip = tabItemsRef.current;
-    if (!strip) return;
-    const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
-    if (maxScrollLeft <= 0) return;
-
-    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (!delta) return;
-
-    const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, strip.scrollLeft + delta));
-    if (nextScrollLeft === strip.scrollLeft) return;
-
-    event.preventDefault();
-    strip.scrollLeft = nextScrollLeft;
-  }, []);
-
-  useEffect(() => {
-    const strip = tabItemsRef.current;
-    if (!strip) return;
-    strip.addEventListener("wheel", handleTabWheel, { passive: false });
-    return () => strip.removeEventListener("wheel", handleTabWheel);
-  }, [handleTabWheel]);
-
-  const selectTab = (noteId: string) => {
-    onTabChange(noteId);
-    setTabMenuOpen(false);
-  };
 
   return (
     <div className="multi-tab-editor">
-      <div className="tab-bar">
-        {topbarLeading && <div className="tabbar-leading">{topbarLeading}</div>}
-        {/* 261116 用户点单：左侧按钮区与多标签区之间加一条小竖线，避免两组控件视觉粘连。 */}
-        {topbarLeading && tabs.length > 0 && <span className="tabbar-divider" aria-hidden="true" />}
-        <div className="tab-items" ref={tabItemsRef} role="tablist" aria-label="打开的文档">
-          {tabs.map((tab) => (
-            splitPair && splitFirstNote != null && (tab.noteId === splitPair.left || tab.noteId === splitPair.right) ? (
-              tab.noteId === splitFirstNote ? (
-                <button
-                  key="__split_group__"
-                  type="button"
-                  className={`tab-item tab-split-tab${splitActive ? " active" : ""}${draggingId != null && draggingId === splitFirstNote ? " dragging" : ""}`}
-                  data-split-group="true"
-                  /* 合并标签在拖拽排序里代表整个组：id 用组内靠前那页（splitFirstNote），
-                     落到新槽位后由 tabOrder.expandTabSlots 把两页整块放回同一位置。 */
-                  data-note-id={splitFirstNote ?? undefined}
-                  role="tab"
-                  aria-selected={splitActive}
-                  onPointerDown={(event) => { if (splitFirstNote) beginTabDrag(event, splitFirstNote); }}
-                  onPointerMove={moveTabDrag}
-                  onPointerUp={endTabDrag}
-                  onPointerCancel={endTabDrag}
-                  title={`分屏：${splitLeftTab?.title || "无标题"} ｜ ${splitRightTab?.title || "无标题"}`}
-                  aria-label={`分屏组：${splitLeftTab?.title || "无标题"}${splitLeftTab?.deleted ? "（已删除）" : ""} ｜ ${splitRightTab?.title || "无标题"}${splitRightTab?.deleted ? "（已删除）" : ""}`}
-                  onClick={() => { if (suppressClickRef.current) return; onActivateSplit?.(); }}
-                  /* 261014 用户点单：复合的二合一标签**右键**给出分屏专属动作（取消分屏 / 左右互换）。
-                     与普通标签的右键菜单（关闭/钉住）分开：这个标签代表**两页**，单页语义在这里不成立。 */
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (splitFirstNote) setTabCtx({ noteId: splitFirstNote, x: event.clientX, y: event.clientY, split: true });
-                  }}
-                >
-                  <span className="tab-split-tab__half">
-                    {splitLeftTab && pinned.has(splitLeftTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
-                    {splitLeftTab?.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={splitLeftTab.icon} /></span>}
-                    <span className="tab-title">{splitLeftTab?.title || "无标题"}</span>
-                    {splitLeftTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
-                    {splitLeftTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
-                  </span>
-                  <span className="tab-split-tab__divider" aria-hidden="true" />
-                  <span className="tab-split-tab__half">
-                    <Columns2 size={12} className="tab-split-tab__glyph" aria-hidden="true" />
-                    {splitRightTab && pinned.has(splitRightTab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
-                    {/* 261012 用户点单：**两半各自带上自己文档的图标**（此前只有左半有，右半丢图标）。 */}
-                    {splitRightTab?.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={splitRightTab.icon} /></span>}
-                    <span className="tab-title">{splitRightTab?.title || "无标题"}</span>
-                    {splitRightTab?.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
-                    {splitRightTab?.deleted && <span className="tab-deleted-badge" title="该侧文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
-                  </span>
-                  <span
-                    className="tab-close"
-                    role="button"
-                    aria-label="取消分屏"
-                    title="取消分屏（两个标签都保留）"
-                    onClick={(event) => { event.stopPropagation(); onCloseSplit?.(); }}
-                  >
-                    <X size={12} />
-                  </span>
-                </button>
-              ) : null
-            ) : (
-            <button
-              key={tab.noteId}
-              data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
-              onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
-              onPointerMove={moveTabDrag}
-              onPointerUp={endTabDrag}
-              onPointerCancel={endTabDrag}
-              onClick={() => { if (suppressClickRef.current) return; onTabChange(tab.noteId); }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setTabCtx({ noteId: tab.noteId, x: event.clientX, y: event.clientY });
-              }}
-              title={tab.title || "无标题"}
-              aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}${tab.deleted ? "（已删除）" : ""}`}
-              aria-selected={tab.noteId === activeNoteId}
-              role="tab"
-            >
-              <TabItemVisual
-                title={tab.title}
-                icon={tab.icon ? <NodeIconGlyph value={tab.icon} /> : null}
-                dirty={tab.dirty}
-                deleted={tab.deleted}
-                pinned={pinned.has(tab.noteId)}
-                /* 钉住标签的 X 由 CSS 隐藏（思源式）：这里直接不给 onClose，语义与样式一致。 */
-                onClose={pinned.has(tab.noteId) ? undefined : () => handleTabClose(tab.noteId)}
-              />
-            </button>
-            )
-          ))}
-        </div>
-        {tabs.length > 0 && (
-          <div className="tab-switcher-wrap" ref={switcherRef}>
-            <button
-              ref={switcherButtonRef}
-              className={`tab-switcher ${tabMenuOpen ? "open" : ""}`}
-              onClick={() => setTabMenuOpen((open) => !open)}
-              aria-label={`切换标签，共 ${tabs.length} 个`}
-              aria-haspopup="menu"
-              aria-expanded={tabMenuOpen}
-              title={`切换标签（${tabs.length}）`}
-            >
-              <ChevronDown size={15} />
-              {tabMenuAnchor}
-            </button>
-            {tabMenuOpen && (
-              <Menu surfaceClassName="tab-switcher-menu" label="打开的标签" onDismiss={() => setTabMenuOpen(false)} surfaceRef={tabMenuRef} style={tabMenuStyle}>
-                <div className="tab-switcher-resize" onPointerDown={startTabMenuResize} title="拖动调整宽度" />
-                <div className="tab-switcher-heading">
-                  <strong>打开的标签</strong>
-                  <span>{tabs.length}</span>
-                </div>
-                <div className="tab-switcher-list">
-                  {tabs.map((tab) => (
-                    <div
-                      key={tab.noteId}
-                      className={`tab-switcher-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.deleted ? " deleted" : ""}`}
-                      role="menuitem"
-                    >
-                      <button
-                        className="tab-switcher-select"
-                        onClick={() => selectTab(tab.noteId)}
-                        title={tab.title || "无标题"}
-                      >
-                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ? <NodeIconGlyph value={tab.icon} /> : <File size={15} />}</span>
-                        <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
-                        <span className="tab-switcher-title ln-ellipsis">{tab.title || "无标题"}</span>
-                        {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
-                      </button>
-                      <button
-                        className="tab-switcher-close"
-                        onClick={() => handleTabClose(tab.noteId)}
-                        aria-label={`关闭${tab.title || "无标题"}`}
-                        title={`关闭${tab.title || "无标题"}`}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </Menu>
-            )}
-          </div>
-        )}
-        {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
-      </div>
+      <TabStrip
+        tabs={tabs}
+        activeNoteId={activeNoteId}
+        pinned={pinned}
+        splitPair={splitPair}
+        splitFirstNote={splitFirstNote}
+        splitActive={splitActive}
+        splitLeftTab={splitLeftTab}
+        splitRightTab={splitRightTab}
+        onTabChange={onTabChange}
+        onTabClose={onTabClose}
+        onTabsReorder={onTabsReorder}
+        onTogglePin={onTogglePin}
+        onActivateSplit={onActivateSplit}
+        onCloseSplit={onCloseSplit}
+        onExitSplit={onExitSplit}
+        onSwapSplit={onSwapSplit}
+        topbarLeading={topbarLeading}
+        topbarTrailing={topbarTrailing}
+      />
       {/* 横幅只给「数据事实类」只读原因（回收站 / 云端已删除）；编辑锁是用户主动行为，不弹横幅（261116 用户裁决）。 */}
       {bannerReadonlyReason && (
         <div className="tab-gone-banner" role="status">
@@ -798,54 +468,6 @@ export function MultiTabEditor({
           />
         )}
       </div>
-      {tabCtx && (
-        <TabContextMenu
-          x={tabCtx.x}
-          y={tabCtx.y}
-          split={tabCtx.split ? { onExit: () => onExitSplit?.(), onSwap: () => onSwapSplit?.() } : undefined}
-          pinned={pinned.has(tabCtx.noteId)}
-          canCloseOthers={tabs.length > 1}
-          hasLeft={tabs.findIndex((t) => t.noteId === tabCtx.noteId) > 0}
-          hasRight={tabs.findIndex((t) => t.noteId === tabCtx.noteId) < tabs.length - 1}
-          onTogglePin={() => {
-            const next = new Set(pinned);
-            if (next.has(tabCtx.noteId)) next.delete(tabCtx.noteId);
-            else next.add(tabCtx.noteId);
-            // 钉住组始终排在最前（思源式固定页签），其余保持原相对顺序
-            const ordered = [
-              ...tabs.filter((t) => next.has(t.noteId)).map((t) => t.noteId),
-              ...tabs.filter((t) => !next.has(t.noteId)).map((t) => t.noteId),
-            ];
-            onTabsReorder?.(ordered);
-            onTogglePin?.(tabCtx.noteId);
-          }}
-          onCloseTab={() => handleTabClose(tabCtx.noteId)}
-          onCloseOthers={() => {
-            for (const t of tabs) {
-              if (t.noteId !== tabCtx.noteId && !pinned.has(t.noteId)) handleTabClose(t.noteId);
-            }
-          }}
-          onCloseLeft={() => {
-            const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
-            for (const t of tabs.slice(0, idx)) {
-              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
-            }
-          }}
-          onCloseRight={() => {
-            const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
-            for (const t of tabs.slice(idx + 1)) {
-              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
-            }
-          }}
-          onCloseAll={() => {
-            // 思源行为：关闭全部也跳过钉住的标签
-            for (const t of tabs) {
-              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
-            }
-          }}
-          onClose={() => setTabCtx(null)}
-        />
-      )}
     </div>
   );
 }

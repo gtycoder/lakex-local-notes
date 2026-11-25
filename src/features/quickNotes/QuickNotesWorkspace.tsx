@@ -1,3 +1,15 @@
+/**
+ * 「小记」空间工作区：列表（虚拟滚动/筛选/排序/多选/回收站）+ 写作卡编排 + 标签选择/管理；
+ * 经 QuickNotesWorkspaceHandle 暴露 confirmLeave/refresh/revealNote 给外壳。
+ *
+ * 边界（不做什么）：排序档位/比较器/本机持久化不在本文件（core/quickNoteSort 两端单一来源）；
+ * 「保存并同步」快路径不在 UI 实现（core/s3v3/quickPush 单条推送，UI 只发触发）；小记无历史快照
+ * （恢复走云端镜像/搜索索引全文缓存，AGENTS §4 缺正文条目）。
+ * 单一来源指针：确认 = useConfirm、浮层 = Overlay(NativeDialog)、标签语义 = core/quickNoteTags、
+ * 过滤 = core/quickNoteFilters|quickNoteTypeFilter。坑：列表投影不带正文 ⇒ refreshItems 在 setItems 前
+ * 预热首屏正文（core/quickNoteDetailPrewarm，AGENTS §4 小记预览条目）；解析器 unsupported 块整条交内核只读兜底。
+ */
+
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, Check, ChevronDown, FilePlus, Feather, Filter, LayoutList, LoaderCircle, MoreHorizontal, Plus, RotateCcw, Search, StickyNote, Tag, Tags, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";

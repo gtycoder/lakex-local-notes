@@ -1,3 +1,16 @@
+/**
+ * 桌面渲染层唯一原生能力入口（IPC 类型 + 封装）：共享组件一律 `native.X()` 调用——桌面走
+ * window.lakeNative（preload.cjs）、移动走 src/mobile/bridge 的同一方法面（跨端契约面）。
+ *
+ * 边界（不做什么）：不写业务逻辑（主进程 Store/协作类）；不新增第二套调用通道；**不拆**（IPC 单一入口
+ * 就是契约本体）；渲染层不接触明文密钥（AGENTS §5）。
+ *
+ * 单一来源指针：方法面 = electron/preload.cjs（IPC 四面 parity 测试对拍）；共享类型已下沉 core/、
+ * lib/types 只留渲染层专属。红线/坑：**IPC 三处同步改** = main.ts(handle) + preload.cjs(invoke) +
+ * 本文件(类型+封装)（AGENTS §7#6）；出网判据只走 core/cloudState.canTouchNetwork（AGENTS §3#20）；
+ * AI 默认关 fail-closed、关闭任何路径不出网（AGENTS §4）。
+ */
+
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTagLinks, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, RestoreSyncConflictResult, SaveNoteResult, SaveQuickNoteInput, SyncConflictsSnapshot, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { NoteKind } from "../core/noteKind";

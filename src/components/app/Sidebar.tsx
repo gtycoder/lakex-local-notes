@@ -1,3 +1,15 @@
+/**
+ * Sidebar —— 桌面文档目录栏（D-04/D-13 头注释，261125）：目录树渲染 + 筛选 + 新建/重命名 + 置顶/已收起分区。
+ *
+ * 职责边界：导入状态机在 hooks/useSidebarImport、多选批量在 hooks/useTreeSelectionBatch、树拖拽 + ghost + FLIP
+ * 在 hooks/useTreeDrag（261125 D-04 三步纯搬家）；目录行内部组件在 ./sidebar/（261112 R2）；本文件只留组合与布局。
+ * 展开记忆语义（261121 口径反转）：设备本地记忆（features/sidebar/treeExpansion.ts；空数组 = 用户主动全部收起）；
+ * **启动不跟随**（261122 用户裁决）：冷启动严格按上次记忆渲染，不替用户展开 active 文档祖先（要定位用「定位」按钮）。
+ * 单一来源指针：展开/收起判据 = ./sidebar/treeExpandState.ts；置顶/收纳 = features/sidebar/{pinnedTree,collapsedNotebooks}；
+ * 多选语义 = core/treeSelection；浮层走 components/ui/Overlay、二次确认走 useConfirm（不引第二套）。
+ * 已知坑：滚动定位只动目录自己的滚动容器（禁 scrollIntoView，user 260917 实测整壳上移 42px）；
+ * 新建/重命名只走统一弹窗（261105 用户验收，无内联创建行）。
+ */
 import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Book, ChevronsDownUp, Filter, Focus, Pin, Plus, RefreshCw } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
@@ -5,7 +17,8 @@ import { escapeId } from "../../lib/cssEscape";
 import type { TreeNode } from "../../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
 import { subtreeIds } from "../../core/tree";
-import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "../model/treeDrag";
+// D-04③（261125）：树拖拽状态机/ghost/FLIP 搬到 hooks/useTreeDrag.ts（纯搬家，本文件只接线）。
+import { useTreeDrag } from "../../hooks/useTreeDrag";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
 import { Menu } from "../ui/Overlay";
@@ -19,15 +32,10 @@ import { SidebarTagFilter } from "./SidebarTagFilter";
 import { NoteTagDialog } from "./NoteTagDialog";
 import { NamePromptDialog } from "./NamePromptDialog";
 import { ImportProgressDialog } from "./ImportProgressDialog";
-import { ImportResultDialog, type ImportResultItem } from "./ImportResultDialog";
-import { createNotesFromImportBatch, type FileImportItem } from "../../features/import/fileImportBatch";
-import { createDesktopMarkdownImportHost } from "../../features/import/markdownImportDesktop";
-import { convertMarkdownToLake } from "../../features/import/markdownImportPipeline";
-import { convertHtmlToLake } from "../../features/import/htmlImportPipeline";
-import type { UsheetWorkbook } from "../../core/usheetDoc";
+import { ImportResultDialog } from "./ImportResultDialog";
+// D-04①（261125）：导入状态机/动作搬到 hooks/useSidebarImport.ts（纯搬家，本文件只接线）。
+import { useSidebarImport } from "../../hooks/useSidebarImport";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
-import { native } from "../../lib/native";
-import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind, QuickNoteTag } from "../../lib/types";
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
@@ -48,31 +56,12 @@ import { toggleExpandedNode } from "./sidebar/treeExpandState";
 import {
   readPinnedOpen,
   readPinnedTreeIds,
-  setPinnedTreeIds,
   togglePinnedTreeId,
   writePinnedOpen,
   writePinnedTreeIds,
 } from "../../features/sidebar/pinnedTree";
-import { batchNotesResultNotice } from "./batchNotesFeedback";
-import { duplicateNotesResultNotice } from "./duplicateNotesFeedback";
-import {
-  EMPTY_TREE_SELECTION,
-  TREE_SELECTION_MAX,
-  clearTreeSelection,
-  isSelectableTreeNode,
-  plainClickSelection,
-  pruneTreeSelection,
-  rangeTreeSelection,
-  selectAllVisible,
-  selectableVisibleOrder,
-  toggleTreeSelection,
-  treeSelectionActions,
-  type TreeSelectionState,
-} from "../../core/treeSelection";
-import { useConfirm } from "../../hooks/useConfirm";
-import { currentParentOf } from "../../core/moveTreeModel";
-import { readBoardBytes } from "../../features/board/boardExport";
-import { renderBoardSnapshotBytes } from "../../features/board/boardSnapshot";
+// D-04②（261125）：多选/批量状态机与动作搬到 hooks/useTreeSelectionBatch.ts（纯搬家，本文件只接线）。
+import { useTreeSelectionBatch } from "../../hooks/useTreeSelectionBatch";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -153,12 +142,6 @@ interface SidebarProps {
   onTagsChanged?: () => void;
 }
 
-/** 批量结果的原因摘要：去重、最多两档（导出/批量操作共用）。 */
-function summarizeReasons(reasons: ReadonlyArray<string | undefined>): string {
-  const unique = [...new Set(reasons.map((reason) => (reason ?? "").trim() || "未知原因"))];
-  return unique.slice(0, 2).join("；") + (unique.length > 2 ? "…" : "");
-}
-
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
@@ -171,6 +154,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  // ===== 目录树展开记忆（261121 设备本地；启动不跟随 261122）=====
   /**
    * 目录树展开集（261121 **口径反转**：用户报「退出前收起所有笔记本，重开又全部展开」）。
    *
@@ -212,30 +196,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     writeExpandedNodeIds([...expanded]);
   }, [expanded]);
 
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  // 真拖拽已开始（越过 5px 阈值）：拖拽视觉（源行变灰 .38）只在真拖时出现 ——
-  // 旧实现按下即 setDraggingId ⇒ 每次点击/展开都「闪一下灰」（261123 用户报「打开都会闪烁一下」的根因）。
-  const [dragMoved, setDragMoved] = useState(false);
-  const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
-  const [releaseState, setReleaseState] = useState<{
-    id: string;
-    target: { id: string; position: DropPosition };
-    expectedParentId: string | null;
-    expectedOrder: string[];
-    positions: Record<string, number>;
-  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   /** 右键「打标签…」：记录目标文档（id + 标题），用 NoteTagDialog 复用属性面板的标签编辑行。 */
   const [tagEditor, setTagEditor] = useState<{ noteId: string; title: string } | null>(null);
-  /** 目录树多选（261106 task-81）：设备本地视图，笔记本不参与；切筛选/搜索/执行完即清空。 */
-  const [selection, setSelection] = useState<TreeSelectionState>(EMPTY_TREE_SELECTION);
-  const [batchBusy, setBatchBusy] = useState(false);
-  const [batchNotice, setBatchNotice] = useState<string | null>(null);
-  /** 提示行右侧动作（导出后的「打开所在文件夹」）。 */
-  const [batchNoticeAction, setBatchNoticeAction] = useState<{ label: string; onClick(): void } | null>(null);
-  /** 多选态右键菜单（恰好四项：创建副本/移动…/导出…/移入回收站；未多选时用旧菜单）。 */
-  const [batchMenu, setBatchMenu] = useState<{ x: number; y: number } | null>(null);
-  const [batchDialogError, setBatchDialogError] = useState<string | null>(null);
   /** 桌面「置顶」：纯设备本地的入口列表（不改原目录、不写库、不进 S3）。 */
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => readPinnedTreeIds());
   const [pinnedOpen, setPinnedOpen] = useState<boolean>(() => readPinnedOpen());
@@ -245,18 +208,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   /** 分区手动高度（px；null = 自适应、最高 1/3 目录栏）。拖分隔条改高度，双击复位。 */
   const [collapsedHeight, setCollapsedHeight] = useState<number | null>(() => readCollapsedHeight());
   const sidebarRef = useRef<HTMLElement | null>(null);
-  /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
-  const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
-  /** 批量「添加标签…」：只追加，可现场新建；id 快照与标签目录在打开时现读。 */
-  const [tagDialog, setTagDialog] = useState<{ ids: string[] } | null>(null);
-  const [tagCatalog, setTagCatalog] = useState<{ loading: boolean; error: string | null; tags: QuickNoteTag[] }>({ loading: false, error: null, tags: [] });
-  /** 批量「移入回收站」二次确认（与删除同一套确认原语）。 */
-  const { confirm, confirmElement } = useConfirm();
-  /** Markdown 导入（261106 task-85）：进度浮层 / 结果汇总 / 中止句柄。 */
-  const [importProgress, setImportProgress] = useState<{ done: number; total: number; current: string | null } | null>(null);
-  const [importStopping, setImportStopping] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: number; skipped: ImportResultItem[]; failed: ImportResultItem[]; warnings: string[] } | null>(null);
-  const importAbortRef = useRef<AbortController | null>(null);
   /** 目录行「＋」的快捷「新建」菜单（锚在该行按钮上） */
   const [createMenu, setCreateMenu] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
@@ -266,15 +217,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
-  const ghostRef = useRef<DragGhost | null>(null);
-  const pointerRef = useRef({ x: 0, y: 0 });
-  const dropTargetRef = useRef<{ id: string; position: DropPosition } | null>(null);
   // 拖拽生命周期只用来决定 `onPreviewLeave` 的时序（拖拽中右缘跟着指针走，不能当"移出"处理）。
   const splitDraggingRef = useRef(false);
-  const suppressClickRef = useRef(false);
   /** 上一次见过的节点 id；**null = 还没建立基线**（启动首帧树是空的，不能把那一次当成"全是新节点"）。 */
   const prevNodeIds = useRef<Set<string> | null>(null);
+  // ===== 筛选与显示索引 =====
   const query = props.search.trim().toLocaleLowerCase();
   // 目录筛选：图标按需展开输入框（交互与大纲筛选共用 dockFilterModel 状态机）
   const filter = useDockFilter(props.search, props.onSearch);
@@ -287,6 +234,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     return { childrenByParent: treeIndex.childrenByParent, visibleIds };
   }, [treeIndex, props.tagFilter]);
   const roots = (displayIndex.childrenByParent.get(null) ?? []).filter((node) => displayIndex.visibleIds.has(node.id));
+  // ===== 「已收起」笔记本分区（261120）=====
   /**
    * 「已收起」（261120 用户点单）：收起项从目录主列表消失、只在底部置底区出现。
    * 搜索/标签筛选期间**不做收纳**（与置顶区同一口径：筛选时底部区隐藏，免得「目录被筛掉、底部还在」）。
@@ -299,10 +247,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   );
   const collapsedRoots = collapsedRootsRaw;
 
-  // ---- 目录树多选（261106 task-81，用户定稿 A 方案）----
-  // 可见可多选行（DFS 顺序；笔记本跳过）：Shift 区间与「全选」都以它为准。
-  const visibleSelectableOrder = useMemo(() => selectableVisibleOrder(displayIndex), [displayIndex]);
-  const selectedIdSet = useMemo(() => new Set(selection.ids), [selection.ids]);
   const nodeById = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
   // 「已收起」历史/异常写入清理：节点已加载且确认**不可收起**（回收站/未分类/日记本/非笔记本）才剔除。
   // 节点未知时保留（加载期/筛选期不误删），否则会在树还没到时把用户的收纳清空。
@@ -312,65 +256,37 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     writeCollapsedNotebookIds(next);
     setCollapsedNotebookIds(next);
   }, [collapsedNotebookIds, nodeById]);
-  const selectionActions = useMemo(() => treeSelectionActions(nodeById, selection), [nodeById, selection]);
-  /** 「创建副本」可用判据（261106）：选区里**全是文档**才成立 ⇒ 分组/笔记本/混选时菜单项禁用并给原因。 */
-  const selectionAllNotes = useMemo(
-    () => selection.ids.length > 0 && selection.ids.every((id) => nodeById.get(id)?.nodeType === "note"),
-    [nodeById, selection.ids],
-  );
+  // 点击展开/收起：收起清整棵子树的展开态，展开只开一级（261119 用户点单）。
+  const toggleNode = useCallback((id: string) => setExpanded((current) => toggleExpandedNode(current, id, props.nodes)), [props.nodes]);
+  /** 置顶状态读写（设备本地）；节点 id 与目录树同源。 */
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+  const refreshPinnedState = useCallback(() => setPinnedIds(readPinnedTreeIds()), []);
 
-  // 可见集合变化（筛选/搜索/删除/移动）⇒ 剔除已不可选的 id（不改变选择顺序）。
-  useEffect(() => {
-    setSelection((state) => (state.ids.length === 0 ? state : pruneTreeSelection(state, visibleSelectableOrder)));
-  }, [visibleSelectableOrder]);
-
-  // 切换笔记本/筛选/搜索 ⇒ 清空多选（用户定稿）。只依赖真正会变的两个值，
-  // 不依赖 tagFilter 对象本身（App 每次渲染都会新建那个对象）。
-  const tagSelection = props.tagFilter?.selection;
-  const tagVisibleIds = props.tagFilter?.visibleIds;
-  useEffect(() => {
-    setSelection(EMPTY_TREE_SELECTION);
-    setBatchNotice(null);
-  }, [query, tagSelection, tagVisibleIds]);
-
-  // 批量结果提示自动消失（4s）：批量进行中不消失（进度提示要一直可见）；下一次选择/清空也会清。
-  useEffect(() => {
-    if (!batchNotice || batchBusy) return;
-    const timer = window.setTimeout(() => { setBatchNotice(null); setBatchNoticeAction(null); }, 4000);
-    return () => window.clearTimeout(timer);
-  }, [batchNotice, batchBusy]);
-
-  /** 261108：批量创建副本的进度（只接受当前请求 id，避免旧请求串台）。 */
-  const duplicateRequestIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    try {
-      if (typeof native.onDuplicateProgress !== "function") return;
-      return native.onDuplicateProgress((progress) => {
-        if (!duplicateRequestIdRef.current || progress.requestId !== duplicateRequestIdRef.current) return;
-        setBatchNotice("正在创建副本 " + progress.done + "/" + progress.total + "…");
-      });
-    } catch {
-      // 非 Electron 宿主（测试/Web shim）没有原生进度通道：静默跳过。
-      return;
-    }
-  }, []);
-
-  // 选择被清空 ⇒ 多选右键菜单一起收起（Esc/点空白/操作完成）
-  useEffect(() => {
-    if (selection.ids.length === 0) setBatchMenu(null);
-  }, [selection.ids.length]);
-
-  // Esc 清空多选（只在有多选时挂监听；重命名输入/浮层已经 preventDefault 的 Esc 不抢）。
-  useEffect(() => {
-    if (selection.ids.length === 0) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      setSelection(EMPTY_TREE_SELECTION);
-      setBatchNotice(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selection.ids.length]);
+  // ---- 目录树多选 + 批量动作（261106 task-81/task-88；D-04② 状态机/动作在 hooks/useTreeSelectionBatch）----
+  const {
+    selection, selectedIdSet, selectionActions, selectionAllNotes, selectionAllPinned,
+    batchBusy, batchNotice, setBatchNotice, batchNoticeAction, batchMenu, setBatchMenu,
+    batchDialogError, setBatchDialogError, moveDialog, setMoveDialog, tagDialog, setTagDialog, tagCatalog,
+    confirmElement, handleRowClick, runBatch, trashSelected, exportSelected,
+    duplicateOne, duplicateSelected, pinSelected,
+    openMoveDialog, openMoveForNode, openBatchTagDialog, confirmBatchTag, createBatchTag,
+    selectAllVisibleRows, cancelSelection,
+  } = useTreeSelectionBatch({
+    nodes: props.nodes,
+    nodeById,
+    displayIndex,
+    query,
+    tagSelection: props.tagFilter?.selection,
+    tagVisibleIds: props.tagFilter?.visibleIds,
+    onRefreshTree: props.onRefreshTree,
+    onTagsChanged: props.onTagsChanged,
+    onBeforeDuplicate: props.onBeforeDuplicate,
+    onSelect: props.onSelect,
+    setContextId,
+    toggleNode,
+    pinnedSet,
+    refreshPinnedState,
+  });
 
   /** 目录刷新（右上角刷新按钮）：重读整棵树，进行中把图标转起来并禁用，避免连点。 */
   const refreshTree = useCallback(async () => {
@@ -479,135 +395,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     return () => { props.onSidebarHold?.(false); };
   }, [editingId, props.onSidebarHold]);
 
-  const buildExpectedOrder = (movingId: string, target: { id: string; position: DropPosition }): { parentId: string | null; order: string[] } | null => {
-    const moving = props.nodes.find((node) => node.id === movingId);
-    const targetNode = props.nodes.find((node) => node.id === target.id);
-    if (!moving || !targetNode) return null;
-    const parentId = target.position === "inside" ? targetNode.id : targetNode.parentId;
-    const siblings = (treeIndex.childrenByParent.get(parentId) ?? []).map((node) => node.id).filter((id) => id !== movingId);
-    if (target.position === "inside") return { parentId, order: [...siblings, movingId] };
-    const targetIndex = siblings.indexOf(target.id);
-    if (targetIndex < 0) return { parentId, order: [...siblings, movingId] };
-    siblings.splice(target.position === "after" ? targetIndex + 1 : targetIndex, 0, movingId);
-    return { parentId, order: siblings };
-  };
-
-  useEffect(() => {
-    if (!draggingId || releaseState) return;
-    const move = (event: PointerEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      if (!drag.moved) {
-        if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= 5) return;
-        drag.moved = true;
-        setDragMoved(true);
-        const sourceEl = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${escapeId(drag.id)}"]`);
-        ghostRef.current = sourceEl ? createDragGhost(sourceEl, event.clientX, event.clientY) : null;
-      }
-      pointerRef.current = { x: event.clientX, y: event.clientY };
-      moveDragGhost(ghostRef.current, event.clientX, event.clientY);
-      // 被拖动项本身会随指针移动，elementFromPoint 可能持续命中它，
-      // 尤其是向上越过兄弟项时会导致永远无法得到真实落点。先排除源行，
-      // 再从当前可见行中选出指针所在/最近的一行。
-      // 浮层 pointer-events:none，elementFromPoint 直接命中真实行；只有命中失败才回退到就近行，
-      // 避免每次 pointermove 对全表做 getClientRects/getBoundingClientRect（实测 28ms/帧）。
-      const hit = document.elementsFromPoint(event.clientX, event.clientY)
-        .map((element) => element.closest<HTMLElement>("[data-tree-node-id]"))
-        .find((candidate) => candidate && candidate.dataset.treeNodeId !== drag.id);
-      let row = hit ?? null;
-      if (!row) {
-        let bestDist = Infinity;
-        document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((candidate) => {
-          if (candidate.dataset.treeNodeId === drag.id) return;
-          const box = candidate.getBoundingClientRect();
-          if (box.height <= 0) return;
-          const distance = Math.abs(box.top + box.height / 2 - event.clientY);
-          if (distance < bestDist) { bestDist = distance; row = candidate; }
-        });
-      }
-      if (!row) {
-        dropTargetRef.current = null;
-        setDropTarget(null);
-        return;
-      }
-      const rowNodeId = row.dataset.treeNodeId;
-      const rect = row.getBoundingClientRect();
-      let position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
-      const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
-      const targetNode = props.nodes.find((node) => node.id === rowNodeId) ?? null;
-      // 目标不支持 inside（如笔记本只能排序）→ 退化为上下半区 before/after，避免中段无落点（对齐思源根节点）
-      if (position === "inside" && !isValidTreeDrop(movingNode, targetNode, "inside")) {
-        position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-      }
-      const nextTarget = { id: rowNodeId!, position };
-      if (!isValidTreeDrop(movingNode, targetNode, nextTarget.position)) {
-        dropTargetRef.current = null;
-        setDropTarget(null);
-        return;
-      }
-      if (dropTargetRef.current?.id === nextTarget.id && dropTargetRef.current?.position === nextTarget.position) return;
-      dropTargetRef.current = nextTarget;
-      setDropTarget(nextTarget);
-    };
-    const up = () => {
-      removeDragGhost(ghostRef.current);
-      ghostRef.current = null;
-      const drag = dragRef.current;
-      const finalDropTarget = dropTargetRef.current;
-      if (drag?.moved && finalDropTarget) {
-        const expected = buildExpectedOrder(drag.id, finalDropTarget);
-        if (expected) {
-          const positions: Record<string, number> = {};
-          document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => {
-            const id = row.dataset.treeNodeId;
-            if (id) positions[id] = row.getBoundingClientRect().top;
-          });
-          setReleaseState({ id: drag.id, target: finalDropTarget, expectedParentId: expected.parentId, expectedOrder: expected.order, positions });
-          if (finalDropTarget.position === "inside") {
-            setExpanded((current) => {
-              const next = new Set(current);
-              next.add(finalDropTarget.id);
-              return next;
-            });
-          }
-          suppressClickRef.current = true;
-          props.onMoveNode(drag.id, finalDropTarget.id, finalDropTarget.position);
-          window.setTimeout(() => { suppressClickRef.current = false; }, 0);
-        }
-      }
-      if (!drag?.moved || !finalDropTarget) {
-        setDraggingId(null);
-        setDragMoved(false);
-      }
-      dragRef.current = null;
-      dropTargetRef.current = null;
-      setDropTarget(null);
-    };
-    // 拖拽中边缘自动滚动（对齐思源 dragOverScroll）
-    let scrollRaf = 0;
-    const tick = () => {
-      const scroller = treeRef.current;
-      if (scroller) {
-        const box = scroller.getBoundingClientRect();
-        const y = pointerRef.current.y;
-        const edge = 44;
-        if (y > 0 && y < box.top + edge) scroller.scrollTop -= 8;
-        else if (y > box.bottom - edge) scroller.scrollTop += 8;
-      }
-      scrollRaf = window.requestAnimationFrame(tick);
-    };
-    scrollRaf = window.requestAnimationFrame(tick);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
-    return () => {
-      window.cancelAnimationFrame(scrollRaf);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-  }, [draggingId, releaseState, props.onMoveNode, props.nodes]);
-
-  // 组件卸载时清掉可能残留的拖拽浮层
-  useEffect(() => () => { removeDragGhost(ghostRef.current); ghostRef.current = null; }, []);
 
   // 创建/上下文定位：直接用当前选中/右键的节点作为父节点（支持多层嵌套，
   // 文档也可作为父节点）；无选中时回退到第一个笔记本。
@@ -619,6 +406,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const groupParent = context?.id ?? defaultNotebookId;
   const noteParent = context?.id ?? defaultNotebookId;
 
+  // ===== 新建 / 重命名（统一弹窗，261105 用户验收）=====
   const openCreateDialog = useCallback((kind: CreateKind, parentId: string | null, afterSortOrder?: number) => {
     setCreateError(null);
     setCreateDialog({ kind, parentId, afterSortOrder });
@@ -673,6 +461,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setEditingTitle(node.title);
   }, []);
 
+  // ===== 右键菜单与行内「＋」快捷菜单 =====
   // 右键菜单：contextmenu 事件在桌面=右键、移动端=长按自动触发，无需手写长按定时器。
   const openContext = useCallback((event: React.MouseEvent, node: TreeNode) => {
     event.preventDefault();
@@ -706,6 +495,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
 
+  // ===== 定位与滚动（reveal；只动目录自己的滚动容器）=====
   /** 把某一行滚进目录栏自己的可见区（已在视口内则不滚，只定位）。
    *  **只动目录栏自己的滚动容器，不能用 `scrollIntoView`**：它会连带滚动所有可滚动祖先，
    *  而 `body` 虽 `overflow:hidden` 仍可被程序化滚动（`.sidebar` 的 `margin-top: 42px`
@@ -822,104 +612,21 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     openCreateDialog(kind, parentId, position === "above" ? node.sortOrder - 1 : node.sortOrder);
   };
 
-  // ---- Markdown 导入（261106 task-85）----
-  const byIdRef = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
-  /** 目标父级 = 触发/当前节点最近的「笔记本或分组」容器（根级文档沿祖先链找）；找不到 ⇒ null（禁用并提示）。 */
-  const containerAncestorOf = useCallback((id: string | null): string | null => {
-    if (!id) return null;
-    let cursor = byIdRef.get(id);
-    while (cursor) {
-      if (cursor.nodeType === "notebook" || cursor.nodeType === "group") return cursor.id;
-      cursor = cursor.parentId ? byIdRef.get(cursor.parentId) : undefined;
-    }
-    return null;
-  }, [byIdRef]);
-  const baseNameOf = (path: string): string => path.replace(/\\/g, "/").split("/").pop() || path;
-
-  /** 选中的文件 → 批量导入：不支持的/超 20MB/读失败 直接计入「跳过」；其余串行转换落盘。 */
-  const runImport = useCallback(async (targetId: string, picked: readonly ImportPickedFileShape[]) => {
-    const skipped: ImportResultItem[] = [];
-    const items: FileImportItem[] = [];
-    const warnings: string[] = [];
-    for (const file of picked) {
-      const label = file.relativePath || file.name;
-      if (!file.supported) { skipped.push({ name: label, reason: "不支持的文件类型" }); continue; }
-      if (file.tooLarge) { skipped.push({ name: label, reason: "超过 20MB" }); continue; }
-      if (file.error) { skipped.push({ name: label, reason: "读取失败：" + file.error }); continue; }
-      const common = { path: file.path, name: file.name, relativePath: file.relativePath || file.name };
-      if (file.kind === "markdown" && typeof file.markdown === "string") {
-        items.push({ kind: "markdown", ...common, markdown: file.markdown });
-      } else if (file.kind === "docx" && typeof file.html === "string") {
-        items.push({ kind: "docx", ...common, html: file.html });
-      } else if ((file.kind === "xlsx" || file.kind === "csv") && file.workbook) {
-        items.push({ kind: "sheet", ...common, workbook: file.workbook as unknown as UsheetWorkbook });
-      } else {
-        skipped.push({ name: label, reason: "文件内容解析为空" });
-        continue;
-      }
-      if (file.warnings?.length) warnings.push(...file.warnings.map((warning) => label + "：" + warning));
-    }
-    if (items.length === 0) {
-      setImportResult({ success: 0, skipped, failed: [], warnings });
-      return;
-    }
-    const controller = new AbortController();
-    importAbortRef.current = controller;
-    setImportStopping(false);
-    setImportProgress({ done: 0, total: items.length, current: null });
-    try {
-      const result = await createNotesFromImportBatch({
-        parentNotebookId: targetId,
-        items,
-        host: createDesktopMarkdownImportHost(),
-        convertMarkdown: convertMarkdownToLake,
-        convertHtml: (input) => convertHtmlToLake(input),
-        signal: controller.signal,
-        onProgress: (progress) => setImportProgress({ done: progress.index, total: progress.total, current: progress.path ? baseNameOf(progress.path) : null }),
-      });
-      const canceled = result.results.filter((entry) => !entry.ok && entry.reason === "导入已取消");
-      const failed = result.results
-        .filter((entry) => !entry.ok && entry.reason !== "导入已取消")
-        .map((entry) => ({ name: baseNameOf(entry.path), reason: entry.reason ?? "未知原因" }));
-      setImportResult({
-        success: result.summary.done,
-        skipped: [...skipped, ...canceled.map((entry) => ({ name: baseNameOf(entry.path), reason: "已取消" }))],
-        failed,
-        warnings: [...warnings, ...result.warnings],
-      });
-    } catch (error) {
-      setImportResult({ success: 0, skipped, failed: [{ name: "导入", reason: getNativeErrorMessage(error) || "导入失败" }], warnings });
-    } finally {
-      importAbortRef.current = null;
-      setImportProgress(null);
-      setImportStopping(false);
-      try { await Promise.resolve(props.onRefreshTree()); } catch { /* 刷新失败不影响已导入结果 */ }
-      // 树刷新是异步 setState：等一帧再定位到目标父级（目录栏自己的滚动容器，内部不用 scrollIntoView）
-      window.requestAnimationFrame(() => revealNodeRef.current(targetId));
-    }
-  }, [props.onRefreshTree]);
-
-  const startImport = useCallback(async (targetId: string | null, kind: ImportPickerKind) => {
-    if (!targetId || importProgress) return;
+  // ---- Markdown 导入（261106 task-85）：状态机/动作在 hooks/useSidebarImport（D-04① 纯搬家）----
+  const closeImportOverlays = useCallback(() => {
     setMenuOpen(false);
     setCreateMenu(null);
     setContextMenu(null);
-    let picked: ImportPickedFileShape[] = [];
-    try {
-      picked = await native.pickImportFiles(kind);
-    } catch (error) {
-      setImportResult({ success: 0, skipped: [], failed: [{ name: "选择导入文件", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
-      return;
-    }
-    // 用户取消 ⇒ 无副作用
-    if (picked.length === 0) return;
-    await runImport(targetId, picked);
-  }, [importProgress, runImport]);
-
-  const cancelMarkdownImport = useCallback(() => {
-    importAbortRef.current?.abort();
-    setImportStopping(true);
   }, []);
+  const {
+    importProgress, importStopping, importResult, setImportResult,
+    containerAncestorOf, startImport, cancelMarkdownImport,
+  } = useSidebarImport({
+    nodes: props.nodes,
+    onRefreshTree: props.onRefreshTree,
+    revealNodeRef,
+    closeImportOverlays,
+  });
 
   const menuRename = () => {
     if (!contextNode) return;
@@ -933,322 +640,31 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setContextMenu(null);
   };
 
-  const beginTreeDrag = useCallback((event: React.PointerEvent, id: string) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return;
-    dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false };
-    setDragMoved(false);
-    setReleaseState(null);
-    dropTargetRef.current = null;
-    setDropTarget(null);
-    setDraggingId(id);
-  }, []);
-  // 点击展开/收起：收起清整棵子树的展开态，展开只开一级（261119 用户点单）。
-  const toggleNode = useCallback((id: string) => setExpanded((current) => toggleExpandedNode(current, id, props.nodes)), [props.nodes]);
   const setContextNode = useCallback((id: string) => setContextId(id), []);
-  const consumeSuppressedClick = useCallback(() => suppressClickRef.current, []);
   const setTreeIcon = useCallback((node: TreeNode, event: React.MouseEvent<HTMLElement>) => {
     setIconPicker({ node, anchor: event.currentTarget.closest<HTMLElement>(".tree-row") ?? event.currentTarget });
   }, []);
   const cancelRename = useCallback(() => setEditingId(null), []);
-  useLayoutEffect(() => {
-    if (!releaseState) return;
-    const rows = [...document.querySelectorAll<HTMLElement>("[data-tree-node-id]")];
-    const currentOrder = props.nodes
-      .filter((item) => item.parentId === releaseState.expectedParentId)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((item) => item.id);
-    const settled = currentOrder.join("|") === releaseState.expectedOrder.join("|");
-    if (!settled) return;
 
-    // 先读后写：一次性读取所有行位置（单次布局），再统一写 transform。
-    // 原实现边写 style 边读 getBoundingClientRect → 每行强制重排一次，500+ 行时拖一次要 2s+。
-    const currentTops: Array<{ row: HTMLElement; top: number }> = [];
-    rows.forEach((row) => {
-      const id = row.dataset.treeNodeId;
-      if (!id || releaseState.positions[id] === undefined) return;
-      currentTops.push({ row, top: row.getBoundingClientRect().top });
-    });
-    const animated: HTMLElement[] = [];
-    currentTops.forEach(({ row, top }) => {
-      const id = row.dataset.treeNodeId!;
-      const delta = releaseState.positions[id] - top;
-      if (Math.abs(delta) < 1) return;
-      row.style.transition = "none";
-      row.style.transform = `translateY(${delta}px)`;
-      animated.push(row);
-    });
-    const frame = window.requestAnimationFrame(() => {
-      animated.forEach((row) => {
-        row.style.transition = "transform 250ms ease";
-        row.style.transform = "translateY(0px)";
-      });
-    });
-    const clear = () => {
-      rows.forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
-      setReleaseState(null);
-      setDraggingId(null);
-      setDragMoved(false);
-      setDropTarget(null);
-    };
-    const timer = window.setTimeout(clear, 280);
-    return () => { window.cancelAnimationFrame(frame); window.clearTimeout(timer); };
-  }, [props.nodes, releaseState]);
-
-  useEffect(() => {
-    if (!releaseState) return;
-    const timer = window.setTimeout(() => {
-      document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
-      setReleaseState(null);
-      setDraggingId(null);
-      setDragMoved(false);
-      setDropTarget(null);
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [releaseState]);
-
-  const draggedNode = draggingId ? props.nodes.find((node) => node.id === draggingId) ?? null : null;
-
-  const dropNode = dropTarget ? props.nodes.find((node) => node.id === dropTarget.id) ?? null : null;
-  const dropParentId = dropTarget && dropNode
-    ? dropTarget.position === "inside" ? dropNode.id : dropNode.parentId
-    : null;
-  const draggedParentId = draggedNode?.parentId ?? null;
+  // ---- 树拖拽（D-04③ 状态机 + ghost + FLIP 在 hooks/useTreeDrag，纯搬家）----
+  const {
+    draggingId, dragMoved, dropTarget, dropParentId, draggedParentId, releasingId,
+    beginTreeDrag, consumeSuppressedClick,
+  } = useTreeDrag({
+    nodes: props.nodes,
+    treeIndex,
+    onMoveNode: props.onMoveNode,
+    treeRef,
+    setExpanded,
+  });
 
   // W-2-B：聚合对象 useMemo 化——props 稳定后 TreeRow memo 才能在按键路径命中
 
-  // ---- 多选：点击语义 / 批量执行 / 弹层（261106 task-81）----
-  /**
-   * 目录行点击：
-   *  · ⌘/Ctrl = 切换该行（笔记本不参与）；
-   *  · Shift = 以锚点为界按**可见顺序**取区间（可见顺序里本就没有笔记本 ⇒ 自动跳过）；
-   *  · 普通点击 = 退出多选（记下锚点，方便紧接着 Shift），并保持原有单行行为。
-   */
-  const handleRowClick = useCallback((event: React.MouseEvent, node: TreeNode, toggleExpand: (id: string) => void = toggleNode) => {
-    setBatchNotice(null);
-    // 笔记本在多选语义里是「不可选」：带 ⌘/Shift 点它直接忽略（避免多选途中的一次误触把笔记本收起）。
-    if (!isSelectableTreeNode(node) && (event.metaKey || event.ctrlKey || event.shiftKey)) {
-      setContextId(node.id);
-      return;
-    }
-    if (isSelectableTreeNode(node) && (event.metaKey || event.ctrlKey)) {
-      setSelection((state) => toggleTreeSelection(state, node.id));
-      setContextId(node.id);
-      return;
-    }
-    if (isSelectableTreeNode(node) && event.shiftKey) {
-      setSelection((state) => rangeTreeSelection(state, visibleSelectableOrder, node.id));
-      setContextId(node.id);
-      return;
-    }
-    setSelection(isSelectableTreeNode(node) ? plainClickSelection(node.id) : clearTreeSelection());
-    setContextId(node.id);
-    if (node.nodeType === "note") props.onSelect(node.id);
-    else toggleExpand(node.id);
-  }, [visibleSelectableOrder, props.onSelect, toggleNode]);
-
-  /** 批量执行（桌面 batch_notes）：成功 ⇒ 刷新 + 清空；失败 ⇒ 失败项保持选中 + 可见提示。 */
-  const runBatch = useCallback(async (request: BatchNotesRequestShape) => {
-    if (batchBusy) return;
-    setBatchBusy(true);
-    setBatchDialogError(null);
-    try {
-      const result = await native.batchNotes(request);
-      const notice = batchNotesResultNotice(result, request.action);
-      setBatchNotice(notice.text);
-      if (result.ok) {
-        setSelection(EMPTY_TREE_SELECTION);
-        setMoveDialog(null);
-        setTagDialog(null);
-        await props.onRefreshTree();
-        if (request.action === "tag-add") props.onTagsChanged?.();
-      } else {
-        const failed = new Set(notice.failedIds);
-        if (failed.size > 0) setSelection((state) => ({ ...state, ids: state.ids.filter((id) => failed.has(id)) }));
-        // 弹层不关：把原因就地显示，方便改目标/换标签重试
-        setBatchDialogError(notice.text);
-      }
-    } catch (error) {
-      const message = getNativeErrorMessage(error) || "批量操作失败";
-      setBatchNotice(message);
-      setBatchDialogError(message);
-    } finally {
-      setBatchBusy(false);
-    }
-  }, [batchBusy, props.onRefreshTree, props.onTagsChanged]);
-
-  /** 批量「移入回收站」（删除 = 移入回收站；可在回收站恢复）：二次确认后走 batch_notes.trash。 */
-  const trashSelected = useCallback(async () => {
-    const ids = [...selection.ids];
-    if (ids.length === 0) return;
-    const ok = await confirm({
-      title: "删除 " + ids.length + " 项？",
-      body: "删除后可在回收站恢复；文档的历史快照会保留。",
-      confirmText: "删除",
-    });
-    if (!ok) return;
-    await runBatch({ action: "trash", ids });
-  }, [confirm, runBatch, selection.ids]);
-
-  /**
-   * 批量导出（261106 task-88；task-96 接入画板）：
-   *  ① 先 pickExportDir（取消 ⇒ 静默返回）；
-   *  ② 对选中项里（含分组展开后）的**画板**串行收集字节：已打开的画板走 readBoardBytes（含未保存编辑），
-   *     否则 readNote 正文 + renderBoardSnapshotBytes 离屏渲染；进度「正在准备画板 N/M」可取消（中止后续）；
-   *  ③ exportNotesBatch({ ids, dirPath, boardImages })——主进程把字节内嵌成 PDF；缺字节的画板由主进程 skipped。
-   */
-  const exportSelected = useCallback(async () => {
-    const ids = [...selection.ids];
-    if (ids.length === 0) return;
-    setBatchNotice("正在导出 " + ids.length + " 项…");
-    setBatchNoticeAction(null);
-    setBatchBusy(true);
-    const prepFailures = new Map<string, string>();
-    try {
-      const dirPath = await native.pickExportDir();
-      if (!dirPath) { setBatchNotice(null); return; } // 用户取消目录 ⇒ 无副作用、不提示失败
-
-      // 选中项 + 分组/笔记本展开后的画板（分组交给主进程展开导出，这里只为画板先收字节）
-      const nodeById = new Map(props.nodes.map((node) => [node.id, node]));
-      const childrenByParent = new Map<string | null, TreeNode[]>();
-      for (const node of props.nodes) {
-        const siblings = childrenByParent.get(node.parentId) ?? [];
-        siblings.push(node);
-        childrenByParent.set(node.parentId, siblings);
-      }
-      const boardIds: string[] = [];
-      const collect = (id: string, depth: number) => {
-        if (depth > 32) return;
-        const node = nodeById.get(id);
-        if (!node) return;
-        if (node.nodeType === "note") {
-          if ((node.kind ?? "doc") === "board" && !boardIds.includes(node.id)) boardIds.push(node.id);
-          return;
-        }
-        for (const child of childrenByParent.get(node.id) ?? []) collect(child.id, depth + 1);
-      };
-      for (const id of ids) collect(id, 0);
-
-      const controller = new AbortController();
-      const boardImages: Record<string, { bytes: Uint8Array; format: "png" | "svg" }> = {};
-      if (boardIds.length > 0) {
-        setBatchNoticeAction({ label: "取消", onClick: () => controller.abort() });
-        for (let index = 0; index < boardIds.length; index += 1) {
-          if (controller.signal.aborted) break;
-          const boardId = boardIds[index];
-          setBatchNotice("正在准备画板 " + (index + 1) + "/" + boardIds.length + "…");
-          let bytes: Uint8Array | null = null;
-          try {
-            const opened = await readBoardBytes(boardId);
-            bytes = opened?.bytes ?? null;
-          } catch { bytes = null; }
-          if (!bytes) {
-            try {
-              const doc = await native.readNote(boardId);
-              const snapshot = await renderBoardSnapshotBytes(doc.content);
-              bytes = snapshot?.bytes ?? null;
-            } catch { bytes = null; }
-          }
-          if (bytes && bytes.byteLength > 0) boardImages[boardId] = { bytes, format: "png" };
-          else prepFailures.set(boardId, "画板快照失败/超时");
-        }
-        if (controller.signal.aborted) {
-          setBatchNotice(null);
-          setBatchNoticeAction(null);
-          return; // 取消准备阶段 ⇒ 不导出
-        }
-      }
-      setBatchNotice("正在导出 " + ids.length + " 项…");
-      setBatchNoticeAction(null);
-
-      const result = await native.exportNotesBatch(
-        Object.keys(boardImages).length > 0 ? { ids, dirPath, boardImages } : { ids, dirPath },
-      );
-      if (result.cancelled) { setBatchNotice(null); return; }
-      const failed = result.results.filter((entry) => !entry.ok && !entry.skipped);
-      const skipped = result.results.filter((entry) => entry.skipped || (!entry.ok && !!entry.reason));
-      const parts: string[] = ["导出 " + result.summary.done + " 项"];
-      if (result.summary.failed > 0) parts.push("失败 " + result.summary.failed + "（" + summarizeReasons(failed.map((entry) => entry.reason)) + "）");
-      if (result.summary.skipped > 0) {
-        const reasons = skipped.map((entry) => prepFailures.get(entry.id) ?? entry.reason);
-        parts.push("跳过 " + result.summary.skipped + "（" + summarizeReasons(reasons) + "）");
-      }
-      setBatchNotice(parts.join("，"));
-      if (result.dirPath) {
-        const path = result.dirPath;
-        setBatchNoticeAction({
-          label: "打开所在文件夹",
-          onClick: () => { setBatchNotice(null); setBatchNoticeAction(null); void native.openExportDir(path); },
-        });
-      }
-    } catch (error) {
-      setBatchNotice("导出失败：" + (getNativeErrorMessage(error) || "未知原因"));
-    } finally {
-      setBatchBusy(false);
-    }
-  }, [selection.ids, props.nodes]);
-
-  /**
-   * 「创建副本」（261106；桌面 IPC duplicate_notes，移动端同形）：单条右键与多选右键/浮动条共用这一条通路。
-   * 主进程逐条复制（部分失败不回滚其它条）：成功 ⇒ 刷新目录树（副本紧邻原笔记下方）+「已创建 N 个副本」；
-   * 有失败 ⇒ 失败项保留选中（单条右键时选区本就为空，不凭空拉出多选条）并给逐条原因文案。
-   */
-  const runDuplicate = useCallback(async (ids: readonly string[]) => {
-    if (ids.length === 0 || batchBusy) return;
-    const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : "dup-" + Date.now() + "-" + Math.random().toString(16).slice(2);
-    duplicateRequestIdRef.current = requestId;
-    setBatchBusy(true);
-    setBatchNotice("正在创建副本 0/" + ids.length + "…");
-    setBatchNoticeAction({ label: "取消", onClick: () => {
-      setBatchNotice("正在取消创建副本…");
-      setBatchNoticeAction(null);
-      void native.cancelDuplicateNotes?.(requestId);
-    } });
-    try {
-      // 先落盘未保存编辑（261106 用户确认）：复制读的是磁盘正文，不 flush 会漏掉最后一次输入。
-      await props.onBeforeDuplicate?.([...ids]);
-      const result = await native.duplicateNotes({ ids: [...ids], requestId });
-      const notice = duplicateNotesResultNotice(result);
-      setBatchNotice(notice.text);
-      if (result.ok) {
-        setSelection(EMPTY_TREE_SELECTION);
-        await props.onRefreshTree();
-      } else {
-        const failed = new Set(notice.failedIds);
-        if (failed.size > 0) {
-          setSelection((state) => (state.ids.length === 0 ? state : { ...state, ids: state.ids.filter((id) => failed.has(id)) }));
-        }
-      }
-    } catch (error) {
-      setBatchNotice("创建副本失败：" + (getNativeErrorMessage(error) || "未知原因"));
-    } finally {
-      duplicateRequestIdRef.current = null;
-      setBatchBusy(false);
-      setBatchNoticeAction(null);
-    }
-  }, [batchBusy, props.onRefreshTree]);
-
-  /** 单条右键「创建副本」（只在 note 行出现；笔记本/分组没有这个入口）。 */
-  const duplicateOne = useCallback((node: TreeNode) => {
-    if (node.nodeType !== "note") return;
-    void runDuplicate([node.id]);
-  }, [runDuplicate]);
-
-  /** 多选「创建副本」（菜单/浮动条；选区里全是文档时才可点）。 */
-  const duplicateSelected = useCallback(() => {
-    void runDuplicate(selection.ids.filter((id) => nodeById.get(id)?.nodeType === "note"));
-  }, [nodeById, runDuplicate, selection.ids]);
-
-  /** 置顶状态读写（设备本地）；节点 id 与目录树同源。 */
-  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
-  const selectionAllPinned = selection.ids.length > 0 && selection.ids.every((id) => pinnedSet.has(id));
   /** 搜/筛选时隐藏置顶区：避免"目录被筛掉、置顶还在"的语义歧义。 */
   const showPinnedSection = useMemo(
     () => !query && !(props.tagFilter && isTagSelectionActive(props.tagFilter.selection)) && pinnedIds.some((id) => nodeById.has(id)),
     [query, props.tagFilter, pinnedIds, nodeById],
   );
-  const refreshPinnedState = useCallback(() => setPinnedIds(readPinnedTreeIds()), []);
   /** 「收起 / 取消收起」笔记本（261120 用户点单）：逻辑排除回收站/未分类/日记本，仅笔记本可收起。 */
   const toggleCollapseNode = useCallback((node: TreeNode) => {
     if (!canCollapseNotebook(node)) return;
@@ -1284,15 +700,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     refreshPinnedState();
     setBatchNotice((pinned ? "已置顶《" : "已取消置顶《") + node.title + "》");
   }, [refreshPinnedState]);
-  const pinSelected = useCallback(() => {
-    if (selection.ids.length === 0) return;
-    const ids = [...selection.ids];
-    const allPinned = ids.every((id) => pinnedSet.has(id));
-    setPinnedTreeIds(ids, !allPinned);
-    refreshPinnedState();
-    setSelection(EMPTY_TREE_SELECTION);
-    setBatchNotice((allPinned ? "已取消置顶 " : "已置顶 ") + ids.length + " 项");
-  }, [selection.ids, pinnedSet, refreshPinnedState]);
   // 历史/外部写入的"笔记本置顶"清理掉（节点已加载且确认是笔记本才删，避免加载期误删文档）。
   useEffect(() => {
     const notebookPinned = pinnedIds.filter((id) => nodeById.get(id)?.nodeType === "notebook");
@@ -1314,51 +721,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     });
   }, []);
 
-  /** 打开「移动到…」树形弹层（多选 = 当前选择；单条 = 右键那一行）。 */
-
-  const openMoveForIds = useCallback((ids: readonly string[]) => {
-    if (ids.length === 0) return;
-    setBatchDialogError(null);
-    setMoveDialog({ ids: [...ids], currentParentId: currentParentOf(props.nodes, ids) });
-  }, [props.nodes]);
-  const openMoveDialog = useCallback(() => { openMoveForIds(selection.ids); }, [openMoveForIds, selection.ids]);
-  const openMoveForNode = useCallback((node: TreeNode) => { openMoveForIds([node.id]); }, [openMoveForIds]);
-
-  /** 批量追加标签：打开时现读标签目录；新建由弹层调用 createQuickNoteTag，不提供移除/改名/图标编辑。 */
-  const openBatchTagDialog = useCallback(() => {
-    if (selection.ids.length === 0) return;
-    setBatchDialogError(null);
-    setTagDialog({ ids: [...selection.ids] });
-    setTagCatalog({ loading: true, error: null, tags: [] });
-    void native.listQuickNoteTags()
-      .then((tags) => setTagCatalog({ loading: false, error: null, tags: Array.isArray(tags) ? tags : [] }))
-      .catch((error) => setTagCatalog({ loading: false, error: getNativeErrorMessage(error), tags: [] }));
-  }, [selection.ids]);
-
-  const confirmBatchTag = useCallback((tagIds: string[]) => {
-    const ids = tagDialog?.ids ?? [];
-    if (ids.length === 0 || tagIds.length === 0) return;
-    void runBatch({ action: "tag-add", ids, tagIds });
-  }, [tagDialog, runBatch]);
-
-  const createBatchTag = useCallback(async (name: string): Promise<QuickNoteTag> => {
-    const created = await native.createQuickNoteTag(name);
-    setTagCatalog((current) => current.tags.some((tag) => tag.id === created.id) ? current : { ...current, tags: [...current.tags, created] });
-    return created;
-  }, []);
-
-  const selectAllVisibleRows = useCallback(() => {
-    if (visibleSelectableOrder.length > TREE_SELECTION_MAX) {
-      setBatchNotice("单次最多 " + TREE_SELECTION_MAX + " 项，已选前 " + TREE_SELECTION_MAX + " 项");
-    }
-    setSelection((state) => selectAllVisible(state, visibleSelectableOrder));
-  }, [visibleSelectableOrder]);
-
-  const cancelSelection = useCallback(() => {
-    setSelection(EMPTY_TREE_SELECTION);
-    setBatchNotice(null);
-  }, []);
-
   const treeRowProps = useMemo(() => ({
     treeIndex: displayIndex,
     query,
@@ -1370,7 +732,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     dropTarget,
     dropParentId,
     draggedParentId,
-    releasingId: releaseState?.id ?? null,
+    releasingId,
 
     editingId,
     onBeginRename: beginRename,
@@ -1385,7 +747,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     lockedNoteIds: props.lockedNoteIds,
     selectedIds: selectedIdSet,
     onRowClick: handleRowClick,
-  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragMoved, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
+  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragMoved, dropTarget, dropParentId, draggedParentId, releasingId, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
   /**
    * 「已收起」分区的行 props：把展开态/切换换成**分区自己那份**（默认空 = 子级默认收起）。
    * ⚠️ 三角（onToggle）和**行点击**（onRowClick）都要换 —— 目录里点笔记本行本身就是展开/收起，
@@ -1404,6 +766,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     [treeRowProps, collapsedZoneExpanded, toggleCollapsedZoneNode, handleCollapsedZoneRowClick],
   );
 
+  // ===== 渲染：目录栏布局 =====
   return (
     <aside
       ref={sidebarRef}

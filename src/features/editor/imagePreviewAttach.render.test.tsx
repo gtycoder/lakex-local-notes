@@ -71,7 +71,7 @@ describe("文档图片预览：画廊列表来自正文（261112）", () => {
     expect(LAKE_EDITOR_SRC).toMatch(/attachImagePreviewClick\(\s*host,\s*\(\) => extractImagesFromContent\(latestDocumentRef\.current\),\s*\{ tap: tapToPreview \},/);
     expect(LAKE_EDITOR_SRC).toMatch(/const tapToPreview = !isDesktop\(\);/);
     // 移动端小记卡片：单击看大图、双击进编辑（首页卡片 + 标签详情都接上了）
-    const homeSrc = readSrc("src/mobile/home/HomePage.tsx");
+    const homeSrc = readSrc("src/mobile/home/QuickNoteCard.tsx");   // M-06①：小记卡（含图片点按）已从 HomePage 尾部拆出
     const tagSrc = readSrc("src/mobile/tags/TagQuickNotePreview.tsx");
     expect(homeSrc).toContain("onImageClick={handleImageTap}");
     expect(homeSrc).toContain("openImagePreview(shots.map");

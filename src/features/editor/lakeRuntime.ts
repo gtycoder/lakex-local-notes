@@ -1,3 +1,17 @@
+/**
+ * 内核运行时总入口（R2 拆出 kernel* 模块后的收口）：createLakeDocument/destroyLakeEditor、内核配置
+ * （上传/工具条/卡片注册/主题）、自定义卡片与交互面挂载（块手柄/选区工具条/TOC/书签兜底等）。
+ *
+ * 边界（不做什么）：不含 React 组件（宿主 = EditorTab/LakeEditor/QuickNoteEditor 等既有 lazy 边界）；
+ * 不做同步/落库（上传走 resourceUpload/imageUploadTask）；内核能力检索顺序见 AGENTS §2（vendor 按能力搜）。
+ *
+ * 单一来源指针：小记工具条 = QUICK_NOTE_TOOLBAR_ITEMS（quickNoteToolbar.test 钉序）；上传限额/形态归一 =
+ * resourceUpload；卡片 value 编解码 = core/fileCard。lazy 边界红线（AGENTS §4）：桌面入口**不得静态
+ * import 本文件**，内核只经既有 React.lazy 边界进入，清单以 desktopKernelLazy.test.ts 为准 + kernelPrefetch
+ * 三触发；image 插件必须显式 `createUploadPromise: undefined`（下方注释；LAKEX-CONTRACT §5.53、
+ * uploadRecoveryWiring.test 钉），否则远程图变假成功卡。
+ */
+
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { isDesktop } from "../../lib/native";
 import { rlog } from "../../lib/log";

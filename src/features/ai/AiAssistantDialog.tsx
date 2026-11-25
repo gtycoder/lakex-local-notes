@@ -1,3 +1,15 @@
+/**
+ * AI 助手浮动面板（编辑器内选区问答）：多轮对话、结果动作（替换选区/插入/复制/重新生成）、分支切换；
+ * 面板行为契约见下方组件注释（进入即输入框、不回显选区原文、结果不自动改写正文）。
+ *
+ * 边界（不做什么）：不自动写正文（用户显式动作才经 insertAtSelection 回写）；AI 正文渲染/落库解析/消息
+ * 模型不在本文件（AiMessageBody / selectionToolbar/aiResultOps / electron/ai/aiContentResolver / core/aiProviders）；
+ * 不存 Key 与提供商配置（lib/ai 设置面）。
+ * 单一来源指针：浮层 = Overlay(Popover) + usePopoverPosition（禁止手写 createPortal）；会话树 =
+ * aiConversationTree（旧格式读取直接给空会话、不写迁移）。红线：AI 助手默认关、fail-closed，关闭时任何
+ * 路径不出网（AGENTS §4）；跨 IPC 只传引用、字节只在主进程（AGENTS §3#14 AI 条目）。
+ */
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowUp, Brain, Check, Copy, CornerDownRight, LoaderCircle, Pencil, Pin, RotateCcw, Square, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";

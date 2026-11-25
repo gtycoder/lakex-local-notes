@@ -1,3 +1,15 @@
+/**
+ * 历史快照面板（对话框）：单文档历史列表、快照预览、恢复、删除快照、当前快照标定
+ * （core/historyCurrent.pickCurrentHistorySnapshotId）。
+ *
+ * 边界（不做什么）：恢复历史 = 只写回内容、**不改生命周期**（不动 trashed_at/parent_id，AGENTS §3#24；
+ * 桌面落点 noteContentRepository.restoreHistory、移动 saveRestoredSnapshot）；快照生成/保护期不在本文件
+ * （Store 历史域）；小记**没有历史快照**（恢复走云端镜像/搜索索引全文缓存，AGENTS §4 缺正文条目）。
+ * 单一来源指针：资产显示 URL = core/assetUrl + lib/assetPort（token 口径）；文件类型 = core/assetNaming.fileKindOf；
+ * 预览分包与 MultiTabEditor/HistorySnapshotPreview 共用同一份动态 import（prefetchPreviewChunk）；
+ * 浮层 = Overlay(Dialog)、确认 = useConfirm。
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
 import { Camera, Clock, File, History, RotateCcw, Trash, X } from "lucide-react";

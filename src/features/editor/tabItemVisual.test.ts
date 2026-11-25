@@ -9,7 +9,8 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 
 describe("标签视觉单一来源", () => {
   it("文档标签与日记标签都通过 TabItemVisual 渲染，且组件内部结构固定", () => {
-    const editor = read("./MultiTabEditor.tsx");
+    // 261125 D-10：标签条搬到 ./TabStrip.tsx（纯搬家）⇒ 与 MultiTabEditor 聚合读，计数口径不变。
+    const editor = [read("./MultiTabEditor.tsx"), read("./TabStrip.tsx")].join("\n");
     const app = read("../../App.tsx");
     const visual = read("./TabItemVisual.tsx");
     expect(editor).toContain("<TabItemVisual");

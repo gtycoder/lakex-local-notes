@@ -12,7 +12,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
-const MULTITAB = read("./MultiTabEditor.tsx");
+// 261125 D-10：标签条/切换器搬到 ./TabStrip.tsx、拖拽状态机 + FLIP 搬到 hooks/useTabStripDrag.ts
+// （纯搬家）⇒ 分屏护栏按「宿主 + 标签条 + 拖拽件」聚合读（护栏不因搬家变假红）。
+const MULTITAB = [read("./MultiTabEditor.tsx"), read("./TabStrip.tsx"), read("../../hooks/useTabStripDrag.ts")].join("\n");
 // 261110：标签右键菜单抽成独立组件（App 的日记标签也要用，而 App 不能静态 import MultiTabEditor）。
 const TABMENU = read("./TabContextMenu.tsx");
 const EDITORTAB = read("./EditorTab.tsx");

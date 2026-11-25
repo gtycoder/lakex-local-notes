@@ -11,7 +11,12 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const APP = read("../../App.tsx");
 // 261112 R2 S6：内部组件搬到 ./sidebar/ ⇒ 按「组件 + 子件」聚合读（源码级护栏不因搬家变假红）。
-const SIDEBAR = ["./sidebar/ContextMenu.tsx", "./sidebar/TreeRowFace.tsx", "./sidebar/TreeRow.tsx", "./Sidebar.tsx"].map(read).join("\n");
+// 261125 D-04：导入/多选批量/树拖拽状态机搬到 src/hooks/useSidebarImport|useTreeSelectionBatch|useTreeDrag，
+// 源码级护栏同样按「Sidebar + 拆出件」聚合读（护栏不因搬家变假红，也不失去对语义落点的钉力）。
+const SIDEBAR = [
+  "./sidebar/ContextMenu.tsx", "./sidebar/TreeRowFace.tsx", "./sidebar/TreeRow.tsx", "./Sidebar.tsx",
+  "../../hooks/useSidebarImport.ts", "../../hooks/useTreeSelectionBatch.ts", "../../hooks/useTreeDrag.ts",
+].map(read).join("\n");
 const INFO = read("./NoteInfoDialog.tsx");
 const TYPES = read("../../desktop/desktopTypes.ts");
 const TOPBAR = read("../../desktop/DesktopTopBar.tsx");

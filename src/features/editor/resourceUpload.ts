@@ -1,3 +1,14 @@
+/**
+ * 资源上传管线（内核 image/file 卡的落盘入口）：请求形态归一（url/file/base64）→ 限额校验 →
+ * 并发队列（6）→ 重试 → native.uploadResource / 移动原生通道；远程 URL 图下载走主进程 httpFetcher
+ * 多地址故障转移（AGENTS §4 图片批量下载条目）。
+ *
+ * 边界（不做什么）：不做上传自愈/恢复日志（imageUploadTask + uploadJournal，AGENTS §4「图片上传必须
+ * 可恢复」）；不做显示缩略（kernelImageThumb / 资产服务 ?w=）；本并发 6 ≠ S3 传输域，S3 并发上限 12
+ * 不得放宽（AGENTS §3#13）。单一来源指针：限额 = core/storeLimits + lib/attachmentLimit；格式归一 =
+ * imageFormat；上传爆发统计 = lib/uploadStats。坑：响应 text/html（防盗链/登录墙）是可读错误、不落盘。
+ */
+
 import { canDownloadRemoteAsset, hasNativeBridge, isCapacitorNativePlatform, isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";

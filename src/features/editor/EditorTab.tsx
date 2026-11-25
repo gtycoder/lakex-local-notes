@@ -1,3 +1,19 @@
+/**
+ * 桌面文档编辑器宿主（单标签页）：自建 Lake 内核实例（createLakeDocument）+ 交互面接线（复制/剪切/粘贴、
+ * 图片预览、附件卡、卡片菜单、上传自愈、书签工具条、大纲/TOC、滚动锚点恢复）。
+ *
+ * 边界（不做什么）：不做标签/分屏编排（MultiTabEditor）；不做保存管线（hooks/savePipelineCore）；
+ * 不做浮层基建（components/ui/Overlay）；gone/只读判据不在本文件（core/syncDecisions、core/capabilities）。
+ *
+ * 三红线触点（AGENTS §4，删任一条即回归旧 bug）：
+ *  ① image 插件配置必须显式 `createUploadPromise: undefined`（配置在 lakeRuntime；uploadRecoveryWiring.test
+ *     钉；否则远程图变「src=原 URL/size 0/done」假成功卡、根本不下载）；
+ *  ② `BookmarkToolbar` 必须由本宿主挂载（vendor 包装层从不运行；删挂载 = 书签卡变死卡）；
+ *  ③ 图片画廊列表必须取自正文 `extractImagesFromContent`（虚拟渲染下 DOM 不可据；本文件双击现场 getDocument）。
+ * 复制管线：本文件独立 copy/cut 是**有意保留的例外**（外发口径，AGENTS §4 复制/剪切条目）；cut 删除必须
+ * 内核 `execCommand("delete")` 先行（editorCut.test 钉，260917 DOM delete 事故）。
+ */
+
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronRight, File } from "lucide-react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
@@ -1077,7 +1093,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}${outlineEnhance ? " native-toc-hidden" : ""}`}
       // 隐藏交给 CSS（.lake-editor-tab:not([data-active]) → opacity:0 + visibility:hidden，见 tabs.css）：
       // 这里再写 display:none 会把尺寸压成 0，切回来触发内核表格重排（261005）。
-      style={{ width: "100%" }}
+      // 261125 审计 M-04：静态 width:100% 内联样式收进 .lake-editor-tab 规则（app/editor.css），组件不写 style={{}}。
       data-note-id={noteId}
       data-active={(focused ?? visible) ? "true" : undefined}
       data-pane-visible={visible ? "true" : undefined}

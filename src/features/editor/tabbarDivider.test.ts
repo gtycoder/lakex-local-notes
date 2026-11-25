@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), "utf8");
 
 describe("顶栏分隔线（tabbar-divider）", () => {
-  const src = read("./MultiTabEditor.tsx");
+  // 261125 D-10：标签条搬到 ./TabStrip.tsx（纯搬家）⇒ 标签条源码级护栏跟读搬家后的家。
+  const src = [read("./MultiTabEditor.tsx"), read("./TabStrip.tsx")].join("\n");
   const css = read("../../styles/compat.css");
 
   it("夹在 tabbar-leading 与 tab-items 之间，且只在有标签时出现", () => {

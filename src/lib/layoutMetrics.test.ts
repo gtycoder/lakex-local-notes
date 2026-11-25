@@ -36,7 +36,10 @@ describe("top bar ↔ macOS traffic light alignment", () => {
 
   it("全屏（macOS 独立 Space）下顶栏不再留红绿灯让位：主进程广播 → 渲染层切根类 → CSS 收窄到 10px", () => {
     // 主进程：enter/leave-full-screen 都要广播；renderer-ready 时补一次初始态（启动即全屏的恢复路径）
-    const main = readFileSync(path.join(ROOT, "electron/main.ts"), "utf8");
+    // C-04 装配外迁后：全屏广播/窗口事件接线在 electron/window/createMainWindow.ts，编排在 main.ts ⇒ 合并读两文件。
+    const main = ["electron/main.ts", "electron/window/createMainWindow.ts"]
+      .map((f) => readFileSync(path.join(ROOT, f), "utf8"))
+      .join("\n");
     expect(main).toContain('win.webContents.send("window-fullscreen", win.isFullScreen())');
     expect(main).toMatch(/win\.on\("enter-full-screen", \(\) => \{ persistWindowState\(\); sendWindowFullscreen\(\); \}\)/);
     expect(main).toMatch(/win\.on\("leave-full-screen", \(\) => \{ persistWindowState\(\); sendWindowFullscreen\(\); \}\)/);

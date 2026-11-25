@@ -59,9 +59,10 @@ describe("QuickNotePreview · 封面图不在预览里重复渲染", () => {
     expect(host.querySelectorAll(".quick-note-preview-image").length).toBe(1);
   });
 
-  it("HomePage 把 note.firstImage 作为 hiddenMediaNames 传给预览（护栏）", () => {
+  it("小记卡（QuickNoteCard）把 note.firstImage 作为 hiddenMediaNames 传给预览（护栏）", () => {
     // jsdom 环境里 import.meta.url 不是 file: 协议 ⇒ 直接按仓库根相对路径读（vitest cwd = 仓库根）。
-    const src = readFileSync("src/mobile/home/HomePage.tsx", "utf8");
+    // M-06①：小记卡已拆到 home/QuickNoteCard.tsx（hiddenMediaNames 接线随之搬入）。
+    const src = readFileSync("src/mobile/home/QuickNoteCard.tsx", "utf8");
     expect(src).toContain("hiddenMediaNames={thumbUrl && note.firstImage ? new Set([note.firstImage]) : undefined}");
   });
 });

@@ -1,3 +1,16 @@
+/**
+ * App.tsx —— 桌面端**组合根**：壳层布局 + 空间分发 + 跨域协调（D-05/D-13 头注释，261125）。
+ *
+ * 职责边界：装配各域 hook 并把动作接到六个空间视图（知识库/小记/标签/AI 写作/日记/回收站+资源）
+ * 与全局浮层；**本文件只留组合与布局，不留域逻辑**（域逻辑在下述 hook 或 core）。
+ * hook 分工：状态 useWorkspaceState/useDesktopShell · 保存 useSavePipeline(±Glue) · 标签 useTabLifecycle/
+ * useDocumentTabs/useTabSessionPersistence · 树 useTreeActions · 日记 useDiarySpaceHandlers ·
+ * 左缘把手 useEdgeReveal · 同步 useSyncController/useSyncProgress/useSyncRefresh · 快捷键 useWindowShortcuts。
+ * 单一来源指针：浮层走 components/ui/Overlay、确认走 useConfirm、gone 判据走 isGoneNote（useTabLifecycle）、
+ * 保存失败/退出闸走 core/unloadGuard.blockingDirtyTabs（HANDOFF §7#12b）、空间可见性走 core/hiddenSpaces。
+ * ⚠️ hooks 顺序红线：`if (!workspace) return` 之上的 hook/effect **不得后移**（首渲染提前 return、随后多跑一个
+ * hook = hooks 顺序变化 ⇒ 白屏；本文件内已有两处同类教训的注释）。
+ */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
 import { ChevronDown, PanelLeft, XSquare } from "lucide-react";
@@ -6,13 +19,15 @@ import { usePopoverPosition } from "./hooks/usePopoverPosition";
 import { TabItemVisual } from "./features/editor/TabItemVisual";
 import { TabContextMenu } from "./features/editor/TabContextMenu";
 import { Sidebar } from "./components/app/Sidebar";
-import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
+import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
 import { SafeModeBanner } from "./components/app/SafeModeBanner";
 import { NamePromptDialog } from "./components/app/NamePromptDialog";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
+import { useDiarySpaceHandlers } from "./hooks/useDiarySpaceHandlers";
+import { useEdgeReveal } from "./hooks/useEdgeReveal";
 import { clearScrollMemory } from "./features/editor/editorViewport";
 import { prefetchEditorKernel, prefetchEditorKernelNow } from "./features/editor/kernelPrefetch";
 
@@ -47,8 +62,6 @@ import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
 import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
-import { diaryToQuickNoteNotice } from "./features/diary/diaryQuickNote";
-import { convertDiaryEntryToDocument } from "./features/diary/diaryConvert";
 import type { TreeNode } from "./lib/types";
 /** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
  *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
@@ -56,7 +69,7 @@ const NoteInfoDialog = lazy(() => import("./components/app/NoteInfoDialog").then
 import { saveSettings } from "./lib/settings";
 import { useSafeModeStatus } from "./hooks/useSafeModeStatus";
 import { useTabSessionPersistence } from "./hooks/useTabSessionPersistence";
-import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, patchTabById, treeNodePath } from "./desktop/desktopTypes";
+import { type OpenTab, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, patchTabById, treeNodePath } from "./desktop/desktopTypes";
 import { SaveConflictDialog } from "./components/app/SaveConflictDialog";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { AiAssistantHost } from "./features/ai/AiAssistantHost";
@@ -72,14 +85,14 @@ import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
 /** 日记空间（docs/DIARY.md）：左栏年月 + 主区复用 EditorTab；组件内部再懒一层内核边界。 */
 const DiaryWorkspace = lazy(() => import("./features/diary/DiaryWorkspace").then((m) => ({ default: m.DiaryWorkspace })));
-import { documentTreeWithoutDiary, diaryEntryIds, documentIdOfTreeNode } from "./features/diary/diaryTree";
-import { diaryOpenErrorMessage, requestDiaryOpenDate } from "./features/diary/diaryOpen";
-import { formatDiaryDateKey, planDiaryConvert, planDiaryOpen } from "./core/diary";
+import { documentTreeWithoutDiary, diaryEntryIds } from "./features/diary/diaryTree";
+import { formatDiaryDateKey } from "./core/diary";
 /** P1 标签空间（一级入口「标签」）：只读聚合 + 就地元数据管理；预览正文由组件内部再懒加载（内核边界）。 */
 const TagsWorkspace = lazy(() => import("./features/tags/TagsWorkspace").then((m) => ({ default: m.TagsWorkspace })));
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
 
 export function App() {
+  // ===== 状态装配（workspace / 壳层 / 标签空间数据）=====
   const {
     workspace, setWorkspace, notes, setNotes, treeNodes, setTreeNodes, openTabs, setOpenTabs,
     activeNoteId, setActiveNoteId, splitPair, setSplitPair, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
@@ -167,6 +180,7 @@ export function App() {
   }, [desktopWorkspace, tagSpace.reload]);
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
   layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
+  // ===== 保存管线与版本守卫（useSavePipeline 单一来源）=====
   // V5 Phase 4：保存管线（串行队列 + 防抖定时器 + revision 竞态保护）收拢到 useSavePipeline。
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty。
@@ -374,6 +388,7 @@ export function App() {
 
 
 
+  // ===== 启动与会话（bootstrap / 标签会话 / 安全模式 / 内核预取）=====
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
 
   useBootstrap({
@@ -417,6 +432,7 @@ export function App() {
       .catch(() => prefetchEditorKernel());
   }, [workspace]);
 
+  // ===== 同步进度、桌面生命周期与回收站对账 =====
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
     setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
@@ -511,6 +527,7 @@ export function App() {
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
   // notice/showNotice 已收拢到 useDesktopShell（Phase C）
 
+  // ===== 标签操作与分屏（261008：左右两栏、临时不持久化）=====
   const { handleTabChange: handleTabChangeBase, reorderTabs, closeTab: closeTabBase } = useDocumentTabs<OpenTab>({
     tabsRef: openTabsRef,
     activeNoteId,
@@ -612,93 +629,14 @@ export function App() {
   /** 日记条目 id 集合：知识库同篇去重（见 libraryTabs）与「打开某天」判定共用。 */
   const diaryNoteIds = useMemo(() => diaryEntryIds(treeNodes), [treeNodes]);
 
-  /** 写「今天」：已存在就直接打开；否则走主进程 `diary_open_date`（单事务 ensure，连点只产生一篇）。
-   *  IPC 未接线时**明确出声**，绝不静默失败、也不在渲染层自己建文档。 */
-  const handleDiaryWriteToday = useCallback(async (dateKey: string) => {
-    const todayKey = dateKey || formatDiaryDateKey();
-    const plan = planDiaryOpen(treeNodes, todayKey);
-    // core 的 existingNoteId 是**树节点 id**；打开文档要 noteFileId（两者不同，见 features/diary/diaryTree.ts）。
-    const existingDocumentId = documentIdOfTreeNode(treeNodes, plan.existingNoteId);
-    if (existingDocumentId) { await openNote(existingDocumentId); return; }
-    const outcome = await requestDiaryOpenDate(todayKey);
-    if (!outcome.ok) { showNotice(diaryOpenErrorMessage(outcome)); return; }
-    // 树来自主进程（新建的 笔记本/年组/月组/文档 只有重读才可见），随后照既有方式打开。
-    await refreshTree();
-    await openNote(outcome.result.noteId);
-  }, [treeNodes, openNote, refreshTree, showNotice]);
-
-  /** 「转为文档」：把日记条目移到目标笔记本（**移动**，同一 note；正文/历史/回收站都跟着走）+ 落标题。
-   *  判据（是否日记条目、目标是否合法）由 core.planDiaryConvert 给；动作顺序与失败可见由
-   *  features/diary/diaryConvert 的单一实现负责（先 move 再 rename —— 日记条目不接受改名）。
-   *  排序：追加到目标笔记本末尾（这不是排序动作，之后仍可在目录里拖）。 */
-  const handleDiaryConvertEntry = useCallback((nodeId: string, targetNotebookId: string, title: string) => {
-    const plan = planDiaryConvert(treeNodes, nodeId, targetNotebookId);
-    if (!plan.ok) { setError("转为文档失败：目标位置或这篇日记已失效，请刷新后重试"); return; }
-    void convertDiaryEntryToDocument({
-      move: async (id, targetId) => {
-        const nextOrder = treeNodes
-          .filter((node) => node.parentId === targetId && node.id !== id)
-          .reduce((max, node) => Math.max(max, node.sortOrder), -1) + 1;
-        await native.moveTreeNode(id, targetId, nextOrder);
-      },
-      rename: async (id, nextTitle) => { await native.renameTreeNode(id, nextTitle); },
-      refresh: refreshTree,
-      notice: showNotice,
-      error: setError,
-    }, { nodeId, targetNotebookId, title, previousTitle: plan.entry.title });
-  }, [treeNodes, refreshTree, showNotice, setError]);
-  /** 新建某天的日记（261109：一天允许多篇）：走 IPC `mode:"new"`，建完刷新树并按**日记空间**打开。 */
-  const handleDiaryCreateEntry = useCallback(async (dateKey: string) => {
-    try {
-      const result = await native.diaryOpenDate(dateKey, "new");
-      await refreshTree();
-      await openNote(result.noteId, "", false, "diary");
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }, [openNote, refreshTree, setError]);
-
-  /** 「删除」日记条目：复用目录树的删除确认与 deleteTreeNode（软删进回收站，可恢复）。 */
-  const handleDiaryDeleteEntry = useCallback((nodeId: string) => {
-    const node = treeNodes.find((item) => item.id === nodeId);
-    if (node) sidebarRequestDelete(node);
-  }, [treeNodes, sidebarRequestDelete]);
-
-  /** 日记本设置（261113 用户裁决：只开放改名/换图标）。守卫在 store：非日记本本身一律拒绝。 */
-  const handleDiaryRenameNotebook = useCallback(async (notebookId: string, title: string) => {
-    try {
-      await native.renameTreeNode(notebookId, title);
-      await refreshTree();
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }, [refreshTree, setError]);
-  const handleDiarySetNotebookIcon = useCallback(async (notebookId: string, icon: string | null) => {
-    try {
-      await native.setNodeIcon(notebookId, icon);
-      await refreshTree();
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }, [refreshTree, setError]);
-
-  /** 「转为小记」（261112 task-92 起；261113 用户裁决 = **复制 + 原稿进回收站**，卡片零剥离）：
-   *  主进程把同一篇日记的 Lake 正文复制成一条小记（媒体复制到小记作用域、引用改写），
-   *  随后原日记软删进回收站（**可恢复**，原资产保留）。 */
-  const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
-    try {
-      // 转换在主进程（同一份正文/资产移动 + 作用域改写 + Lake 侧移除）；渲染层只显示结果。
-      const result = await native.diaryToQuickNote(nodeId);
-      showNotice(diaryToQuickNoteNotice(result));
-      await refreshTree();
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }, [refreshTree, setError, showNotice]);
-
-  /** 日记内搜索入口 = 打开**现有**全局搜索面板（日记是文档，已在 FTS 里；不新增索引）。
-   *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
-  const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
+  // 8 个 handleDiary* 在 hooks/useDiarySpaceHandlers（D-05 纯搬家；showNotice/setError 等调用面在此注入）。
+  const {
+    handleDiaryWriteToday, handleDiaryConvertEntry, handleDiaryCreateEntry, handleDiaryDeleteEntry,
+    handleDiaryRenameNotebook, handleDiarySetNotebookIcon, handleDiaryToQuickNote, handleDiaryOpenSearch,
+  } = useDiarySpaceHandlers({
+    treeNodes, openNote, refreshTree, showNotice, setError,
+    sidebarRequestDelete, sidebarOpenSearch,
+  });
 
   /** 知识库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
   const [newNoteOpen, setNewNoteOpen] = useState(false);
@@ -824,89 +762,11 @@ export function App() {
     return () => window.removeEventListener("pointermove", onPointerMove, true);
   }, [sidebarMode, clearSidebarPreviewTimer, hideSidebarPreview]);
 
-  // ── 左缘触发把手（260922 用户定稿：隐形 8px 热区 + 跟手把手）──
-  // 指针进入热区 → 立刻淡入把手（Y 跟随指针，钳制在热区内）；**驻留 EDGE_HANDLE_DWELL_MS** 后
-  // 才浮出目录面板预览（防止只是划过左缘就弹）。把手点击 = 固定/取消固定（与热区点击同语义）。
-  // 只用 ref + class 操作 DOM：mousemove 高频，不能每次 setState 触发整棵 App 重渲染。
-  const edgeHotzoneRef = useRef<HTMLDivElement | null>(null);
-  const edgePreviewTimer = useRef<number | null>(null);
-  const cancelEdgePreview = useCallback(() => {
-    if (edgePreviewTimer.current !== null) {
-      window.clearTimeout(edgePreviewTimer.current);
-      edgePreviewTimer.current = null;
-    }
-  }, []);
-  const showEdgeHandle = useCallback((clientY: number) => {
-    const el = edgeHotzoneRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const y = Math.max(rect.top + 40, Math.min(rect.bottom - 40, clientY));
-    el.style.setProperty("--edge-handle-y", `${Math.round(y)}px`);
-    el.classList.add("is-active");
-  }, []);
-  const hideEdgeHandle = useCallback(() => {
-    cancelEdgePreview();
-    edgeHotzoneRef.current?.classList.remove("is-active");
-  }, [cancelEdgePreview]);
-  const armEdgePreview = useCallback(() => {
-    cancelEdgePreview();
-    edgePreviewTimer.current = window.setTimeout(() => {
-      edgePreviewTimer.current = null;
-      showSidebarPreview();
-    }, EDGE_HANDLE_DWELL_MS);
-  }, [cancelEdgePreview, showSidebarPreview]);
-  useEffect(() => () => cancelEdgePreview(), [cancelEdgePreview]);
-  // W5：把手相位机（纯决策在 ./components/model/sidebarHoverMachine；相位从 DOM/定时器真实来源读取，不额外持有 state）
-  const edgeHandleShown = useCallback(() => Boolean(edgeHotzoneRef.current?.classList.contains("is-active")), []);
-  const edgeDwellArmed = useCallback(() => edgePreviewTimer.current !== null, []);
-  const applyEdgeEffects = useCallback((effects: HoverEffect[], clientY: number) => {
-    for (const effect of effects) {
-      if (effect === "showHandle") showEdgeHandle(clientY);
-      else if (effect === "hideHandle") hideEdgeHandle();
-      else if (effect === "armDwell") armEdgePreview();
-      else if (effect === "cancelDwell") cancelEdgePreview();
-      else if (effect === "showPreview") showSidebarPreview();
-      else if (effect === "hidePreview") hideSidebarPreview();
-      else if (effect === "toggleDock") toggleSidebarDock();
-    }
-  }, [showEdgeHandle, hideEdgeHandle, armEdgePreview, cancelEdgePreview, showSidebarPreview, hideSidebarPreview, toggleSidebarDock]);
-  const dispatchEdge = useCallback((event: HoverEvent, clientY: number) => {
-    const { effects } = reduceHover({ handleShown: edgeHandleShown(), dwellArmed: edgeDwellArmed() }, event);
-    applyEdgeEffects(effects, clientY);
-  }, [applyEdgeEffects, edgeHandleShown, edgeDwellArmed]);
-
-  // 非指针清理（260924）：窗口失焦 / 页面隐藏时**收不到 pointerleave**，否则 is-active 残留 ⇒
-  // 回到「收起」态时把手"常驻"。这里只收把手 + 取消驻留，不动面板模式。
-  useEffect(() => {
-    const clearEdgeHandle = () => hideEdgeHandle();
-    const onVisibilityChange = () => { if (document.visibilityState === "hidden") clearEdgeHandle(); };
-    window.addEventListener("blur", clearEdgeHandle);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("blur", clearEdgeHandle);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [hideEdgeHandle]);
-
-  // 把手是 10px 边缘热区的「召唤物」，不是持久 UI。窗口失焦/页面隐藏之外，快速划出左缘、
-  // 首次进入知识库时指针已经停在热区里、或热区因布局重建吞掉 pointerleave，都可能留下
-  // `.is-active`。这里用全局 pointermove 做真实位置兜底：指针一旦明确离开热区/目录栏就收把手。
-  useEffect(() => {
-    if (sidebarRenderMode !== "collapsed") hideEdgeHandle();
-  }, [hideEdgeHandle, sidebarRenderMode]);
-
-  useEffect(() => {
-    const clearWhenOutside = (event: PointerEvent) => {
-      const hotzone = edgeHotzoneRef.current;
-      if (!hotzone?.classList.contains("is-active")) return;
-      const path = event.composedPath();
-      if (path.includes(hotzone)) return;
-      if (path.some((node) => node instanceof Element && (node.classList.contains("sidebar") || node.classList.contains("edge-hotzone-handle")))) return;
-      hideEdgeHandle();
-    };
-    window.addEventListener("pointermove", clearWhenOutside, true);
-    return () => window.removeEventListener("pointermove", clearWhenOutside, true);
-  }, [hideEdgeHandle]);
+  // ── 左缘触发把手（260922 用户定稿：隐形 8px 热区 + 跟手把手）：状态机 + 定时器/监听器清理
+  // 在 hooks/useEdgeReveal（D-05 纯搬家）；这里只接线（热区 JSX 在下方渲染区）。──
+  const { edgeHotzoneRef, dispatchEdge, hideEdgeHandle } = useEdgeReveal({
+    showSidebarPreview, hideSidebarPreview, toggleSidebarDock, sidebarRenderMode,
+  });
 
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
@@ -955,6 +815,7 @@ export function App() {
     at: diaryTabMenu,
   });
 
+  // ===== 壳层快捷键（键位单一来源 = src/lib/shortcuts/registry.ts）=====
   // 壳层快捷键（261114）：键位/展示单一来源 = src/lib/shortcuts/registry.ts（思源口径，暂不支持自定义）。
   // 放在所有被引用动作（closeTab / cycleTab / runSync / handleShortcutNewDocument）之后、早期 return 之前：
   // 全部是已初始化的绑定，无 TDZ 风险；匹配/保留键规则见 registry 与其单测。
@@ -1046,6 +907,7 @@ export function App() {
     </>
   );
 
+  // ===== 渲染：壳层布局与空间分发 =====
   return (
     <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "ai-writing" ? "ai-writing-active" : ""} ${desktopWorkspace === "diary" ? "diary-space-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${desktopWorkspace === "tags" ? "tags-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
       {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}

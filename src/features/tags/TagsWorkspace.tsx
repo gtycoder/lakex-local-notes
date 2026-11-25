@@ -1,3 +1,13 @@
+/**
+ * 「标签」空间工作区：标签目录（拖拽排序/改名/合并/删除）+ 标签详情（文档/小记双列、预览、宽度布局）。
+ *
+ * 边界（不做什么）：标签顺序是设备本地（device_state.quick_tags_manual_order，不进 S3、两端互不传播；
+ * 默认序 = 新的在前 createdAt DESC → 名称，AGENTS §4 标签顺序条目）；标签删除 = 缺席、不写墓碑
+ * （AGENTS §4 标签删除条目，不要再引入 deletedAt）；两套标签选择 UI 不合并（产品定稿差异，语义在
+ * core/quickNoteTags 单源）。单一来源指针：布局持久化 = tagsLayout（TAG_LAYOUT_STORAGE_KEY，设备本地）；
+ * 菜单/浮层 = Overlay、确认 = useConfirm、拖拽序持久化 = writeLocalStorage。坑：置顶已删（不要恢复）。
+ */
+
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, FileText, GripVertical, MoreVertical, Merge, Pencil, Plus, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
 import { Menu, NativeDialog } from "../../components/ui/Overlay";
