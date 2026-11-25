@@ -41,7 +41,7 @@ const ROOT = path.resolve(ELECTRON_DIR, "..");
  *
  * 批次 B（窗口层外迁）落地时才加 `window`；现在提前登记会让「目录还不存在」的规则静默失效。
  */
-const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "testing", "update", "webApi"] as const;
+const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "sql", "testing", "update", "webApi"] as const;
 type Subdir = (typeof REGISTERED_SUBDIRS)[number];
 type Layer = "entry" | "domain" | Subdir;
 
@@ -71,7 +71,7 @@ const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   //     （261123/261201 迁入迁出语义，PORTABLE-TRANSFER §3.1）：合成实现的单一来源在
   //     portable/bootstrapFromWorkspace.ts（便携包三路导入共用），domain 不自造第二份——编排委托（与 domain→s3v3 同类）。
   // 反向（ipc/boot → domain）是主流方向，见下面各层。
-  domain: ["domain", "quickNotes", "s3v3", "webApi", "ai", "portable"],
+  domain: ["domain", "quickNotes", "s3v3", "webApi", "ai", "portable", "sql"],
   // IPC 注册层：装配各子系统的 handler。不允许依赖 boot/（装配层）与 webApi/（传输层的另一端）。
   ipc: ["domain", "ipc", "ai", "portable", "s3v3", "update"],
   // 启动装配层：负责把 IPC 注册表与各子系统接起来，所以它能依赖 ipc/ 与其他子系统；
@@ -83,6 +83,9 @@ const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   quickNotes: ["domain", "quickNotes"],
   // S3 桌面适配：只依赖领域层（协议纯逻辑在 src/core/s3v3/）。
   s3v3: ["domain", "s3v3"],
+  // SQL 片段单一来源（审计 261125 C-01，electron/sql/treeFragments.ts）：纯 SQL 字符串 + 参数助手，
+  // 零 import、只被 domain 层的仓储/对账类引用（回收站子树 CTE 与 purge UPDATE 的统一出处）。
+  sql: ["sql"],
   // AI 主进程侧：只依赖领域层。
   ai: ["domain", "ai"],
   // 便携包：只依赖领域层。

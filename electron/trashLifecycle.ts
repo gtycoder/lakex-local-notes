@@ -94,6 +94,7 @@ export class TrashLifecycle {
    * 子树集合（**purge 与 restore 共用**，261112 task-62 复核补）：两条边取并集后，既覆盖常规 parent 链，
    * 也覆盖「被同步扁平化成回收站容器」的 trashed 后代（原始父在 deleted_from_parent_id）。
    * UNION 去重 ⇒ 环上节点各纳入一次、递归必然收敛（无队列/次数上限问题）。
+   * 判据场景表 = `src/core/trashSubtreeScenarios.ts`（两端对拍共用；移动 JS 实现见 mobile/data/trashSubtree）。
    */
   private flattenedSubtreeIds(rootId: string): string[] {
     const rows = this.ctx.db.prepare(

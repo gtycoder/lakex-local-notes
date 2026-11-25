@@ -3,6 +3,7 @@ import { normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.j
 import { normalizeNoteKind } from "../src/core/noteKind.js";
 import { AppError } from "../src/core/storeErrors.js";
 import type { DbLike, DbLikeStatement } from "./dbLike.js";
+import { TRASH_SUBTREE_CTE, trashSubtreeParams } from "./sql/treeFragments.js";
 
 export interface NoteSummary {
   id: string;
@@ -214,16 +215,15 @@ export class NoteQueries {
   }
 
   listTreeNodes(): TreeNode[] {
+    // C-01（审计 261125）：回收站子树 CTE 统一走 sql/treeFragments（UNION 防环，AGENTS §3#15）；
+    // 参数占位符顺序 = [trashId, trashId, workspaceId]（trashId×2 在前，noteQueries.test.ts 钉）。
     const rows = this.db.prepare(
-      `WITH RECURSIVE trash_ids(id) AS (
-         SELECT ? FROM tree_nodes WHERE id=?
-         UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
-       )
+      `${TRASH_SUBTREE_CTE}
        SELECT t.*, n.kind AS note_kind FROM tree_nodes t
        LEFT JOIN notes n ON n.id = t.note_file_id
        WHERE t.workspace_id=? AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
        ORDER BY t.sort_order`
-    ).all(this.trashNotebookId, this.trashNotebookId, this.workspaceId) as TreeNodeRow[];
+    ).all(...trashSubtreeParams(this.trashNotebookId), this.workspaceId) as TreeNodeRow[];
     return rows.map((row) => this.mapTreeNode(row));
   }
 

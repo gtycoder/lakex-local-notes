@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TRASH_NOTEBOOK_ID,
-  decidePurge, rowToLocalState, isGoneNote,
+  decidePurge, rowToLocalState, isGoneNote, isGoneRow,
   type LocalNoteState,
 } from "./syncDecisions.js";
 
@@ -93,5 +93,34 @@ describe("isGoneNote（打开与同步共用的「已删除」判定）", () => 
   it("trashedAt 为 null（活跃文档）不改变既有判定", () => {
     expect(isGoneNote({ parentId: "notebook-personal", trashedAt: null })).toBe(false);
     expect(isGoneNote({ parentId: TRASH_NOTEBOOK_ID, trashedAt: null })).toBe(true);
+  });
+});
+
+describe("isGoneRow（审计 261125 C-02：行级纯谓词，桌面写守卫与 isGoneNote 同源）", () => {
+  it("三判据任一命中 = gone：回收站容器 / trashedAt 非空 / isPurged", () => {
+    expect(isGoneRow({ parentId: TRASH_NOTEBOOK_ID })).toBe(true);
+    expect(isGoneRow({ parentId: "notebook-a", trashedAt: "2026-11-13T08:43:44.205Z" })).toBe(true);
+    expect(isGoneRow({ parentId: "notebook-a", isPurged: true })).toBe(true);
+    expect(isGoneRow({ parentId: "notebook-a", isPurged: 1 })).toBe(true); // SQLite 行直传
+    expect(isGoneRow({ parentId: "notebook-a" })).toBe(false);
+  });
+  it("isPurged 为 0/null/undefined 不算 gone（SQLite 行级语义）", () => {
+    expect(isGoneRow({ parentId: "notebook-a", trashedAt: null, isPurged: 0 })).toBe(false);
+    expect(isGoneRow({ parentId: null, trashedAt: null, isPurged: null })).toBe(false);
+    expect(isGoneRow({ parentId: null })).toBe(false);
+  });
+  it("isGoneNote 判据 = isGoneRow（改调后行为逐位不变）", () => {
+    for (const note of [
+      { parentId: TRASH_NOTEBOOK_ID, syncState: "local" },
+      { parentId: "notebook-a", syncState: "purged" },
+      { parentId: "notebook-a", isPurged: true },
+      { parentId: "notebook-personal", trashedAt: "2026-11-13T08:43:44.205Z" },
+      { parentId: "notebook-a", syncState: "synced" },
+      { parentId: null, syncState: "local" },
+    ]) {
+      expect(isGoneNote(note)).toBe(
+        isGoneRow({ parentId: note.parentId, trashedAt: note.trashedAt ?? null, isPurged: note.isPurged === true || note.syncState === "purged" }),
+      );
+    }
   });
 });

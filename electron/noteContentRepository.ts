@@ -1,7 +1,7 @@
 import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import { AppError } from "../src/core/storeErrors.js";
-import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+import { isGoneRow } from "../src/core/syncDecisions.js";
 import { hasNoteSaveChanges } from "../src/core/noteSaveDecision.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 
@@ -84,9 +84,11 @@ export class NoteContentRepository {
       // 文案保留「已删除」字样（noteContentRepository.test.ts 的 F04 断言判据），并说明不可恢复。
       throw new AppError("InvalidInput", `笔记已被彻底删除（不可恢复），保存被拒绝；已删除条目不可复原: ${noteId}`);
     }
-    // 261124 B8-④P2-3（审计④）：拒写判据与 isGoneNote 对齐 —— 还要看 parent===回收站容器
-    //（「parent=trash 但 trashed_at 空」的行由 importRemoteFolder 等路径产出，旧判据放行普通保存改写）。
-    if ((current.trashed_at != null || current.parent_id === TRASH_NOTEBOOK_ID) && !opts?.allowTrashed) {
+    // 261124 B8-④P2-3（审计④）→ 审计 261125 C-02：拒写判据统一走 core/syncDecisions.isGoneRow（AGENTS §16 单一来源），
+    // 「parent=trash 但 trashed_at 空」的行（importRemoteFolder 等路径产出）不再漏判。
+    // 调用方分类（AGENTS §3#23）：U 用户保存在此入口层拒写；S 同步镜像走 saveSynced（allowTrashed）放行回收站行、不经此拒绝；
+    // purged 已在上一行无条件拒绝 ⇒ 这里只剩回收站/trashed 分支，与旧判据逐位等价。
+    if (isGoneRow({ parentId: current.parent_id, trashedAt: current.trashed_at, isPurged: current.is_purged === 1 }) && !opts?.allowTrashed) {
       throw new AppError("InvalidInput", `笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: ${noteId}`);
     }
     const currentContent = fs.readFileSync(notePath, "utf8");

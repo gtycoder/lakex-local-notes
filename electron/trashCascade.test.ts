@@ -13,6 +13,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { Store } from "./store.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+import { TRASH_SUBTREE_SCENARIOS } from "../src/core/trashSubtreeScenarios.js";
 
 vi.mock("electron", () => ({
   safeStorage: {
@@ -377,4 +378,76 @@ describe("261114 级联软删：带子级/多级子级的删除", () => {
     expect(store.listTrash()).toHaveLength(0);
     for (const id of [f.docRoot, f.childDoc, f.grandDoc]) expect(fs.existsSync(bodyPath(id))).toBe(false);
   });
+});
+
+// ── M-02（审计 03-mobile）：两路边集共享场景表对拍 ─────────────────────────────────────
+// 判据数据同源 = src/core/trashSubtreeScenarios.ts（两端测试消费同一张表；移动侧见
+// src/mobile/data/trashSubtree.test.ts）。两端**实现不合并**——本端是 trashLifecycle.flattenedSubtreeIds
+// 的 SQL 递归（parent_id ∪ deleted_from_parent_id+trashed_at，AGENTS §3#5/§3#24）；这里按场景表
+// 走生产路径对拍：未 trashed 根 → deleteTreeNode 级联（新标 trashed 的集合 = 期望集）；
+// 已 trashed 根 → purgeTrashItem（物理删除集合 = 期望集）。
+describe("M-02 两路边集共享场景表对拍（core/trashSubtreeScenarios）", () => {
+  for (const scenario of TRASH_SUBTREE_SCENARIOS) {
+    it(scenario.title, () => {
+      const store = new Store(dir);
+      // 场景 id → 实际行 id：用生产建节点 API 落库，再按场景覆写 parent_id/deleted_from_parent_id/trashed_at
+      // 三列（扁平化形态只能这样到达：wire 把 trashed 条目的 parent 归一成回收站容器）。
+      const idMap = new Map<string, string>();
+      const scratch = store.createNotebook("scratch");
+      for (const node of scenario.nodes) {
+        const created = node.kind === "folder"
+          ? (node.parent_id === null ? store.createNotebook(node.id) : store.createGroup(scratch.id, node.id))
+          : store.createNoteIn(scratch.id, node.id);
+        idMap.set(node.id, created.id);
+      }
+      const mapId = (scenarioId: string): string => idMap.get(scenarioId) ?? scenarioId;
+      withRawDb((db) => {
+        for (const node of scenario.nodes) {
+          const parent = node.parent_id === null ? null : mapId(node.parent_id);
+          const dfp = node.deleted_from_parent_id == null ? null : mapId(node.deleted_from_parent_id);
+          db.prepare("UPDATE tree_nodes SET parent_id=?, deleted_from_parent_id=?, trashed_at=? WHERE id=?")
+            .run(parent, dfp, node.trashed_at ?? null, mapId(node.id));
+          // notes 行同列跟随（purge/级联会一并维护；对拍判据在 tree_nodes）
+          db.prepare("UPDATE notes SET parent_id=?, deleted_from_parent_id=?, trashed_at=? WHERE id=?")
+            .run(parent, dfp, node.trashed_at ?? null, mapId(node.id));
+        }
+      });
+
+      const expectIds = scenario.expect.allIds.map(mapId).sort();
+      const rootTrashed = scenario.nodes.find((node) => node.id === scenario.rootId)?.trashed_at != null;
+      const preTrashed = new Set(scenario.nodes.filter((node) => node.trashed_at != null).map((node) => node.id));
+      try {
+        if (rootTrashed) {
+          // 回收站里的根：purge 的物理删除集合必须**恰好**是两路边集
+          store.purgeTrashItem(mapId(scenario.rootId));
+          withRawDb((db) => {
+            for (const sid of scenario.expect.allIds) {
+              expect(db.prepare("SELECT id FROM tree_nodes WHERE id=?").get(mapId(sid)), sid + " 应被 purge").toBeUndefined();
+            }
+            for (const node of scenario.nodes) {
+              if (scenario.expect.allIds.includes(node.id)) continue;
+              expect(db.prepare("SELECT id FROM tree_nodes WHERE id=?").get(mapId(node.id)), node.id + " 不在边集，不得被 purge").toBeTruthy();
+            }
+          });
+        } else {
+          // 活跃根：deleteTreeNode 级联的收集集合 = 期望集（原本已 trashed 的行不动，只比「新标 trashed」）
+          store.deleteTreeNode(mapId(scenario.rootId));
+          withRawDb((db) => {
+            const newlyTrashed = scenario.nodes
+              .filter((node) => !preTrashed.has(node.id) && nodeRow(db, mapId(node.id)).trashed_at != null)
+              .map((node) => node.id)
+              .sort();
+            expect(newlyTrashed).toEqual(scenario.expect.allIds.filter((id) => !preTrashed.has(id)).sort());
+            for (const node of scenario.nodes) {
+              if (scenario.expect.allIds.includes(node.id) || preTrashed.has(node.id)) continue;
+              expect(nodeRow(db, mapId(node.id)).trashed_at ?? null, node.id + " 不在边集，不得被牵连").toBeNull();
+            }
+          });
+        }
+        expect(expectIds.length).toBeGreaterThan(0);
+      } finally {
+        store.close?.();
+      }
+    });
+  }
 });

@@ -72,6 +72,17 @@ export function decidePurge(local: LocalNoteState | null, isRestorePending: bool
   return "remember-deleted";
 }
 
+/** 行级「已 gone」纯谓词（审计 261125 C-02）：回收站容器 / trashed 标记 / purged 三者任一即 gone。
+ *  isGoneNote 与桌面两处写守卫（electron/noteMetadataRepository.assertNodeWritable、
+ *  electron/noteContentRepository.save）共用这**一条**判据，防再次漂移（261124 B8-④P2-3 判据漂移实证）。
+ *  行级形态：isPurged 收 SQLite 0/1 与布尔（DB 行直传不用再包装）。
+ *  调用方分类（AGENTS §3#23）：**U 用户入口**（打开/保存/元数据写）拒写走本谓词；
+ *  **S 同步镜像**走 saveSynced / applyRemoteNodeIcon 等专用写路径，不经本谓词（回收站行允许镜像落库，
+ *  purged 仍拒）——守卫只留在入口层，不下沉共用写函数。 */
+export function isGoneRow(row: { parentId: string | null; trashedAt?: string | null; isPurged?: boolean | number | null }): boolean {
+  return row.trashedAt != null || row.parentId === TRASH_NOTEBOOK_ID || row.isPurged === true || row.isPurged === 1;
+}
+
 /** 文档是否"已进回收站 / 已被他端彻底删除"：这类文档不得再被编辑保存。
  * 打开（含启动恢复最后文档）与同步刷新共用同一判定——此前只有同步路径标记，
  * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。
@@ -79,5 +90,5 @@ export function decidePurge(local: LocalNoteState | null, isRestorePending: bool
  * 旧判据漏掉它们 ⇒ 回收站段落里的子文档能被当成正常文档打开（用户 261113 现场：删光笔记本后
  * 重启自动打开回收站里的欢迎文档，能编辑但保存被拒、关不掉退不出）。 */
 export function isGoneNote(note: { parentId: string | null; syncState?: string; isPurged?: boolean; trashedAt?: string | null }): boolean {
-  return note.trashedAt != null || note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
+  return isGoneRow({ parentId: note.parentId, trashedAt: note.trashedAt, isPurged: note.isPurged === true || note.syncState === "purged" });
 }

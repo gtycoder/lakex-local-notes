@@ -90,6 +90,24 @@ describe("SearchRepository v2（统一 FTS5 unicode61 + 账本）", () => {
     expect(ids).not.toContain("n-in");
   });
 
+  it("C-01 调用点钉：search / activeNoteCount / listIndexableNotes 三处 trash_ids 参数占位符顺序 = trashId×2 在前", () => {
+    // trashNotebookId="trash" 与其他参数（查询串/limit）不同值：占位符错位时 trash_ids 集合错 ⇒ 断言翻红。
+    const { raw, repo, addNote } = makeRepo();
+    raw.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,0)")
+      .run("trash", null, "回收站", null, "notebook", null, "2026-01-01T00:00:00Z");
+    raw.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,0)")
+      .run("g-trash", null, "回收站分组", "trash", "group", null, "2026-01-01T00:00:00Z");
+    addNote("n-deep", "深层文档", "正文", "g-trash"); // 回收站深层后代：search 与重建都不得收
+    addNote("n-out", "正常文档", "正文");
+    expect(repo.search("文档").map((r) => r.id)).toEqual(["n-out"]);
+    // activeNoteCount/listIndexableNotes 走 ensureIndex/rebuild：账本只收活跃文档 ⇒ 第二次 ensureIndex 短路不重建
+    expect(repo.ensureIndex()).toBe(true); // 旧账本含 n-deep ⇒ 触发一次重建
+    expect(repo.ensureIndex()).toBe(false); // 重建后账本数 == 活跃数（回收站子树不计数）
+    expect(repo.search("文档").map((r) => r.id)).toEqual(["n-out"]);
+    const ledger = raw.prepare("SELECT COUNT(*) AS c FROM search_index").get() as { c: number };
+    expect(ledger.c).toBe(1);
+  });
+
   it("remove 后不再命中", () => {
     const { repo, addNote } = makeRepo();
     addNote("n1", "标题", "可搜索的正文内容");

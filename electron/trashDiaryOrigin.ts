@@ -3,6 +3,10 @@ import type { DbLike } from "./dbLike.js";
 /**
  * 回收站条目的**来源解析**（261110）：沿「原始父链」向上找 space=diary 的笔记本。
  *
+ * ⚠️ 变体勿合并（审计 261125 C-03）：日记归属的常规判据在 electron/diaryAncestry.ts（沿活动树 parent 链）；
+ * 本函数沿 deleted_from_parent_id ?? parent_id 的**原始父链**走（回收站条目的 parent 已被换成回收站容器），
+ * 边语义不同 ⇒ **保留独立实现**，不要与 diaryNotebookOfNode 收口（AGENTS §3#17）。
+ *
  * 为什么要它：
  * · 徽标 —— 回收站里的条目 parent 已被换成「回收站」笔记本，只能靠 `deleted_from_parent_id` 回溯；
  *   **不看标题**（用户点名的「老六」场景：文档标题刚好写成日期，不能被当成日记）。

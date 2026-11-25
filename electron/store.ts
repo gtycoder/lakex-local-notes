@@ -13,6 +13,7 @@ import { noteBodyHash } from "./noteBodyHash.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
 import { nextSiblingSortOrder, shiftSiblingsAfter, shiftSiblingsForTop } from "./treeSort.js";
+import { diaryNotebookOfNode, diaryNotebookOfNote as diaryNotebookOfNoteRow } from "./diaryAncestry.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
@@ -458,25 +459,16 @@ export class Store {
   /**
    * 261112 task-104（F-04/F-05）：节点是否在**日记子树**内（含自身）；返回命中它的日记本 id，否则 null。
    * 入口层守卫共用这一条判据（沿 parent 链向上找 space='diary' 的笔记本；递归 CTE 防环）。
+   * 审计 261125 C-03：判据单一实现 = electron/diaryAncestry.ts，本方法只做空值短路 + 委托。
    */
   diaryNotebookOfTreeNode(id: string | null): string | null {
     if (!id) return null;
-    const row = this.db.prepare(
-      `WITH RECURSIVE chain(id,parent_id,node_type,space) AS (
-         SELECT id,parent_id,node_type,space FROM tree_nodes WHERE id=? AND deleted_at IS NULL
-         UNION
-         SELECT t.id,t.parent_id,t.node_type,t.space FROM tree_nodes t JOIN chain c ON t.id=c.parent_id
-       )
-       SELECT id FROM chain WHERE node_type='notebook' AND space=? LIMIT 1`
-    ).get(id, DIARY_FOLDER_SPACE) as { id: string } | undefined;
-    return row?.id ?? null;
+    return diaryNotebookOfNode(this.db, id);
   }
 
   /** 笔记（notes 行 id）是否属于日记子树（F-04 转换前置判据）。 */
   diaryNotebookOfNote(noteId: string): string | null {
-    const row = this.db.prepare("SELECT id FROM tree_nodes WHERE (note_file_id=? OR id=?) AND deleted_at IS NULL LIMIT 1").get(noteId, noteId) as
-      { id: string } | undefined;
-    return row ? this.diaryNotebookOfTreeNode(row.id) : null;
+    return diaryNotebookOfNoteRow(this.db, noteId);
   }
 
   /**

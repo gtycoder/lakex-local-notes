@@ -3,6 +3,9 @@ import { AppError } from "../src/core/storeErrors.js";
 import { assertTreeNodeTitle, normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
 import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
 import { nextSiblingSortOrder, shiftSiblingsAfter, shiftSiblingsForTop, type SortDb } from "./treeSort.js";
+import { TRASH_SUBTREE_CTE, trashSubtreeParams } from "./sql/treeFragments.js";
+import { isGoneRow } from "../src/core/syncDecisions.js";
+import { diaryNotebookOfNode } from "./diaryAncestry.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -48,42 +51,31 @@ export class NoteMetadataRepository {
 
   /** 审计 F04：元数据写边界——回收站条目 / 已 purge（含他端保留副本）节点一律 fail-closed。
    * 旧行为是 revivePurgedIfNeeded"编辑即隐式恢复"，违反"恢复是唯一显式例外"，已删除；
-   * 这里明确拒绝，避免把 purged 行改成 local 却仍留在回收站产生脏态。 */
+   * 这里明确拒绝，避免把 purged 行改成 local 却仍留在回收站产生脏态。
+   * 审计 261125 C-02：拒写判据统一走 core/syncDecisions.isGoneRow（AGENTS §16 单一来源，防判据漂移；
+   * 生产装配 trashNotebookId 恒为 TRASH_NOTEBOOK_ID（store.ts）⇒ 与旧判据逐位等价）。
+   * 调用方分类（AGENTS §3#23）：**U 用户元数据写**（rename/setNodeIcon/setNoteEditLocked）在入口层拒写；
+   * **S 同步镜像**走 applyRemoteNodeIcon 等专用路径，不经本守卫（回收站行允许镜像写、purged 仍拒）。 */
   private assertNodeWritable(id: string): void {
     const row = this.db.prepare(
       "SELECT t.parent_id AS parent_id, t.trashed_at AS trashed_at, t.is_purged AS node_purged, n.is_purged AS note_purged " +
       "FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id = ?"
     ).get(id) as { parent_id: string | null; trashed_at: string | null; node_purged: number | null; note_purged: number | null } | undefined;
     if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
-    if (row.parent_id === this.trashNotebookId || row.trashed_at != null || row.node_purged === 1 || row.note_purged === 1) {
+    if (isGoneRow({ parentId: row.parent_id, trashedAt: row.trashed_at, isPurged: row.node_purged === 1 || row.note_purged === 1 })) {
       throw new AppError("InvalidInput", `节点已在回收站或已被删除，不能修改；请先显式恢复: ${id}`);
     }
   }
 
   /**
-   * 节点身份（日记守卫用；缺失返回 undefined）。`space` 只对 notebook 有意义。
-   */
-  private nodeIdentity(id: string): { node_type: string; space: string | null; parent_id: string | null } | undefined {
-    return this.db.prepare("SELECT node_type, space, parent_id FROM tree_nodes WHERE id=?").get(id) as
-      { node_type: string; space: string | null; parent_id: string | null } | undefined;
-  }
-
-  /**
-   * 日记子树归属（261112 用户裁决，AGENTS §3#25）：沿 parent 链向上找 `space='diary'` 的笔记本。
+   * 日记子树归属（261112 用户裁决，AGENTS §3#25）：沿 parent 链向上找 space='diary' 的笔记本。
    * 返回日记本 id；null = 不在日记子树（节点不存在也返回 null，交给调用方的 NotFound 判据）。
-   * visited 防环（坏库/并发写入不能让守卫死循环）。
+   * 审计 261125 C-03：单一实现 = electron/diaryAncestry.ts（UNION 防环递归 CTE，原 store.ts 版）；
+   * 旧 JS 循环版已删（与 CTE 版语义相同、实现不同——收口成一份）。
+   * 变体勿合并：回收站来源解析走 trashDiaryOrigin.resolveDiaryOriginNotebookId（原始父链），语义不同。
    */
   private diaryNotebookOf(id: string): string | null {
-    const visited = new Set<string>();
-    let cur: string | null = id;
-    while (cur !== null && !visited.has(cur)) {
-      visited.add(cur);
-      const row = this.nodeIdentity(cur);
-      if (!row) return null;
-      if (row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) return cur;
-      cur = row.parent_id;
-    }
-    return null;
+    return diaryNotebookOfNode(this.db, id);
   }
 
   /** 日记子树（年/月组、日记条目）不可改名/换图标/排序（261112 §3#25）：通用 IPC 一律拒绝。 */
@@ -425,12 +417,12 @@ export class NoteMetadataRepository {
     const base = parentId === null
       ? "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id IS NULL AND deleted_at IS NULL"
       : "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL";
-    // 参数顺序必须与 SQL 占位符一致：WITH trash_ids 的 2 个 ?（trashId）在前，base 的 ?（workspaceId[, parentId]）在后
-    const params: unknown[] = [this.deps.trashNotebookId, this.deps.trashNotebookId, this.workspaceId];
+    // C-01（审计 261125）：回收站子树 CTE 统一走 sql/treeFragments（UNION 防环 = 原 P1-6 语义，AGENTS §3#15）。
+    // 参数顺序必须与 SQL 占位符一致：trash_ids 的 2 个 ?（trashId×2 在前），base 的 ?（workspaceId[, parentId]）在后。
+    const params: unknown[] = [...trashSubtreeParams(this.deps.trashNotebookId), this.workspaceId];
     if (parentId !== null) params.push(parentId);
     const rows = this.db.prepare(
-      // P1-6：UNION（去重）而不是 UNION ALL —— 树里出现环时递归会无限展开；去重后自然收敛。
-      "WITH RECURSIVE trash_ids(id) AS (SELECT ? FROM tree_nodes WHERE id=? UNION SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id) SELECT id FROM (" + base + ") WHERE id NOT IN (SELECT id FROM trash_ids)"
+      TRASH_SUBTREE_CTE + " SELECT id FROM (" + base + ") WHERE id NOT IN (SELECT id FROM trash_ids)"
     ).all(...params) as Array<{ id: string }>;
     return rows.map((row) => row.id);
   }

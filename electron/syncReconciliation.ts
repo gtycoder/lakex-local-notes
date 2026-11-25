@@ -2,6 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import { PURGE_NODE_SQL, PURGE_NOTE_SQL, TRASH_SUBTREE_CTE, trashSubtreeParams } from "./sql/treeFragments.js";
 import { advanceWaterline, normalizeWaterline } from "../src/core/syncWaterline.js";
 import { parseS3v3DiagnosticReports, pushS3v3DiagnosticReport, type S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import type { SyncNote } from "./noteQueries.js";
@@ -207,12 +208,15 @@ export class SyncReconciliation {
     const tx = this.ctx.db.transaction(() => {
       // restore_pending_at 一并清除（对齐移动端 bridge applyRemotePurge）：purge 后恢复标记无意义，
       // 残留会让 isRestorePending 误判。engine 的 decidePurge 已挡 restoring 场景，此处纯口径对齐。
-      this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
-      ).run(this.ctx.trashNotebookId, now, now, id);
-      this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1 WHERE note_file_id=? AND deleted_at IS NULL"
-      ).run(this.ctx.trashNotebookId, now, now, id);
+      // C-01（审计 261125）：purge UPDATE 统一走 sql/treeFragments 的 PURGE_NOTE_SQL/PURGE_NODE_SQL
+      //（清掉原 4 条复制粘贴里 is_purged=1 的重复 SET；参数顺序 = [回收站, 时间, 时间, 行 id]，
+      //  syncReconciliation.test.ts 钉）。原 tree_nodes 侧按 note_file_id 整批 UPDATE，改走
+      // 「先取 node id、逐行同款 UPDATE」——命中集合与列值逐位相同（纯抽提，不改同步专用路径语义）。
+      this.ctx.db.prepare(PURGE_NOTE_SQL).run(this.ctx.trashNotebookId, now, now, id);
+      const purgeNodeByNote = this.ctx.db.prepare(PURGE_NODE_SQL);
+      for (const node of this.ctx.db.prepare("SELECT id FROM tree_nodes WHERE note_file_id=? AND deleted_at IS NULL").all(id) as Array<{ id: string }>) {
+        purgeNodeByNote.run(this.ctx.trashNotebookId, now, now, node.id);
+      }
       this.ctx.removeSearch([id]);
     });
     tx();
@@ -239,18 +243,15 @@ export class SyncReconciliation {
   applyRemoteFolderDelete(id: string, deletedAt: string): void {
     const now = deletedAt || nowIso();
     const tx = this.ctx.db.transaction(() => {
-      // 递归找 folder 子树（含自身）：tree_nodes parent 链向下（软删子节点也跟随）
+      // 递归找 folder 子树（含自身）：tree_nodes parent 链向下（软删子节点也跟随）。
+      // C-01（审计 261125）：原 sub CTE 复用 sql/treeFragments 统一「UNION 防环」片段（AGENTS §3#15）；
+      // 参数 = 根 id×2 在前。锚点统一为「列值+行过滤」两占位符：根行缺失时旧版仍会顺 parent 边收走
+      // 挂在其下的孤儿行——purge/启动自愈都是整树删行、不产生该形态（行为差异仅限此不可达边角）。
       const subtree = this.ctx.db.prepare(
-        `WITH RECURSIVE sub(id) AS (
-           SELECT ? UNION ALL SELECT t.id FROM tree_nodes t JOIN sub s ON t.parent_id = s.id
-         ) SELECT t.id, t.note_file_id, t.node_type FROM tree_nodes t WHERE t.id IN (SELECT id FROM sub) AND t.deleted_at IS NULL`
-      ).all(id) as Array<{ id: string; note_file_id: string | null; node_type: string }>;
-      const purgeNote = this.ctx.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
-      );
-      const purgeNode = this.ctx.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,is_purged=1, is_dirty=0,is_purged=1 WHERE id=? AND deleted_at IS NULL"
-      );
+        `${TRASH_SUBTREE_CTE} SELECT t.id, t.note_file_id, t.node_type FROM tree_nodes t WHERE t.id IN (SELECT id FROM trash_ids) AND t.deleted_at IS NULL`
+      ).all(...trashSubtreeParams(id)) as Array<{ id: string; note_file_id: string | null; node_type: string }>;
+      const purgeNote = this.ctx.db.prepare(PURGE_NOTE_SQL);
+      const purgeNode = this.ctx.db.prepare(PURGE_NODE_SQL);
       const removedNoteIds: string[] = [];
       for (const node of subtree) {
         if (node.note_file_id) {
