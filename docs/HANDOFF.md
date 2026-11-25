@@ -7,7 +7,7 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
-- **261124 · 全量 review + P3 清理批（v1.6.3）**：
+- **261205 · 密钥自管理 + 标签接入 + 同步面板 B' + 移动端四项（v1.6.4）**：①密钥全自管理（`560d0b19` 自管理换底 + `8c4b93a8` 删 enc:v1 读分支/Keystore 迁移 —— 用户裁决「不为历史数据写代码」，升级后各端密钥重填一次）；②标签接入云按钮与同步展示（`4cd39e7a`：tags_pending 计数、成功清零、报告 uploaded/downloadedTags）；③同步弹层 B' 双列网格（`43bcf8f8`：A/B/B' 三方案截图对比后用户定稿，禁换行红线极端值压测）；④移动端四项（本批）：同步气泡成功顶替 + A 方案悬停/长按明细/双关（toastBus.detail）、打标签面板搜索收起+不弹键盘+高度拉高、新建文档直进编辑（kind 触点钉 7→8）、设置页细分补标签。样式棘轮按惯例带说明上调（components 391→415、quick-notes 277→289、floating 320→331）。
   - **review 查漏**：逐簇复核 A/B 两批 22 提交，**抓到 1 处真漏** —— A4 的 dfp 保留只修了 notes 行，tree_nodes 的 2 处 UPDATE + 1 处 INSERT 仍无条件覆盖 null（桌面侧新回归 `electron/dfpPreserve.test.ts` 当场打红后补齐，`874dca53`）；另查 A5 兄弟 upsert、folder apply 同类 COALESCE、quick bodyFailed 抑制残留等面，除上述外无漏（结论记录见提交）。
   - **P3 全清（Batch C，22 项中 21 项落地 + 1 项待复现登记）**：索引校验补洞（`e4b99178`）/ 快路径三修（`83e24ddf`）/ 发布读回+unchanged 清理+深清新鲜度下限（`1263a377`）/ 排序+纯文档父判定+移动深清平价（`de9cc660`）/ ⑤ 组三件（`77818646`）/ 环告警独立码+批窗口补提交+判据前提注释（`d9cba06f`）/ 正文「未变才应用」补真（`5f6f23f4`）/ keepLocalTrash 两修（`ed2dd2b2`）/ 日记复活特征钉+A4 桌面补漏（`874dca53`）/ deleteMany 吞错（`59c568c6`）。
   - **语义变更 2 处已钉**：深清 retentionDays=0 从「立即全删」改为「锁 TTL 外才删」（防删他端刚上传未切 pointer 的对象）；目录 keepLocalTrash 对齐文档侧「绝不隐式恢复」（B1 裁决语义一致）。
