@@ -89,7 +89,7 @@ bash scripts/mobile-preview.sh 1430     # 换端口
 | --- | --- |
 | AVD | `lake_gate`（与开发用的 `lake_mobile` 分开：用户在那台上随手改数据不影响门禁） |
 | CDP | **9336**（别占 9335） |
-| 夹具 | `scripts/mobile-audit/gate-fixture.mjs`：默认笔记本 `notebook-personal` 下 **5 篇文档 + 4 条小记**（走查要 doc-0..doc-4 五行；文档必须挂默认笔记本，否则抽屉里没有文档行） |
+| 夹具 | `scripts/mobile-audit/gate-fixture.mjs`：默认笔记本下 **5 篇文档 + 4 条小记**（优先种子 `notebook-personal`，缺失回落书架第一本普通笔记本——26125 起不假设固定 id；走查要 doc-0..doc-4 五行；文档必须挂默认笔记本，否则抽屉里没有文档行） |
 | 基线 | `scripts/mobile-audit/baseline/mobile-snap.json`（**入库**，几 KB：每态元素数 + 合并哈希） |
 | 中间快照 | `.css-audit/snap/<tag>.json`（**gitignore**；同名 tag 会被覆盖，别当对拍依据） |
 

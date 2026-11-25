@@ -17,7 +17,12 @@
 
 **为什么**：`home-quicknotes` / `home-doc` 这些态的元素数与指纹**直接由设备里的数据决定** ——
 用户在模拟器上随手记一条小记，该态就 +17 元素、门禁报"两轮一致 ⇒ 真差异"，而代码一行没动（261013 实测踩到）。
-⇒ **门禁固定跑在专用 AVD `lake_gate`（emulator-5556）上**，用户自己那台随便改数据都不影响门禁。
+⇒ **门禁固定跑在专用 AVD `lake_gate` 上**（serial 以 `adb devices` 现场确认，不固定），用户自己那台随便改数据都不影响门禁。
+
+> ⚠️ **lake_gate 只跑门禁（261125 用户裁决）**：`lake_gate` 上只跑 `check-mobile-snap`（+ 重灌夹具/重烤基线这一套）；
+> **其它测试/走查一律另起模拟器实例**（桌面侧 = `LAKE_USER_DATA` 独立目录），不许在 lake_gate 上跑任何会造数据的装置
+> （走查/长文档探针/多维表夹具/缺正文演练…）—— 那些装置跑完都要重灌夹具 + 重烤基线，等于把门禁打废。
+> 「后续测试不要动这个门禁，重新起一个目录/实例很方便」（用户原话口径）。
 
 ```bash
 # 1) 起专用实例（首次）
@@ -28,7 +33,7 @@ emulator -list-avds | grep -qx lake_gate || echo no | avdmanager create avd -n l
 nohup emulator -avd lake_gate -no-snapshot -no-boot-anim -gpu host &
 
 # 2) 装包 + CDP 转发到 9336（别占用用户那台的 9335）
-export ANDROID_SERIAL=emulator-5556
+export ANDROID_SERIAL=emulator-5556   # ← 改成 lake_gate 那台（adb devices 现场确认，serial 不固定）
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n com.lakexlocalnotes.android/.MainActivity
 bash scripts/emu-cdp.sh 9336
@@ -47,6 +52,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336
 **夹具口径**（`gate-fixture.mjs`）：默认笔记本「个人笔记」下 **5 篇文档** + **4 条小记**。
 5 篇是**走查**的下限（它要 doc-0..doc-4 五行；3 篇时 doc-3/doc-4 会 ERR "not found: doc row #3/#4"，261013 实测）。
 文档必须挂在**默认笔记本**上 —— 门禁的 `home-doc` 态是"点书架第一张卡"进的，另建笔记本会让第一张卡是空的默认本、抽屉里没有文档行（261013 实测）。
+261125 起夹具**不假设固定笔记本 id**：优先种子 `notebook-personal`，缺失时回落书架第一本普通笔记本（口径 = `libraryNotebooks.ts`，跳过日记本/回收站；判据认 `nodeType` 不认旧 `type` 字段），语义由 `gate-fixture.test.ts` 钉住。
 该实例**不配 S3**（`pm clear` 后即未配置）⇒ 不走同步 ⇒ 少一层取样抖动。
 
 **重烤基线**（只在专用实例上做；配方 = 先采一份暖态，再以它为基线）：
