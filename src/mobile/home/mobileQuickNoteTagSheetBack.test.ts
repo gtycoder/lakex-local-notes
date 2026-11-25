@@ -53,7 +53,9 @@ describe("小记标签面板返回键（MOB-01）", () => {
     // 裸 body 的横向内距是 0 ⇒ 输入框 / 标签行会贴屏幕边；--form = --mb-page-pad(16) + 底部安全区。
     const body = host!.querySelector(".mb-sheet__body") as HTMLElement;
     expect(body.className).toBe("mb-sheet__body qn-tag-sheet__body mb-sheet__body--form");
-    expect(body.querySelector(".qn-tag-sheet__input-row")).not.toBeNull();
+    // 261205 用户点单：搜索/新建行默认收起（不弹键盘）⇒ 默认只见切换钮；点开才出现输入行。
+    expect(body.querySelector(".qn-tag-sheet__search-toggle")).not.toBeNull();
+    expect(body.querySelector(".qn-tag-sheet__input-row")).toBeNull();
   });
 
   it("关闭后注销处理器：返回栈不在关面板后残留", () => {

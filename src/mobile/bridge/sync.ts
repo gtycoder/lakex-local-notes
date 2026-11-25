@@ -458,7 +458,7 @@ export const syncDomain = {
     const diag = createS3v3PhaseCollector();
     const progress: Array<{ phase: string; ms: number }> = [];
     // 用引用包一层：赋值发生在 runMaintenance 回调里，TS 控制流看不到 ⇒ 直接 let 会被收窄成 null。
-    const summaryRef: { current: { uploaded: number; downloaded: number; deleted: number; warnings: NonNullable<MobileSyncResult["warnings"]>; conflicts: number; generation: number | null; published: boolean; uploadedDocuments: number; downloadedDocuments: number; uploadedQuickNotes: number; downloadedQuickNotes: number; uploadedFolders: number; downloadedFolders: number; uploadedBytes: number; downloadedBytes: number } | null } = { current: null };
+    const summaryRef: { current: { uploaded: number; downloaded: number; deleted: number; warnings: NonNullable<MobileSyncResult["warnings"]>; conflicts: number; generation: number | null; published: boolean; uploadedDocuments: number; downloadedDocuments: number; uploadedQuickNotes: number; downloadedQuickNotes: number; uploadedFolders: number; downloadedFolders: number; uploadedBytes: number; downloadedBytes: number; uploadedTags: number; downloadedTags: number } | null } = { current: null };
     try {
       beginSyncProgress();
       // 断点续传：成功才清标记；失败/被杀保留 ⇒ 下次进入自动续上（261026）。
@@ -500,6 +500,9 @@ export const syncDomain = {
           downloadedFolders: v3.downloadedFolders ?? 0,
           uploadedBytes: v3.uploadedBytes ?? 0,
           downloadedBytes: v3.downloadedBytes ?? 0,
+          // 261205 对齐桌面：标签维度（随 quick 索引同步、无正文段）。
+          uploadedTags: v3.uploadedTags ?? 0,
+          downloadedTags: v3.downloadedTags ?? 0,
         };
         // task-67：跳过项的「N 项被跳过（需处理/可重试）」统一由调用方用 core/syncWarningText 摘要，
         // 状态行只留计数（避免同一句话在 toast 里出现两遍）。
@@ -523,6 +526,7 @@ export const syncDomain = {
           uploadedQuickNotes: summary.uploadedQuickNotes, downloadedQuickNotes: summary.downloadedQuickNotes,
           uploadedFolders: summary.uploadedFolders, downloadedFolders: summary.downloadedFolders,
           uploadedBytes: summary.uploadedBytes, downloadedBytes: summary.downloadedBytes,
+          uploadedTags: summary.uploadedTags, downloadedTags: summary.downloadedTags,
           // task-67：跳过项摘要随「上次同步」落盘（精简到 20 条 + 完整列表的分组计数），重启不丢。
           ...(summary.warnings.length > 0 ? { warnings: summary.warnings } : {}),
         });

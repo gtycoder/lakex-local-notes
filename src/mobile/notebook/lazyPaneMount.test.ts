@@ -31,7 +31,8 @@ describe("工作区正文懒挂载接线", () => {
     expect(SESSION).toMatch(/loaded: false/);
     expect(ASSEMBLE).toMatch(/if \(!active \|\| active\.loaded\) return;\s*\n\s*void loadTabBody\(active\.id\);/);
     expect(WS).not.toContain("pendingEditRef");
-    expect(ACTIONS).toMatch(/enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board"/);
+    // 261205 用户点单：文档建完直接进编辑（旧钉「文档停阅读态」随裁决翻转）。
+    expect(ACTIONS).toMatch(/enterEditor: kind === "doc" \|\| kind === "usheet" \|\| kind === "bitable" \|\| kind === "board"/);
   });
 
   it("活动页未挂载时显示骨架；正文只在 mountedIds 命中后起编辑器", () => {

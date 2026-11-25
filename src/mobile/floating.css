@@ -8,7 +8,7 @@
  * 结构契约：
  *   Sheet       .mb-scrim + .mb-sheet > (.mb-sheet__grab, .mb-sheet__head > .mb-sheet__title, .mb-sheet__body)
  *   ActionSheet .mb-scrim + .mb-actionsheet > .mb-actionsheet__group > .mb-actionsheet__item[--danger] + .mb-actionsheet__cancel
- *   Toast       .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__close)
+ *   Toast       .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__detail, .mb-toast__close)
  * 迁移期说明：这些原语是 .mobile-sheet* / .mobile-dialog* / .mobile-toast* / .mobile-menu* 的**替代**，
  * 旧类随各组件迁完后删除（不许两套并存）。 */
 
@@ -142,7 +142,7 @@
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none;
 }
 .mb-toast {
-  pointer-events: auto; display: flex; align-items: center; gap: 8px;
+  pointer-events: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   max-width: min(420px, 100%); padding: 12px 14px;
   border-radius: var(--mb-radius-card);
   background: var(--lake-bg-panel); color: var(--lake-text-1);
@@ -155,6 +155,9 @@
   background: var(--lake-status-error);
 }
 .mb-toast__text { flex: 1 1 auto; min-width: 0; }
+/* 261205 A 方案（用户点单）：摘要气泡悬停/长按展开明细 —— 明细独占第二行（flex-wrap 全宽），默认隐藏。 */
+.mb-toast__detail { flex: 1 0 100%; display: none; margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--lake-border-1); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: 1.55; white-space: pre-line; }
+.mb-toast:hover .mb-toast__detail, .mb-toast.is-detail .mb-toast__detail { display: block; }
 .mb-toast__close { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--mb-radius-sm); background: transparent; color: var(--lake-text-3); cursor: pointer; }
 
 /* 减弱动效：与 mobile.css 的 reduced-motion 块同口径（新增浮层也必须在名单里） */

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Tag } from "lucide-react";
+import { Check, Plus, Search, Tag } from "lucide-react";
 import { normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { MobileSheet } from "../ui/MobileSheet";
 
@@ -19,6 +19,8 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // 261205 用户点单：搜索/新建行**默认收起**（不弹键盘），点开才聚焦输入。
+  const [searchOpen, setSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedNames = useMemo(
@@ -30,8 +32,7 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
     if (!open) return;
     setQuery("");
     setError(null);
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
-    return () => window.clearTimeout(timer);
+    setSearchOpen(false); // 261205：打开不展开搜索、不弹键盘（点「搜索或新建标签」才聚焦）
   }, [open]);
 
   // 返回键 / 右滑 / 遮罩 / 焦点与滚动锁：MOB-11 起统一由 ui/MobileSheet 负责
@@ -77,7 +78,14 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
       // 此前只有裸 body（横向 0）⇒ 输入框与标签行直接贴屏幕边（用户截图红框处）。
       bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
     >
-      <div className="qn-tag-sheet__input-row">
+      {!searchOpen && (
+        <button
+          type="button"
+          className="qn-tag-sheet__search-toggle"
+          onClick={() => { setSearchOpen(true); window.setTimeout(() => inputRef.current?.focus(), 80); }}
+        ><Search size={16} /><span>搜索或新建标签</span></button>
+      )}
+      {searchOpen && <div className="qn-tag-sheet__input-row">
         <span className="mb-input qn-tag-sheet__input">
           <input
             ref={inputRef}
@@ -98,7 +106,7 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
           disabled={!candidate || !!candidateError || exactExists || creating}
           onClick={() => { if (existing && !selectedSet.has(existing.id)) addExisting(existing.id); else void create(); }}
         >添加</button>
-      </div>
+      </div>}
       {(candidateError || error) && <div className="qn-tag-sheet__error">{error || candidateError}</div>}
       {candidate && !candidateError && !exactExists && (
         <button type="button" className="qn-tag-sheet__create" disabled={creating} onClick={() => void create()}>

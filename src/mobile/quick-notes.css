@@ -97,7 +97,9 @@
 .qn-tag-filter-bar .qn-tag { min-height: var(--mb-tap-min); }
 /* 261030 贴边修复：正文列走 .mb-sheet__body--form（页内距 16 + 底部安全区），
  * 这里只补列布局；行内距归 body 提供 ⇒ 行自己不再左右加 8（否则文字比标题多缩 8）。 */
-.qn-tag-sheet { max-height: min(76vh, 680px); }
+/* 261205 用户点单：默认高度拉高（min-height 撑起列表）；搜索/新建行默认收起（见 __search-toggle）。 */
+.qn-tag-sheet { min-height: min(62vh, 560px); max-height: min(82vh, 720px); }
+.qn-tag-sheet__search-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; border-radius: var(--mb-radius-sm); background: var(--mb-bg-secondary, transparent); color: var(--lake-text-3); font: inherit; font-size: var(--lake-font-size-small); }
 .qn-tag-sheet__body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
 .qn-tag-sheet__input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .qn-tag-sheet__input { min-width: 0; }

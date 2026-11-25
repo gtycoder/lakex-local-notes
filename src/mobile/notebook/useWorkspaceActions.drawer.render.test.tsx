@@ -200,7 +200,8 @@ describe("新建/重命名（已按用户要求恢复 task-54 之前的行为）
     expect(mocks.createNote).not.toHaveBeenCalled();
     await act(async () => { api.createNameSheet.onSubmit("我的文档"); await Promise.resolve(); });
     expect(mocks.createNote).toHaveBeenCalledWith("我的文档", "nb1");
-    expect(calls.openTab).toHaveBeenCalledWith("n9", { enterEditor: false });
+    // 261205 用户点单：文档建完直接进编辑（旧钉 enterEditor:false 随裁决翻转）。
+    expect(calls.openTab).toHaveBeenCalledWith("n9", { enterEditor: true });
     expect(calls.setRenamingId).not.toHaveBeenCalled();
   });
 });

@@ -51,6 +51,7 @@ import { bridge } from "../bridge";
 import { dismissNoteTabs } from "../notebook/tabDismissal";
 import { clearPersistedNotebookTabsFor } from "../notebook/tabSessionCleanup";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
+import { describeSyncBreakdown, describeSyncResultSummary, readSyncStatus } from "../sync/syncStatusStore";
 import { escapeId } from "../../lib/cssEscape";
 import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
@@ -200,10 +201,27 @@ export function HomePage(props: HomePageProps) {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
-  // 同步气泡（261124）：进度快照变化即同 id 覆盖气泡文案；同步收尾（快照清空）收掉气泡（结果 toast 另起、不受影响）。
+  // 同步气泡（261205 用户点单）：进度期 = 粘性摘要；同步收尾**由结果气泡顶掉**（同 id 覆盖），不再静默消失。
+  // A 方案：摘要一行（零省）、悬停/长按看上传/下载细分（含标签）、✕ 手动关、到时自动关（成功 6s / 失败 10s）。
+  const syncActiveRef = useRef(false);
   useEffect(() => {
-    if (syncProgress) showToast("正在同步：" + describeSyncProgress(syncProgress), { id: SYNC_BUBBLE_ID, timeout: 0 });
-    else hideToast(SYNC_BUBBLE_ID);
+    if (syncProgress) {
+      syncActiveRef.current = true;
+      showToast("正在同步：" + describeSyncProgress(syncProgress), { id: SYNC_BUBBLE_ID, timeout: 0 });
+      return;
+    }
+    if (!syncActiveRef.current) return;
+    syncActiveRef.current = false;
+    const status = readSyncStatus();
+    // 只认「刚出炉」的结果（30s 内）：progress 清空但状态陈旧（启动清场等）就静默收掉，不冒充本轮结果。
+    const fresh = status && Date.now() - new Date(status.at).getTime() < 30_000;
+    if (!fresh) { hideToast(SYNC_BUBBLE_ID); return; }
+    showToast(describeSyncResultSummary(status), {
+      id: SYNC_BUBBLE_ID,
+      type: status.ok ? "info" : "error",
+      timeout: status.ok ? 6000 : 10000,
+      detail: status.ok ? describeSyncBreakdown(status) ?? undefined : undefined,
+    });
   }, [syncProgress]);
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail, cacheDetail: cacheQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);

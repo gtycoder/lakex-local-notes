@@ -4,7 +4,14 @@
  * 用模块级总线而非 Context/prop drilling：深层组件（回收站、设置子页）都能一行调用。
  */
 export type ToastType = "info" | "error";
-export interface ToastItem { id: string; text: string; type: ToastType; timeout: number; }
+export interface ToastItem {
+  id: string;
+  text: string;
+  type: ToastType;
+  timeout: number;
+  /** 261205 A 方案（用户点单）：摘要气泡的**明细**（悬停/长按展开；如 S3 上传/下载细分）。 */
+  detail?: string;
+}
 
 let seq = 0;
 let version = 0;
@@ -22,13 +29,13 @@ export function getToastSnapshot(): ToastItem[] {
   return cacheList;
 }
 
-export function showToast(text: string, opts: { type?: ToastType; timeout?: number; id?: string } = {}): string {
+export function showToast(text: string, opts: { type?: ToastType; timeout?: number; id?: string; detail?: string } = {}): string {
   // 261124：传 id = **同 id 覆盖**（可更新气泡，如同步进度）；timeout=0 = 不自动消失（由调用方收尾）。
   const id = opts.id ?? "t" + ++seq;
   const timeout = opts.timeout ?? 6000;
   const prevTimer = timers.get(id);
   if (prevTimer != null) { window.clearTimeout(prevTimer); timers.delete(id); }
-  items.set(id, { id, text, type: opts.type ?? "info", timeout });
+  items.set(id, { id, text, type: opts.type ?? "info", timeout, ...(opts.detail !== undefined ? { detail: opts.detail } : {}) });
   emit();
   if (timeout > 0) {
     timers.set(id, window.setTimeout(() => hideToast(id), timeout));

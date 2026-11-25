@@ -72,7 +72,8 @@ describe("工作区「更多」菜单（261014）", () => {
     // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）
     expect(ACTIONS).toMatch(/createBoard\(title \|\| "无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
     // 表格/数据表/画板建完直接进编辑态（文档与手写板停在阅读态）
-    expect(ACTIONS).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
+    // 261205 用户点单：文档建完直接进编辑（旧钉随裁决翻转；手写板仍停阅读态）。
+    expect(ACTIONS).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "doc" \|\| kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
     // 菜单只把文档类交给创建通道，group 走分组创建；v2 先弹命名弹窗（createNameSheet），提交后才落库。
     expect(ACTIONS).toContain('CREATE_MENU_KINDS[it.id] ?? (it.id === "group" ? "group" : null)');
     expect(ACTIONS).toContain("const createNameSheet = {");

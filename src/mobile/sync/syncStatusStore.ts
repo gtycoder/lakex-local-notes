@@ -32,6 +32,9 @@ export interface MobileSyncStatus {
   downloadedFolders?: number;
   uploadedBytes?: number;
   downloadedBytes?: number;
+  /** 261205 对齐桌面：标签变更（随 quick 索引同步，无正文段）——设置页/气泡都要看得见。 */
+  uploadedTags?: number;
+  downloadedTags?: number;
   /**
    * task-67：最近一轮的「跳过项」摘要（重启不丢）。**只留前 20 条**（防止 localStorage 膨胀）；
    * 总数/分组计数另存 `warningSummary`（按完整列表算），保证摘要行不因截断而撒谎。
@@ -152,10 +155,28 @@ export function describeSyncStatus(status: MobileSyncStatus): string {
   return `${time}，同步失败：${status.message}`;
 }
 
-/** 261028：上传/下载细分一行（文档/目录/小记/字节；旧记录没有细分时返回 null）。 */
+/** 261028：上传/下载细分一行（文档/目录/小记/标签/字节；旧记录没有细分时返回 null）。 */
 export function describeSyncBreakdown(status: MobileSyncStatus): string | null {
   if (status.uploadedDocuments == null && status.downloadedDocuments == null) return null;
-  const up = `上传 ${status.uploadedDocuments ?? 0}/${status.uploadedFolders ?? 0}/${status.uploadedQuickNotes ?? 0}，${formatBytesCompact(status.uploadedBytes ?? 0)}`;
-  const down = `下载 ${status.downloadedDocuments ?? 0}/${status.downloadedFolders ?? 0}/${status.downloadedQuickNotes ?? 0}，${formatBytesCompact(status.downloadedBytes ?? 0)}`;
-  return `${up}；${down}（文档/目录/小记）`;
+  const up = `上传 ${status.uploadedDocuments ?? 0}/${status.uploadedFolders ?? 0}/${status.uploadedQuickNotes ?? 0}/${status.uploadedTags ?? 0}，${formatBytesCompact(status.uploadedBytes ?? 0)}`;
+  const down = `下载 ${status.downloadedDocuments ?? 0}/${status.downloadedFolders ?? 0}/${status.downloadedQuickNotes ?? 0}/${status.downloadedTags ?? 0}，${formatBytesCompact(status.downloadedBytes ?? 0)}`;
+  return `${up}；${down}（文档/目录/小记/标签）`;
+}
+
+/** 261205 A 方案：气泡摘要（零省；上传/下载择主显；全零 = 无变更）。 */
+export function describeSyncResultSummary(status: MobileSyncStatus): string {
+  const segs = (prefix: string, docs: number, folders: number, quick: number, tags: number, bytes: number): string => {
+    const parts = [
+      docs > 0 ? docs + " 文档" : "",
+      folders > 0 ? folders + " 目录" : "",
+      quick > 0 ? quick + " 小记" : "",
+      tags > 0 ? tags + " 标签" : "",
+    ].filter(Boolean);
+    if (bytes > 0) parts.push(formatBytesCompact(bytes));
+    return parts.length > 0 ? prefix + " " + parts.join("，") : "";
+  };
+  const up = segs("上传", status.uploadedDocuments ?? 0, status.uploadedFolders ?? 0, status.uploadedQuickNotes ?? 0, status.uploadedTags ?? 0, status.uploadedBytes ?? 0);
+  const down = segs("下载", status.downloadedDocuments ?? 0, status.downloadedFolders ?? 0, status.downloadedQuickNotes ?? 0, status.downloadedTags ?? 0, status.downloadedBytes ?? 0);
+  const body = [up, down].filter(Boolean).join("；") || "无变更";
+  return status.ok ? "同步成功：" + body : "同步失败：" + (status.message || "未知原因");
 }

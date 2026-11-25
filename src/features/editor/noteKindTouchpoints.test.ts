@@ -67,7 +67,7 @@ const TOUCHPOINTS: Record<string, number> = {
   // 261119 F-E 同构加载骨架（NotePaneSkeleton）：kind 分支只选**骨架形态**（ink 满幅纸面 / bitable 头部两行 / usheet 顶条），不碰正文语义 ⇒ 语义分派安全，登记钉数。
   "src/mobile/notebook/NotePaneSkeleton.tsx": 3,
   "src/mobile/notebook/NotebookTreeList.tsx": 4,
-  "src/mobile/notebook/useWorkspaceActions.ts": 7,
+  "src/mobile/notebook/useWorkspaceActions.ts": 8, // 261205 用户点单：文档加入「建完进编辑」分派（enterEditor 条件 +1 个 kind 比较；语义已确认）
   "src/mobile/notebook/useWorkspaceChrome.ts": 2,
   "src/mobile/notebook/useWorkspaceSession.ts": 3,
   "src/mobile/notebook/WorkspaceOverlayHost.tsx": 1,

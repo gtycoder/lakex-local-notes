@@ -94,7 +94,8 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
 
   /**
    * 行内 ＋ / 抽屉「新建」→ 建子节点（同一条创建管线：建库 → 刷新目录 → 收抽屉 → 打开标签）。
-   * 文档/手写板建完停在阅读态；表格/数据表/画板建完直接进编辑态。
+   * 261205 用户点单：**文档建完直接进编辑**（此前文档/手写板停阅读态 —— 该设计注被本裁决覆盖）；
+   * 手写板仍停阅读态；表格/数据表/画板不变（本就进编辑）。
    * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
    */
   const createChildDocument = useCallback(async (kind: NoteKind, parentId: string, title?: string) => {
@@ -107,8 +108,8 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
               : await bridge.createInk(title || "无标题手写板", pid);
       await loadTree();
       closeOverlay("sidebar");
-      // 手写板沿用 remote ink 批的行为：建完停在阅读态（与文档一致），需要时再点顶栏「编辑」
-      await openTab(n.id, { enterEditor: kind === "usheet" || kind === "bitable" || kind === "board" });
+      // 手写板沿用 remote ink 批的行为：建完停在阅读态，需要时再点顶栏「编辑」；文档 261205 起直接进编辑。
+      await openTab(n.id, { enterEditor: kind === "doc" || kind === "usheet" || kind === "bitable" || kind === "board" });
     } catch { showToast("新建失败", { type: "error" }); }
   }, [closeOverlay, loadTree, openTab, notebookId]);
 
