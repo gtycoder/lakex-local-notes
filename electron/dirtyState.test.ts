@@ -12,7 +12,7 @@ describe("UI dirty 状态（v3 发布后清 0）", () => {
     const nb = store.createNotebook("NB");
     store.createNoteInAtTopWithContent(nb.id, "D", "<p>x</p>", [], "d1");
     expect(store.listNoteSummaries().find((n) => n.id === "d1")?.isDirty).toBe(true);
-    store.markNotesSynced(["d1"]);
+    store.syncState.markNotesSynced(["d1"]);
     expect(store.listNoteSummaries().find((n) => n.id === "d1")?.isDirty).toBeUndefined();
     store.saveNote("d1", "D2", "<p>y</p>");
     expect(store.listNoteSummaries().find((n) => n.id === "d1")?.isDirty).toBe(true);

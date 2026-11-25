@@ -23,7 +23,7 @@ describe("同步窗口元数据守卫（261107 数据安全）", () => {
   it("干净行：远端元数据正常应用", async () => {
     const { root, store, nb } = await freshStore();
     try {
-      store.markNotesSynced(["n1"]);
+      store.syncState.markNotesSynced(["n1"]);
       const before = metaOf(store, "n1").updatedAt;
       store.applyRemoteNoteMeta({ id: "n1", title: "Remote", parentId: nb.id, sortOrder: 3, updatedAt: "2026-11-07T00:00:00.000Z", isConflict: false }, before);
       const meta = metaOf(store, "n1");
@@ -38,15 +38,15 @@ describe("同步窗口元数据守卫（261107 数据安全）", () => {
   it("窗口内本地改名（dirty）：远端旧元数据不得覆盖本地", async () => {
     const { root, store, nb } = await freshStore();
     try {
-      store.markNotesSynced(["n1"]);
+      store.syncState.markNotesSynced(["n1"]);
       const snapshotUpdatedAt = metaOf(store, "n1").updatedAt;
       store.renameTreeNode("n1", "Local in window");
-      expect(store.getSyncPendingSummary().documents).toBeGreaterThan(0);
+      expect(store.syncState.getSyncPendingSummary().documents).toBeGreaterThan(0);
       // 引擎传入的是本轮开始时的本地快照 updatedAt；窗口内改名后当前行已不等于它 ⇒ 不覆盖。
       store.applyRemoteNoteMeta({ id: "n1", title: "Remote old", parentId: nb.id, sortOrder: 0, updatedAt: "2026-11-07T00:00:00.000Z", isConflict: false }, snapshotUpdatedAt);
       const meta = metaOf(store, "n1");
       expect(meta.title).toBe("Local in window");
-      expect(store.getSyncPendingSummary().documents).toBeGreaterThan(0);
+      expect(store.syncState.getSyncPendingSummary().documents).toBeGreaterThan(0);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

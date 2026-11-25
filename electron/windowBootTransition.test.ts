@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const MAIN = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const MAIN = ["./main.ts", "./window/bootSplash.ts", "./window/createMainWindow.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：窗口层外迁 window/*
 
 describe("主窗口 / boot 窗口切换", () => {
   it("主窗显式设置底色：浅色档纯白（与 boot 窗同色，261120 用户点单「都统一白色」），深色档 #1e2126", () => {
@@ -20,7 +20,7 @@ describe("主窗口 / boot 窗口切换", () => {
   });
 
   it("renderer 崩溃重载期间重新挂 boot，并保留超时兜底", () => {
-    expect(MAIN).toContain("mainWindowRevealed = false;\n    win.hide();\n    createBootWindow();");
+    expect(MAIN).toContain("mainWindowRevealed = false;\n    win.hide();\n    createBootWindow(splashDeps);");
     expect(MAIN).toContain('revealMainWindow("crash-fallback-timeout")');
   });
 });

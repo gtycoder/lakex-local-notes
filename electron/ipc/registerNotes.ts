@@ -1,3 +1,17 @@
+/**
+ * notes 域 IPC 注册（registerNotesIpc）：文档/目录 CRUD、正文读写、搜索、导入导出、附件打开/另存、
+ * 剪贴板图片、备份/恢复、缺正文治理等渲染层入口的**参数校验 + 分发**（业务在 Store 与协作类）。
+ *
+ * 边界（不做什么）：不写业务逻辑（Store/noteExport/workspaceBackup 等）；新增通道必须三处同步改 =
+ * main.ts + preload.cjs + src/lib/native.ts（AGENTS §7#6），别只改本文件；错误形状走 core/errorContract
+ * → ipc/errors 白名单透传，不自造错误契约。
+ *
+ * 调用方分类（AGENTS §3#23）：本文件全是 **U 用户入口**；回收站/purged 拒写等策略守卫在 Store 入口层
+ * 与 S 同步专用镜像路径，**不下沉**到这里（§3#23）。红线引注：路径段安全 = core/storeUtils
+ * （isSafePathSegment/sanitizeFileName）；附件上限 = core/storeLimits；打开文档 gone 判据 =
+ * core/syncDecisions.isGoneNote（AGENTS §3#16，落点 Store.readNote/getNoteDigest）。
+ */
+
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -98,9 +112,9 @@ export function registerNotesIpc(
     }
     return note;
   });
-  ipc.handle("note_body_missing", (id: string) => store.isNoteBodyMissing(id));
-  ipc.handle("list_missing_bodies", () => store.listMissingBodies());
-  ipc.handle("purge_missing_body", (id: string) => store.purgeMissingBodyNote(id));
+  ipc.handle("note_body_missing", (id: string) => store.missingBody.isNoteBodyMissing(id));
+  ipc.handle("list_missing_bodies", () => store.missingBody.listMissingBodies());
+  ipc.handle("purge_missing_body", (id: string) => store.missingBody.purgeMissingBodyNote(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
   ipc.handle("create_note", (title: unknown, position?: unknown) => store.createNote(assertTitle(title), insertPosition(position)));
   // Batch4-D 保存版本守卫：可选第 5 参 baseHash（打开/上次保存时的正文 sha256）。

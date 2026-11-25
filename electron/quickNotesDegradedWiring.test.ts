@@ -6,14 +6,14 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const main = ["./main.ts", "./boot/quickNotesWiring.ts", "./boot/timerWiring.ts", "./boot/syncWiring.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：小记库启动接线外迁
 const quickNotes = readFileSync(new URL("./quickNotes.ts", import.meta.url), "utf8");
 const desktopSync = readFileSync(new URL("./s3v3/desktopSync.ts", import.meta.url), "utf8");
 const registerSync = readFileSync(new URL("./ipc/registerSync.ts", import.meta.url), "utf8");
 
 describe("小记库降级接线（main.ts 静态锁）", () => {
   it("QuickNotesStore 构造有独立 try/catch，失败走 availability 判定（不再裸构造卡 splash）", () => {
-    expect(main).toMatch(/let quickNotesOpenError: unknown = null;\s*try \{\s*quickNotes = new QuickNotesStore\(workspaceRoot\(\), log\);\s*\} catch \(error\) \{\s*quickNotesOpenError = error;\s*\}/);
+    expect(main).toMatch(/let quickNotesOpenError: unknown = null;\s*try \{\s*quickNotes = new QuickNotesStore\(deps\.workspaceRoot\(\), log\);\s*\} catch \(error\) \{\s*quickNotesOpenError = error;\s*\}/);
     expect(main).toContain("decideQuickNotesAvailability({ openError: quickNotesOpenError })");
     expect(main).toContain("setQuickNotesAvailability(quickNotesAvailability)");
     expect(main).toContain("createUnavailableQuickNotesStore(degradedMessage)");
@@ -22,7 +22,7 @@ describe("小记库降级接线（main.ts 静态锁）", () => {
   it("降级分支不注册 v3、不跑 recoverConversions（空小记世界会被同步误判下载/删除）", () => {
     const degradedAt = main.indexOf('if (quickNotesAvailability.mode === "degraded")');
     const elseAt = main.indexOf("} else {", degradedAt);
-    const registerAt = main.indexOf("setQuickNotesStoreForV3(quickNotes)", degradedAt);
+    const registerAt = main.indexOf("registerQuickNotesForV3(quickNotes)", degradedAt); // C-04：v3 注册经 main 注入的回调（boot 不 import s3v3）
     const recoverAt = main.indexOf("quickNotes.recoverConversions(", degradedAt);
     expect(degradedAt).toBeGreaterThan(0);
     expect(elseAt).toBeGreaterThan(degradedAt);
@@ -32,7 +32,7 @@ describe("小记库降级接线（main.ts 静态锁）", () => {
 
   it("降级时跳过自动同步与退出同步；手动/单条同步由 desktopSync 前置断言给出可读错误", () => {
     expect(main).toContain('const autoSyncAllowed = getQuickNotesAvailability().mode === "ok"');
-    expect(main).toContain("if (!autoSyncAllowed) return;");
+    expect(main).toContain("if (!deps.autoSyncAllowed) return;");
     // 条件行可能被其他批次（如安全模式）加上前缀，这里只锁「autoSyncAllowed 必须参与该判据」。
     expect(main).toMatch(/autoSyncAllowed\s*&&\s*canTouchNetwork\(/);
     const quitGuard = main.indexOf('if (getQuickNotesAvailability().mode === "degraded") return;', main.indexOf('app.on("before-quit"'));

@@ -1,3 +1,19 @@
+/**
+ * 树/笔记元数据仓储（Store 协作类）：笔记本/分组/文档的创建、改名、图标、编辑锁、移动/排序、
+ * 远端目录镜像（importRemoteFolder/applyRemoteFolderMeta）。只写元数据——正文/资产/历史/同步账本不在此。
+ *
+ * 边界（不做什么）：不写正文与资产（noteContentRepository/Store）；不做回收站生命周期（trashLifecycle）；
+ * 不做同步账本（syncReconciliation）；不做合并判定（core/s3v3Merge）。
+ *
+ * 调用方分类（AGENTS §3#23）：rename/setNodeIcon/setNoteEditLocked = **U 用户写**，经 assertNodeWritable
+ * 对 gone 行 fail-closed（判据 core/syncDecisions.isGoneRow，AGENTS §16 单一来源）；move 族 / reorder 族同为
+ * **U 入口**（日记/父环守卫见各方法注释）；applyRemoteNodeIcon/applyRemoteEditLock/applyRemoteFolderMeta
+ * = **S 同步镜像写**（专用路径、不经用户守卫）；importRemoteFolder = **I 导入**（走镜像口径）。
+ *
+ * 单一来源指针：日记归属 electron/diaryAncestry（变体勿合并：trashDiaryOrigin 走原始父链）；
+ * 排序 electron/treeSort；SQL 片段 electron/sql/treeFragments。红线引注：AGENTS §3#25（日记不可变）、
+ * §3#12（兜底「未分类」认 id 不认名）、§3#24（位置与内容正交）。
+ */
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { assertTreeNodeTitle, normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";

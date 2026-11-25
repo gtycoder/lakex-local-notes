@@ -135,10 +135,12 @@ describe("分支穷尽：每个判定值都可达（死分支会让 satisfies �
 
 describe("接线完整：main.ts 消费了全部启动判据，且顺序不变量成立", () => {
   // 不 import main.ts（会真的跑 Electron 启动流程）：只做源码文本断言。
-  const mainSource = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "main.ts"),
-    "utf8",
-  );
+  // C-04：启动判据散布在入口装配层（main + boot/*），文本断言合并读取；顺序断言仍锚 main.ts 自身。
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const mainSource = ["main.ts", "boot/startupDecision.ts", "boot/quickNotesWiring.ts", "boot/protocolWiring.ts", "boot/recoveryWiring.ts"]
+    .map((rel) => fs.readFileSync(path.join(dir, rel), "utf8"))
+    .join("\n");
+  const entrySource = fs.readFileSync(path.join(dir, "main.ts"), "utf8");
 
   it("5 个启动判据全部被 main.ts 引用（新增判据必须同时接线）", () => {
     for (const symbol of [
@@ -148,18 +150,20 @@ describe("接线完整：main.ts 消费了全部启动判据，且顺序不变�
       "decideQuickNotesAvailability(",
       "rendererMode",
     ]) {
-      expect(mainSource.includes(symbol), `main.ts 没有引用启动判据 ${symbol}（分支没被消费）`).toBe(true);
+      expect(mainSource.includes(symbol), `启动装配层没有引用启动判据 ${symbol}（分支没被消费）`).toBe(true);
     }
   });
 
   it("顺序不变量：恢复模式先于建主窗口（且在恢复页后 return，不再继续普通启动）", () => {
-    const recoveryBranch = mainSource.indexOf('startupDecision.mode === "recovery"');
-    const recoveryWindow = mainSource.indexOf("showRecoveryWindow(");
-    const createWindow = mainSource.indexOf("createWindow();");
+    // C-04：恢复页装配 = enterStartupRecovery（boot/recoveryWiring 内部最终调 showRecoveryWindow）。
+    const recoveryBranch = entrySource.indexOf('startupDecision.mode === "recovery"');
+    const recoveryWindow = entrySource.indexOf("enterStartupRecovery(");
+    const createWindow = entrySource.indexOf("createWindow(mainWindowDeps())");
     expect(recoveryBranch).toBeGreaterThan(-1);
     expect(recoveryWindow).toBeGreaterThan(recoveryBranch);
-    expect(createWindow, "createWindow(); 必须在普通启动路径上").toBeGreaterThan(-1);
+    expect(createWindow, "createWindow(mainWindowDeps()) 必须在普通启动路径上").toBeGreaterThan(-1);
     expect(recoveryWindow, "恢复页必须先于建主窗口").toBeLessThan(createWindow);
+    expect(entrySource.slice(recoveryWindow, createWindow), "恢复分支必须 return，不再继续普通启动").toContain("return;");
   });
 
   it("顺序不变量：私有协议注册与 userData 隔离都在 app ready 之前（模块顶层同步调用）", () => {

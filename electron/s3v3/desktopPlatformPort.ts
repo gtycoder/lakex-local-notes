@@ -70,22 +70,22 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       return out;
     },
     async listPurgedTombstones(): Promise<PurgedTombstoneRow[]> {
-      return store.listPurgedTombstones().map((t) => ({ id: t.id, purgedAt: t.purgedAt }));
+      return store.syncState.listPurgedTombstones().map((t) => ({ id: t.id, purgedAt: t.purgedAt }));
     },
     async listRestorePendingNoteIds(): Promise<string[]> {
-      return store.listRestorePendingNoteIds();
+      return store.syncState.listRestorePendingNoteIds();
     },
     async listRestorePendingQuickNoteIds(): Promise<string[]> {
       return qn ? qn.listRestorePendingQuickNoteIds() : [];
     },
     async listBodyRecoveryPending(): Promise<string[]> {
-      return store.listBodyRecoveryPending();
+      return store.missingBody.listBodyRecoveryPending();
     },
     /** 单条推送轻量投影（261110）：只读 cloud_deleted 标记，不拼全库行。桌面目录没有该列 ⇒ 空。 */
     async listCloudDeletedIds() {
       return {
         folders: [] as string[],
-        notes: store.listCloudDeletedNoteIds(),
+        notes: store.syncState.listCloudDeletedNoteIds(),
         quickNotes: qn ? qn.listCloudDeletedQuickNoteIds() : [],
       };
     },
@@ -133,13 +133,13 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       store.restoreTrashItem(noteId);
     },
     async applyNotesCloudDeleted(noteIds: string[]): Promise<void> {
-      store.applyNotesCloudDeleted(noteIds);
+      store.syncState.applyNotesCloudDeleted(noteIds);
     },
     async markBodyRecoveryPending(noteIds: string[]): Promise<void> {
-      store.markBodyRecoveryPending(noteIds);
+      store.missingBody.markBodyRecoveryPending(noteIds);
     },
     async clearBodyRecoveryPending(): Promise<void> {
-      store.clearBodyRecoveryPending();
+      store.missingBody.clearBodyRecoveryPending();
     },
     async importRemoteFolder(folder: SyncFolderRow): Promise<void> {
       store.importRemoteFolder(folder as never);

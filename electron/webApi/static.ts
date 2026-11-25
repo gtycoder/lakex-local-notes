@@ -1,18 +1,22 @@
+/**
+ * Web 客户端（最小验证 MVP）· 静态面与下载等价物：`/__native.js` shim 注入（方法面 = preload.cjs）、
+ * 静态服务 `dist/`（仅 GET/HEAD；凭据只在文档响应下发，静态子资源不带 Set-Cookie）、
+ * `GET /download` 导出产物下载（白名单只收主进程导出 handler 刚生成的产物）。
+ *
+ * 边界（不做什么）：不做 API 业务（webApiServer 的 /api 路由）；shim **不发任何令牌**（SEC-07）；
+ * 不接受任意路径下载（DownloadRegistry 相对路径键 + 过期 + realpath 根目录校验，防目录遍历/符号链接逃逸）。
+ *
+ * 单一来源指针：方法面清单 = electron/preload.cjs（webApiServer.test.ts 对拍）；凭据/CSRF =
+ * webApi/security.ts；MIME = appOrigin.DIST_MIME。红线引注：凭据是 HttpOnly + SameSite=Strict cookie、
+ * 渲染层不接触明文密钥（AGENTS §5）；判页面来源用 scheme+host 不比 URL.origin（AGENTS §4 壳层双 origin）。
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import type http from "node:http";
 import { DIST_MIME } from "../appOrigin.js";
 import { ZipWriter } from "../../src/core/zipArchive.js";
 import { documentSetCookies, hasValidToken, json } from "./security.js";
-
-/**
- * Web 客户端（最小验证 MVP）· 静态面与下载等价物。
- *
- * - `/__native.js`：把 `window.lakeNative` 的 HTTP shim 注入页面（方法面 = preload.cjs，
- *   **本文件不含任何令牌**；凭据是文档响应下发的 HttpOnly cookie）；
- * - 静态服务 `dist/`（仅 GET/HEAD；凭据只在文档响应下发，静态子资源不带 Set-Cookie）；
- * - `GET /download`：导出产物的下载等价物（白名单只收主进程导出 handler 刚生成的产物）。
- */
 
 /** dist/index.html 注入 shim：<script src="/__native.js"> 必须先于 bundle 执行。 */
 export function injectNativeShim(html: string): string {

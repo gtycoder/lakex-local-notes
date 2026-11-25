@@ -310,7 +310,7 @@ describe("只读：批量导出不改源数据", () => {
     const { notebook } = seed();
     const before = {
       summaries: store.listNoteSummaries().map((note) => ({ id: note.id, dirty: !!note.isDirty })),
-      pending: store.getSyncPendingSummary(),
+      pending: store.syncState.getSyncPendingSummary(),
       docs: store.listNoteSummaries().map((note) => note.id).map((id) => store.readNote(id).content),
     };
     const { deps } = stubDeps();
@@ -320,7 +320,7 @@ describe("只读：批量导出不改源数据", () => {
     const strip = (summary: { documents: number; folders: number; resources: number }) => ({
       documents: summary.documents, folders: summary.folders, resources: summary.resources,
     });
-    expect(strip(store.getSyncPendingSummary())).toEqual(strip(before.pending));
+    expect(strip(store.syncState.getSyncPendingSummary())).toEqual(strip(before.pending));
     expect(store.listNoteSummaries().map((note) => note.id).map((id) => store.readNote(id).content)).toEqual(before.docs);
   });
 });

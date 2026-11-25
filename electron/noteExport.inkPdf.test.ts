@@ -14,7 +14,7 @@ import { localAssetHttpUrl } from "../src/core/assetUrl.js";
 import { createInkDoc, createInkPage, inkToBody, parseInkBody, type InkDoc } from "../src/core/inkDoc.js";
 import { Store } from "./store.js";
 import { createLocalSecretCipher } from "./secretCipher.js";
-import { INK_PDF_PRINT_CSS, buildInkPageSvg, buildInkPdfBody, inkBackgroundFitCss } from "./noteExport.js";
+import { INK_PDF_PRINT_CSS, buildInkPageSvg, buildInkPdfBody, inkBackgroundFitCss } from "./noteExportInk.js";
 
 const electronMock = vi.hoisted(() => {
   const secrets = new Map<string, string>();
@@ -269,7 +269,8 @@ describe("静态契约：export.ts 分流 + UI 只对 ink 放开 PDF", () => {
     const src = read("./noteExport.ts");
     expect(src).toContain("exportInkPdfHtml(");
     expect(src).toContain('if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir, options);');
-    expect(src).toContain("strokeToSvgPath");
+    // C-07：ink 纯渲染块已抽 electron/noteExportInk.ts（笔迹几何单一来源的消费点随之转移）。
+    expect(read("./noteExportInk.ts")).toContain("strokeToSvgPath");
     // 261117 打包瘦身：perfect-freehand 是**渲染层依赖**（`src/features/ink/inkGeometry` 用它算笔迹轮廓），
     // 主进程只是**间接** import inkGeometry 做手写 PDF 导出 ⇒ 它必须留在 devDependencies：
     //   · 放回 dependencies ⇒ 整套渲染层依赖会被 electron-builder 原样塞进 asar；

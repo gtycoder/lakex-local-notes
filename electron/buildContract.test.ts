@@ -165,15 +165,20 @@ describe("构建配置与运行期入口都引用契约，而不是复制字面�
     expect(viteConfig.includes(`outDir: "${ELECTRON_OUT_DIR}"`), "outDir 又写回字面量了").toBe(false);
   });
 
-  it("electron/main.ts 的三条路径都走契约函数（不许再出现裸相对路径）", () => {
+  it("入口装配的三条路径都走契约函数（不许再出现裸相对路径）", () => {
+    // C-04：装配外迁后路径契约分散在 main.ts + window/{bootSplash,createMainWindow}.ts。
     const main = readCode(path.join("electron", "main.ts"));
+    const bootSplash = readCode(path.join("electron", "window", "bootSplash.ts"));
+    const createMainWindow = readCode(path.join("electron", "window", "createMainWindow.ts"));
     expect(main, "main.ts 必须 import 契约函数").toMatch(/from "\.\/buildTarget\.js"/);
     expect(main).toContain("appDirOf(BUILD_DIR)");
-    expect(main).toContain("bootSplashPath(BUILD_DIR)");
-    expect(main).toContain("preloadPath(BUILD_DIR, app.isPackaged)");
+    expect(bootSplash, "splash 路径必须走契约函数").toContain("bootSplashPath(");
+    expect(createMainWindow, "preload 路径必须走契约函数").toContain("preloadPath(");
     // 防回退：这三条老字面量是「打包版才炸」的高危点，出现即红
     for (const literal of ['"../electron/preload.cjs"', '"../../app.asar.unpacked', '"../electron/boot.html"']) {
-      expect(main.includes(literal), `main.ts 里又出现硬编码路径 ${literal}`).toBe(false);
+      for (const [name, src] of [["main.ts", main], ["window/bootSplash.ts", bootSplash], ["window/createMainWindow.ts", createMainWindow]] as const) {
+        expect(src.includes(literal), `${name} 里又出现硬编码路径 ${literal}`).toBe(false);
+      }
     }
   });
 });

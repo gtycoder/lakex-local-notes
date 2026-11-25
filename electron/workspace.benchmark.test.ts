@@ -46,7 +46,7 @@ describe.skipIf(process.env.LAKE_RUN_BENCHMARK !== "1")("workspace capacity benc
     const fixtureMs = performance.now() - fixtureStarted;
 
     const summaryStarted = performance.now();
-    const summary = store.getSyncPendingSummary();
+    const summary = store.syncState.getSyncPendingSummary();
     const summaryMs = performance.now() - summaryStarted;
     const searchStarted = performance.now();
     const search = store.searchNotes("资源基准", 20);

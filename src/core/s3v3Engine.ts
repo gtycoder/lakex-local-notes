@@ -1,3 +1,20 @@
+/**
+ * S3v3 同步引擎编排层（v4 四相内核是唯一实现，旧 v3 路径已删）：职责 = 读 pointer/索引、选入口路径、
+ * 写 state/基线、上报；「决策 + 整轮 IO」委托 `s3v3/commit/runSyncRound`（docs/SYNC-PROTOCOL.md §8）。
+ *
+ * 四相编排职责图（顺序与不变量的单一来源 = runSyncRound.ts 头注释）：
+ *   plan（三方合并 s3v3Decision/s3v3Merge/plan/*）→ apply（正文/声明 IO）→ assets（声明差集传输）
+ *   → buildPublishIndex（合成真相）→ commit（锁 + 读回 + 写 pointer）→ executePending（清理）→ settle（意图）。
+ * 入口四分支（syncOnceInner）：常规轮 syncOnceRound / 全量重拉 syncPullAllRound / 首轮上传 syncFirstRound /
+ * 首次相遇合并轮（SYNC-PROTOCOL §21）；「保存并同步」pushQuickNote = quickPush/pipeline 薄委托（§12.3），整轮不感知。
+ *
+ * 边界（不做什么）：不做合并判定（纯逻辑在 s3v3Decision/s3v3Merge/plan/positionMerge，SYNC-PROTOCOL §9）；
+ * 不碰协议结构/密钥/序列化（s3v3/protocol/*）；不做 UI 选区与弹窗。
+ *
+ * 红线引注：本地是真相（AGENTS §3#1）；发布 = 锁 + 读回 + pointer、无 CAS（SYNC-PROTOCOL §2/§12.1）；
+ * 删除 = 缺席（§10）、恢复唯一显式例外（AGENTS §3#4）；传输并发 12 上限（AGENTS §3#13）；深清窗口（§14）。
+ */
+
 import { sha256Hex } from "./syncUtils.js";
 import {
   S3V3_POINTER_KEY,
@@ -452,6 +469,7 @@ export class S3v3SyncEngine {
    * v4 四相内核的一轮（E2-3）：外层只负责读 pointer/索引、写 state/基线、上报；
    * 「决策 + IO」整段交给 runSyncRound（plan → apply → assets → publishIndex → commit → 清理 → 意图）。
    * 首拉/无基线/无 pointer 不在本路径（会抛错，由调用方回退既有路径）。
+   * 契约引注：docs/SYNC-PROTOCOL.md §8（主流程）/ §9（合并决策）/ §17（失败语义）。
    */
   private async syncOnceRound(state: DeviceState, baseline: DeviceBaseline | null, pointer: S3v3Pointer | null, report: S3v3SyncReport, opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "四相内核需要云端 pointer（首拉/空桶请走既有路径）");
@@ -949,6 +967,7 @@ export class S3v3SyncEngine {
    * 3) 保留窗口：默认 7 天（可传 retentionDays；<=0 表示立即到期=手动显式清理）；
    *    窗口内对象一律不删；provider 不返回 lastModified（无法判龄）时保守保留；
    * 4) dryRun：只返回候选，不删对象、不动本地 pending。
+   * 契约引注：docs/SYNC-PROTOCOL.md §14（GC 保留窗口/keep 集口径）。
    */
   async deepCleanup(opts: S3v3DeepCleanupOptions = {}): Promise<S3v3DeepCleanupResult> {
     const pointer = await this.readPointer();
@@ -1032,7 +1051,10 @@ export class S3v3SyncEngine {
     return { deleted: toDelete, kept: keep.size, dryRun: !!opts.dryRun, skippedRecent, ageUnknown, previousIndexes };
   }
 
-  /** 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档（v4 四相）。 */
+  /**
+   * 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档（v4 四相）。
+   * 契约引注：docs/SYNC-PROTOCOL.md §8.2（全量拉取 pullAll；只拉不推、建立基线）。
+   */
   async resetFromCloud(): Promise<S3v3SyncReport> {
     const pointer = await this.readPointer();
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法全量重拉");

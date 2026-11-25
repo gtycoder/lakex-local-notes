@@ -107,8 +107,8 @@ describe("端口配置接线（main / preload / 下游 URL 构造）", () => {
   const root = path.resolve(import.meta.dirname, "..");
   const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
 
-  it("main：正式 19876 / 开发 19877，Web 19880/19881；写回 env；无回退逻辑", () => {
-    const main = read("electron/main.ts");
+  it("装配层：正式 19876 / 开发 19877，Web 19880/19881；写回 env；无回退逻辑", () => {
+    const main = read("electron/boot/protocolWiring.ts"); // C-04：端口/资产服务接线外迁
     expect(main).toContain("Number(process.env.LAKE_ASSET_PORT) || (app.isPackaged ? 19876 : 19877)");
     expect(main).toContain("Number(process.env.LAKE_WEB_PORT) || (app.isPackaged ? 19880 : 19881)");
     // env 必须在启动监听之前写回（即使失败/降级，渲染层构造的也是本形态固定端口）

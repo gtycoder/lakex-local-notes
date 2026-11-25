@@ -52,22 +52,22 @@ describe("cloudDeleted：Store 标记位（notes/tree_nodes）", () => {
     store.createNoteInAtTopWithContent(nb.id, "Doc", "body", [], "n1");
 
     expect(store.listNoteSummaries().find((n) => n.id === "n1")?.cloudDeleted).toBeUndefined();
-    store.applyNotesCloudDeleted(["n1"]);
-    expect(store.listCloudDeletedNoteIds()).toEqual(["n1"]);
+    store.syncState.applyNotesCloudDeleted(["n1"]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual(["n1"]);
     expect(store.listNoteSummaries().find((n) => n.id === "n1")?.cloudDeleted).toBe(true);
     expect(store.listTreeNodes().find((n) => n.id === "n1")?.cloudDeleted).toBe(true);
     expect(store.readNote("n1").cloudDeleted).toBe(true);
     expect(store.getNoteInfo("n1").cloudDeleted).toBe(true);
 
     // 恢复并重新上传成功 = remotePurged 全集里不再有它 → 清除
-    store.applyNotesCloudDeleted([]);
-    expect(store.listCloudDeletedNoteIds()).toEqual([]);
+    store.syncState.applyNotesCloudDeleted([]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual([]);
     expect(store.readNote("n1").cloudDeleted).toBeUndefined();
     expect(store.getNoteInfo("n1").cloudDeleted).toBe(false);
 
     // 非法 id（目录穿越等）忽略，不抛错
-    store.applyNotesCloudDeleted(["../evil", "n1"]);
-    expect(store.listCloudDeletedNoteIds()).toEqual(["n1"]);
+    store.syncState.applyNotesCloudDeleted(["../evil", "n1"]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual(["n1"]);
   });
 
   it("回收站列表带 cloudDeleted（文档页签徽标的数据源）", async () => {
@@ -76,7 +76,7 @@ describe("cloudDeleted：Store 标记位（notes/tree_nodes）", () => {
     const nb = store.createNotebook("NB");
     store.createNoteInAtTopWithContent(nb.id, "Trashed", "body", [], "t1");
     store.deleteNote("t1");
-    store.applyNotesCloudDeleted(["t1"]);
+    store.syncState.applyNotesCloudDeleted(["t1"]);
     const item = store.listTrash().find((x) => x.id === "t1");
     expect(item?.cloudDeleted).toBe(true);
     expect(item?.purged).toBe(false); // 独立于 purged：不抑制恢复
@@ -89,9 +89,9 @@ describe("cloudDeleted：Store 标记位（notes/tree_nodes）", () => {
     store.createNoteInAtTopWithContent(nb.id, "Restored", "body", [], "r1");
     store.deleteNote("r1");
     store.restoreTrashItem("r1");
-    expect(store.listRestorePendingNoteIds()).toEqual(["r1"]);
-    store.markNotesSynced(["r1"]);
-    expect(store.listRestorePendingNoteIds()).toEqual([]);
+    expect(store.syncState.listRestorePendingNoteIds()).toEqual(["r1"]);
+    store.syncState.markNotesSynced(["r1"]);
+    expect(store.syncState.listRestorePendingNoteIds()).toEqual([]);
     // mapSummary 只在为真时带 isDirty 字段：undefined = 不脏（已同步）
     expect(store.listNoteSummaries().find((n) => n.id === "r1")?.isDirty).toBeUndefined();
   });
@@ -109,7 +109,7 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
     const state = (await adapter.loadState())!;
     state.remotePurged = ["n1"];
     await adapter.saveState(state);
-    expect(store.listCloudDeletedNoteIds()).toEqual(["n1"]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual(["n1"]);
     // E3-1 phase2a：sidecar = v3 信封（remotePurged → cloud-deleted records）
     const idsOf = async (): Promise<string[]> => {
       const raw = JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { records?: Array<{ kind: string; id?: string }> };
@@ -121,7 +121,7 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
     const next = (await adapter.loadState())!;
     next.remotePurged = [];
     await adapter.saveState(next);
-    expect(store.listCloudDeletedNoteIds()).toEqual([]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual([]);
     expect(await idsOf()).toEqual([]);
   });
 
@@ -135,7 +135,7 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
     const state = (await adapter.loadState())!;
     state.remotePurged = ["p1"];
     await adapter.saveState(state);
-    expect(store.listCloudDeletedNoteIds()).toEqual(["p1"]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual(["p1"]);
 
     store.deleteNote("p1");
     store.purgeTrashItem("p1");
@@ -148,7 +148,7 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
       expect((raw.records ?? []).filter((r) => r.kind === "cloud-deleted").map((r) => r.id)).toEqual([]);
     }
     // purge 墓碑仍是"下次同步要传播的删除意图"，但不再有 remotePurged 打标
-    expect(store.listPurgedTombstones().map((t) => t.id)).toContain("p1");
+    expect(store.syncState.listPurgedTombstones().map((t) => t.id)).toContain("p1");
   });
 
   it("state.restorePending 从 DB 恢复标记补齐（引擎唯一能看到的恢复信号）", async () => {
@@ -202,11 +202,11 @@ describe("B8-④F6：目录行的 cloud_deleted 置位/清除（note_file_id 匹
       const store = await makeStore(root);
       const nb = store.createNotebook("目录本");
       const rawDb = (store as unknown as { db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } } }).db;
-      store.applyNotesCloudDeleted([nb.id]);
+      store.syncState.applyNotesCloudDeleted([nb.id]);
       const nodeRow = rawDb.prepare("SELECT cloud_deleted FROM tree_nodes WHERE id=?").get(nb.id) as { cloud_deleted: number };
       expect(nodeRow.cloud_deleted, "folder 行置不上 ⇒ 目录徽标失明").toBe(1);
       // 旧实现 flagged 只扫 notes、树行按 note_file_id 匹配 ⇒ 目录行永远清不掉（settleCloudDeleted 永不失效）
-      store.applyNotesCloudDeleted([]);
+      store.syncState.applyNotesCloudDeleted([]);
       const cleared = rawDb.prepare("SELECT cloud_deleted FROM tree_nodes WHERE id=?").get(nb.id) as { cloud_deleted: number };
       expect(cleared.cloud_deleted).toBe(0);
     } finally { await fs.rm(root, { recursive: true, force: true }); }
@@ -244,15 +244,15 @@ describe("cloudDeleted：端到端（v3 引擎 remotePurged → 桌面标 → �
     await engineA.sync();
     expect(store.hasNote("p1")).toBe(true);
     expect(store.listNotesForSync().find((n) => n.id === "p1")?.trashedAt).toBeTruthy();
-    expect(store.listCloudDeletedNoteIds()).toContain("p1");
+    expect(store.syncState.listCloudDeletedNoteIds()).toContain("p1");
     expect(store.listTrash().find((x) => x.id === "p1")?.cloudDeleted).toBe(true);
 
     // A 显式恢复（不限制恢复）→ 重新上传成功后标记消失
     store.restoreTrashItem("p1");
-    expect(store.listRestorePendingNoteIds()).toEqual(["p1"]);
+    expect(store.syncState.listRestorePendingNoteIds()).toEqual(["p1"]);
     await engineA.sync();
-    expect(store.listCloudDeletedNoteIds()).toEqual([]);
-    expect(store.listRestorePendingNoteIds()).toEqual([]);
+    expect(store.syncState.listCloudDeletedNoteIds()).toEqual([]);
+    expect(store.syncState.listRestorePendingNoteIds()).toEqual([]);
     expect(store.listNotesForSync().find((n) => n.id === "p1")?.trashedAt ?? null).toBeNull();
     // 云端确实重新有了 active 条目（不是只本地清标）
     const idx = JSON.parse(new TextDecoder().decode((await remote.get("meta/pointer.json"))!)) as { lake: { commit: string } };
@@ -277,10 +277,10 @@ describe("cloudDeleted：UI 文案口径（状态栏 / 属性面板）", () => {
     const store = await makeStore(root);
     const nb = store.createNotebook("NB");
     store.createNoteInAtTopWithContent(nb.id, "Doc", "body", [], "n1");
-    store.applyNotesCloudDeleted(["n1"]);
+    store.syncState.applyNotesCloudDeleted(["n1"]);
     const statusOf = (rows: Array<[string, string]>) => rows.find(([label]) => label === "状态")?.[1] ?? "";
     expect(statusOf(noteInfoRows(store.getNoteInfo("n1")))).toContain("云端已删除（仅本地）");
-    store.applyNotesCloudDeleted([]);
+    store.syncState.applyNotesCloudDeleted([]);
     expect(statusOf(noteInfoRows(store.getNoteInfo("n1")))).not.toContain("云端已删除");
   });
 });

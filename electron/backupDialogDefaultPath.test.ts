@@ -72,11 +72,11 @@ describe("从备份恢复文件选择框（defaultPath = backups）", () => {
   });
 
   it("路径来源单一：两个入口都经 pickBackupDatabaseDialog（不再各自手拼 dialog 选项）", () => {
-    const main = fs.readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const main = fs.readFileSync(new URL("./boot/recoveryWiring.ts", import.meta.url), "utf8"); // C-04：恢复页入口外迁
     const registerNotes = fs.readFileSync(new URL("./ipc/registerNotes.ts", import.meta.url), "utf8");
     // 恢复页入口：走共用选择框并带自己的按钮文案
     expect(main).toContain("pickBackupDatabaseDialog(userDataDir, { buttonLabel: \"用此备份恢复\" })");
-    expect(main).not.toContain("dialog.showOpenDialog"); // main 不再有裸 dialog 调用
+    expect(main).not.toContain("dialog.showOpenDialog"); // 恢复页不再有裸 dialog 调用
     // 设置入口：handler 走共用选择框；实现里 defaultPath = backupsDir(...)
     expect(registerNotes).toContain('ipc.handle("pick_backup_database"');
     expect(registerNotes).toContain("pickBackupDatabaseDialog(app.getPath(\"userData\"))");

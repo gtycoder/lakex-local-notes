@@ -1,3 +1,18 @@
+/**
+ * 回收站生命周期域（Store 协作类）：软删除 / 恢复 / 彻底删除（purge）/ 清空 / 自动过期 ——
+ * 「删除 = 移入回收站笔记本（trashed_at + deleted_from_parent_id、不写墓碑）；purge 才是墓碑」的桌面落点。
+ *
+ * 边界（不做什么）：不做同步镜像写（applyRemoteMoveToTrash/applyRemoteRestore 在 syncReconciliation，
+ * S 路径不经本文件）；不写正文/资产内容（noteContentRepository/Store）；不做合并判定（core/s3v3Merge）。
+ *
+ * 调用方分类（AGENTS §3#23）：deleteTreeNode/purgeTrashItem/emptyTrash = **U 用户入口**（批量删除要求
+ * 幂等——重复删除不改 parent，AGENTS §3#5）；restoreTrashItem = **R 显式恢复**（唯一改生命周期的例外，
+ * restore_pending_at → local-wins，AGENTS §3#4）；autoPurgeExpiredTrash = **M 维护**（90 天过期钟）。
+ *
+ * 单一来源指针：purge/restore 子树两路边集合判据 = `flattenedSubtreeIds`（场景对拍
+ * core/trashSubtreeScenarios.ts）；SQL 片段 electron/sql/treeFragments；日记本不可删 = assertNotDiaryNotebook。
+ * 红线引注：AGENTS §3#2/#3/#5/#15/#16（trashedAt 必传）、§3#24（purge 整棵子树）、§3#25（日记）。
+ */
 import fs from "node:fs";
 import path from "node:path";
 import type { DbLike } from "./dbLike.js";

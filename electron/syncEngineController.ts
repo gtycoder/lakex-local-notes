@@ -236,10 +236,10 @@ export async function restoreMissingBodyFromCloud(
   const bytes = await remote.get(lakeBodyKey(noteId, entry.contentHash));
   if (!bytes) return { ok: false, reason: "object-missing" };
   if (sha256Hex(bytes) !== entry.contentHash) return { ok: false, reason: "hash-mismatch" };
-  store.writeRestoredBody(noteId, new TextDecoder().decode(bytes));
+  store.missingBody.writeRestoredBody(noteId, new TextDecoder().decode(bytes));
   // Del-6：不再回写 v2 的 sync_base（已随死账本删除）。恢复后的基线一致性由下一次成功同步写
   // sync-v3/baseline.json.gz 保证；这里只需把本地行标 synced（正文 == 云端内容，无需再上传）。
-  store.markSynced(noteId);
+  store.syncState.markSynced(noteId);
   store.logScopes.sync.info(perfMessage("missing-body.restoreFromCloud", Date.now() - startedAt, { noteId, bytes: bytes.length }));
   return { ok: true, title: entry.title };
 }

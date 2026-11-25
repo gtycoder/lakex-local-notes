@@ -1,3 +1,15 @@
+/**
+ * 本机资产服务（HTTP）：按 noteId/filename 服务笔记资产——原图、按需缩略（?w= 档位，内存 LRU 不落盘）、
+ * 原文件 data URL（?base64=1，webp/avif 转 PNG 供外发粘贴）、AI 附件读取与 vendor 静态资源。
+ *
+ * 边界（不做什么）：不做资产存在性/上传/同步判定（声明差集单一来源 = AGENTS §3#11 / core/s3v3*）；
+ * 缩略是可重建派生物（不落盘、不上传）；MIME 判定单一来源 core/assetNaming（本文件只留 vendor 专有例外表）。
+ *
+ * 红线引注：端口固定 packaged 19876 / dev 19877、**不做自动回退**，取值只走 currentAssetServerPort()
+ * （AGENTS §7#1，策略详见下方 ASSET_PORT 注释）；路径段安全 = core/storeUtils.isSafePathSegment；
+ * ?w= 档位与 ?base64=1 是跨端契约（AGENTS §4 复制/剪切、移动端离散缩略），改口径先读 docs/LAKEX-CONTRACT.md。
+ */
+
 import http from "node:http";
 import { APP_ORIGIN } from "./appOrigin.js";
 import fs from "node:fs";

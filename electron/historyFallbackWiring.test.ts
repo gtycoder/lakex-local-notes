@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  * ① 定时器用「兜底」而不是旧的 flushHistorySnapshots（旧路径只在内存里记 saveNote，重启丢）；
  * ② 单飞防重入；③ 启动不立即跑（只有 setInterval）；④ 设置 0 = 关闭、失败不阻断。
  */
-const MAIN = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const MAIN = ["./main.ts", "./boot/timerWiring.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：历史兜底定时器外迁
 const STORE = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 
 describe("兜底快照接线（桌面主进程）", () => {
@@ -28,10 +28,10 @@ describe("兜底快照接线（桌面主进程）", () => {
     expect(MAIN).toContain("historyFallbackRunning = true;");
     // P2-A：兜底改为异步分片后，单飞标记必须在 promise finally 里释放（覆盖整个异步窗口）
     expect(MAIN).toMatch(/\.finally\(\(\) => \{ historyFallbackRunning = false; \}\);/);
-    expect(MAIN).toContain("void store.runHistoryFallback()");
+    expect(MAIN).toContain("void deps.store.runHistoryFallback()");
     // 首轮延迟 = 一个间隔：定时器体内才调用，注册之前不调用
     const beforeTimer = MAIN.slice(0, MAIN.indexOf("snapshotTimer = setInterval(() => {"));
-    expect(beforeTimer.endsWith("if (shouldRunHistoryFallback(fallbackMinutes)) {\n        ")).toBe(true);
+    expect(beforeTimer.endsWith("if (shouldRunHistoryFallback(fallbackMinutes)) {\n      ")).toBe(true);
   });
 
   it("失败只记日志、不阻断（兜底不能影响启动/保存）", () => {

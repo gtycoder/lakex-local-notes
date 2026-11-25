@@ -1,16 +1,31 @@
+/**
+ * 核心合并判据（纯逻辑、零 IO）：三方合并 base(设备基线) × local(本地索引) × remote(远端索引)，
+ * 逐条输出下载/上传/删除/归档意图 —— `planLakeMerge`（文档+目录）、`planQuickNotesMerge`（小记）。
+ * 单条内容判定委托 `s3v3Decision.decideItem`：恢复标记 → 本地删除意图 → 缺席/新增 → contentHash
+ * （docs/SYNC-PROTOCOL.md §9.1；小记顺序见 §9.3）。
+ *
+ * 边界（不做什么）：只做「判定」不执行（传输/落盘在 `s3v3Engine` 四相编排与 `s3v3/commit/*`）；
+ * 位置三件套 parentId/trashedAt/deletedFromParentId **不在此判**，走 `s3v3/plan/positionMerge.ts`
+ * 独立三方合并（SYNC-PROTOCOL §9.5，AGENTS §3#24 位置与内容正交）；编辑锁同理独立合并（§9.8）；
+ * 合并层不做父集合合法性闸门（父节点兜底「未分类」归适配器，AGENTS §3#12）。
+ *
+ * 红线引注：本地是真相、S3 只是镜像（AGENTS §3#1）；删除传播/删除压编辑（§3#2/#3，删除=缺席 §10）；
+ * 恢复是唯一显式例外（§3#4）；被远端删除强制留历史快照（SYNC-PROTOCOL §9.9）；日记本 space 只升不降
+ * （§3#25，`enforceDiarySpaceMonotone`）；远端父环拒绝并出 warning（P1-6，`idsWithCyclicAncestors`）。
+ */
+
 import { isDiaryNotebookNode } from "./diary.js";
 import { decideItem, type ItemAction } from "./s3v3Decision.js";
 import { applyEncounterAction, applyFolderEncounterAction, applyQuickEncounterAction, type EncounterFolderAction, type EncounterQuickAction, type FirstEncounterMode } from "./firstEncounter.js";
 import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { PlanWarning } from "./s3v3/plan/types.js";
 
-/** 三方合并计划（纯逻辑）：输入基线×本地×远端，输出每条的下载/上传/删除/归档意图。 */
 
 export interface LakeMergeContext {
   restorePending: ReadonlySet<string>;
   purgeIntents: ReadonlySet<string>;
   folderPurgeIntents: ReadonlySet<string>;
-  /** 首次相遇（docs/SYNC-PROTOCOL.md §16）：四选项对缺席/冲突判定的改写层（undefined = 既有语义）。 */
+  /** 首次相遇（docs/SYNC-PROTOCOL.md §21）：四选项对缺席/冲突判定的改写层（undefined = 既有语义）。 */
   encounter?: FirstEncounterMode;
   /** download-to-trash 落回收站用的时间戳（trashedAt）。 */
   trashNow?: string;

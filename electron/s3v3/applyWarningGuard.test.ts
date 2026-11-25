@@ -81,7 +81,7 @@ describe("单篇 apply 失败降级（task-66）", () => {
     expect(b.store.hasNote("n1")).toBe(false);
 
     // ④ 诊断报告逐项可定位（设置页「同步诊断」的 failed 清单含该篇）
-    const reports = b.store.listV3SyncReports();
+    const reports = b.store.syncState.listV3SyncReports();
     const latest = reports[reports.length - 1];
     expect(latest?.ok).toBe(true);
     expect(latest?.failed.some((f) => f.kind === "apply_skipped" && f.id === "n1" && f.title === "Doc1")).toBe(true);

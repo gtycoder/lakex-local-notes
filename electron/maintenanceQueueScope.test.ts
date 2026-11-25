@@ -27,9 +27,12 @@ const WIRING = read(WIRING_FILE);
 
 const MAIN_LINES = MAIN.split("\n");
 const WIRING_LINES = WIRING.split("\n");
+// C-04：备份/对账的队列包装随装配外迁到 boot/*（队列唯一实现仍在 main）。
+const BOOT = ["electron/boot/backupWiring.ts", "electron/boot/fileReconcileWiring.ts"].map(read).join("\n");
+const BOOT_LINES = BOOT.split("\n");
 
 /** 允许出现在维护队列包裹范围内的维护操作标记（轮次级）。 */
-const MAINTENANCE_MARKERS = ["syncNowViaEngine", "backupDatabaseTo", "runGcReconcile", "runFullSync", "FileMetadataReconciler", "runBackupCycle"] as const;
+const MAINTENANCE_MARKERS = ["syncNowViaEngine", "backupDatabaseTo", "runGcReconcile", "runFullSync", "FileMetadataReconciler", "runBackupCycle", "startFileReconciler", "startAutoBackup"] as const; // C-04 后两个 = 对账/备份装配入口
 
 /** 本地写标记：这些绝不能出现在维护队列的包裹范围内。 */
 const LOCAL_WRITE_MARKERS = ["saveNote", "createNoteIn", "renameTreeNode", "moveTreeNode", "trashNote", "restoreTrash"] as const;
@@ -69,18 +72,20 @@ describe("桌面维护队列范围（F16 的反向护栏）", () => {
     expect(WIRING).not.toContain("let maintenanceQueue");
   });
 
-  it("用法分布：main 4 处（2 包装 + 2 注入）、接线层 4 处（1 声明 + 3 域注入）", () => {
-    // main：runFullSync 包装 / 自动备份包装 / 传给接线层 / 给 FileMetadataReconciler
+  it("用法分布：main 4 处（1 包装 + 3 注入）、接线层 4 处（1 声明 + 3 域注入）、boot 装配 4 处（2 声明 + 1 包装 + 1 注入）", () => {
+    // C-04 外迁后：main = runFullSync 包装 / 传给 ipcWiring / 给对账装配 / 给备份装配；包装随备份搬去 boot/backupWiring。
     expect(occurrenceLines(MAIN_LINES), "main.ts 的 enqueueMaintenance 用法数变了 ⇒ 确认是有意的并更新本条").toHaveLength(4);
     // wiring：deps 字段声明 / registerNotesIpc / registerSyncIpc / registerQuickNotesIpc
     expect(occurrenceLines(WIRING_LINES), "ipcWiring.ts 的 enqueueMaintenance 用法数变了 ⇒ 确认是有意的并更新本条").toHaveLength(4);
+    expect(occurrenceLines(BOOT_LINES), "boot 装配层的 enqueueMaintenance 用法数变了 ⇒ 确认是有意的并更新本条").toHaveLength(4); // 2 deps 声明 + 1 包装 + 1 注入
     // 包装用法必须是 await（不许"丢进队列不等待"，那会吞掉同步失败）
-    expect(MAIN.match(/await enqueueMaintenance\(/g) ?? []).toHaveLength(2);
+    expect((MAIN + BOOT).match(/await (?:deps\.)?enqueueMaintenance\(/g) ?? []).toHaveLength(2);
   });
 
   it("每处用法都落在已知的维护操作上下文里，且不碰本地写", () => {
     for (const i of occurrenceLines(MAIN_LINES)) assertMaintenanceContext(MAIN_FILE, MAIN_LINES, i);
     for (const i of occurrenceLines(WIRING_LINES)) assertMaintenanceContext(WIRING_FILE, WIRING_LINES, i);
+    for (const i of occurrenceLines(BOOT_LINES)) assertMaintenanceContext("boot/{backup,fileReconcile}Wiring.ts", BOOT_LINES, i);
   });
 
   it("注入点白名单：接线层的 3 处注入只能给「整轮同步 / 备份快照 / 缺正文补拉」三个域", () => {

@@ -24,10 +24,15 @@ import {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const srcRead = (rel: string) => readFileSync(path.join(ROOT, "src", rel), "utf8");
 
-/** 桌面实现面 = electron/store.ts 的 Store 类方法名。 */
+/** 桌面实现面 = electron/store.ts 的 Store 类方法名 + 协作类（C-06 抽出的 SyncStateBookkeeping 等）方法名；
+ *  登记可用「协作类.方法」（如 syncState.recordHistoryCleanup）指明表面路径，存在性比对取末段。 */
 const storeMethods = new Set(
-  [...readFileSync(path.join(ROOT, "electron", "store.ts"), "utf8").matchAll(/^  (?:async )?([a-zA-Z][A-Za-z0-9_]*)\(/gm)].map((m) => m[1]),
+  ["store.ts", "syncStateBookkeeping.ts"].flatMap((f) =>
+    [...readFileSync(path.join(ROOT, "electron", f), "utf8").matchAll(/^  (?:async )?([a-zA-Z][A-Za-z0-9_]*)\(/gm)].map((m) => m[1]),
+  ),
 );
+const desktopHas = (name: string): boolean =>
+  storeMethods.has(name) || storeMethods.has(name.slice(name.lastIndexOf(".") + 1));
 
 const mobileExports = (file: string): string[] =>
   [...srcRead(file).matchAll(/^export (?:async )?function ([A-Za-z0-9_]+)/gm)].map((m) => m[1]);
@@ -45,9 +50,9 @@ describe("领域仓储能力矩阵（C2-3）", () => {
 
   it("② 每条能力的桌面对应方法真实存在（desktop=null 表示桌面无同类，不算缺失）", () => {
     const bad = REPOSITORY_CAPABILITIES
-      .filter((row) => row.desktop !== null && !storeMethods.has(row.desktop))
+      .filter((row) => row.desktop !== null && !desktopHas(row.desktop))
       .map((row) => row.capability + " → Store." + row.desktop);
-    expect(bad, "以下登记项在 electron/store.ts 的 Store 里找不到：\n  " + bad.join("\n  ")).toEqual([]);
+    expect(bad, "以下登记项在 Store/协作类里找不到：\n  " + bad.join("\n  ")).toEqual([]);
   });
 
   it("③ 移动端仓储文件的导出函数必须全部登记（新能力只落一端 ⇒ 红）", () => {
@@ -76,8 +81,9 @@ describe("领域仓储能力矩阵（C2-3）", () => {
     const bad: string[] = [];
     for (const row of DESKTOP_ONLY_CAPABILITIES) {
       for (const name of row.desktop.split(" / ")) {
-        if (!storeMethods.has(name)) bad.push("桌面并不存在：Store." + name);
-        if (mobileAll.has(name)) bad.push("移动端其实有同名函数，不该列进 DESKTOP_ONLY：" + name);
+        const bare = name.slice(name.lastIndexOf(".") + 1);
+        if (!desktopHas(name)) bad.push("桌面并不存在：Store." + name);
+        if (mobileAll.has(bare)) bad.push("移动端其实有同名函数，不该列进 DESKTOP_ONLY：" + bare);
       }
     }
     expect(bad, "DESKTOP_ONLY 差集表有虚报：\n  " + bad.join("\n  ")).toEqual([]);

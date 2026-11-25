@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
  * ④ 空闲判定用 powerMonitor.getSystemIdleTime，报告经 Store/Diagnostics 的 fileReconcile 字段暴露。
  * 这些依赖 Electron 运行时（powerMonitor/BrowserWindow），没有单测入口，只能静态锁。
  */
-const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const main = ["./main.ts", "./boot/fileReconcileWiring.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：对账装配外迁
 /** 261112 拆分：IPC 接线装配搬到 electron/boot/ipcWiring.ts（main 只传依赖）。 */
 const ipcWiring = readFileSync(new URL("./boot/ipcWiring.ts", import.meta.url), "utf8");
 const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
@@ -34,8 +34,8 @@ describe("file metadata reconcile wiring（主进程）", () => {
 
   it("P2-B：lastRun 跨重启持久化 + 定时器按到期 sleep（不再每 60s 醒）", () => {
     // 持久化：main 注入 settings 读写；实现侧构造时读取、成功后保存。
-    expect(main).toContain("loadLastRunAt: () => store.getFileReconcileState().lastScanAt");
-    expect(main).toContain("saveLastRunAt: (at) => store.saveFileReconcileState({ lastScanAt: at })");
+    expect(main).toContain("loadLastRunAt: () => deps.store.getFileReconcileState().lastScanAt");
+    expect(main).toContain("saveLastRunAt: (at) => deps.store.saveFileReconcileState({ lastScanAt: at })");
     expect(store).toContain("getFileReconcileState(): FileReconcileState");
     expect(store).toContain("saveFileReconcileState(state: FileReconcileState)");
     expect(reconcile).toContain("computeReconcileWakeDelayMs");
@@ -48,7 +48,7 @@ describe("file metadata reconcile wiring（主进程）", () => {
   });
 
   it("同步成功分支打点（onSyncComplete 且位于 markSyncComplete 之后）", () => {
-    const mark = main.indexOf("store.markSyncComplete(");
+    const mark = main.indexOf("store.syncState.markSyncComplete(");
     const trigger = main.indexOf("fileReconciler?.onSyncComplete();");
     expect(mark).toBeGreaterThan(0);
     expect(trigger).toBeGreaterThan(mark);

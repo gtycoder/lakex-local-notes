@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-const MAIN = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const MAIN = ["./main.ts", "./boot/syncWiring.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：续传接线在 boot/syncWiring
 const HOOK = readFileSync(new URL("../src/hooks/useSyncProgress.ts", import.meta.url), "utf8");
 const DESKTOP_SYNC = readFileSync(new URL("./s3v3/desktopSync.ts", import.meta.url), "utf8");
 

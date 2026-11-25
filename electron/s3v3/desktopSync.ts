@@ -37,7 +37,7 @@ export function localHistoryAssetRefs(store: Store): Set<string> {
 
 /** SD-13：把本轮同步诊断写进 device_state（最近 3 轮环形）；失败不阻断同步结果。 */
 function recordV3Diagnostic(store: Store, report: S3v3DiagnosticReport): void {
-  try { store.recordV3SyncReport(report); } catch { /* 诊断落盘失败不影响同步 */ }
+  try { store.syncState.recordV3SyncReport(report); } catch { /* 诊断落盘失败不影响同步 */ }
 }
 
 /** 桌面设备 id（整轮与单条推送必须同 id，才能共用发布锁/基线语义）。 */
@@ -169,7 +169,7 @@ export async function syncWithV3(
     // 记账失败不影响同步结果；下一轮成功后水线继续前进即可覆盖。
     try {
       const at = new Date().toISOString();
-      store.markTombstonesWaterline(at);
+      store.syncState.markTombstonesWaterline(at);
       quickNotes?.markTombstonesWaterline(at);
       // 261204：成功同步后清零标签变动计数（标签随 quick 索引发布，任何成功轮都已携带）。
       quickNotes?.clearTagsPending();
@@ -177,14 +177,14 @@ export async function syncWithV3(
     // 目录归位（缺此步 is_dirty 永不清 → 「待同步 folders」常驻、便携包导出被挡）：
     // 引擎只把 folders 放进索引，不负责清 dirty；成功后按构建索引时的 updatedAt 快照条件归位。
     try {
-      for (const folder of store.listFoldersForSync()) store.markFolderSynced(folder.id, folder.updatedAt);
+      for (const folder of store.listFoldersForSync()) store.syncState.markFolderSynced(folder.id, folder.updatedAt);
     } catch { /* 归位失败不影响同步结果；下一轮再补 */ }
     // SD-03（261027）：把已发布到云端的文档/小记 id 回填（供给「缺正文 / 缺小记」的「可云恢复」判据；
     // Del-6：v2 的 sync_base 账本已删，v3 基线是唯一事实）。
     try {
       const baseline = await device.loadBaseline();
       if (baseline) {
-        store.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
+        store.syncState.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
         quickNotes?.markRemoteQuickNoteIds(baseline.quickNotes.items.map((q) => q.id));
       }
     } catch { /* 读基线失败时保持上一轮集合 */ }

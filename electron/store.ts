@@ -35,11 +35,8 @@ export type { PreparedDuplicate } from "./noteDuplication.js";
 
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { countTextStats } from "../src/core/textStats.js";
-import { missingBodyRecovery, type MissingBodyDoc } from "../src/core/missingBody.js";
-import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
-import type { S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
 import { AiWritingRepository } from "./aiWritingRepository.js";
 import { TrashRepository } from "./trashRepository.js";
@@ -48,6 +45,8 @@ import { HistoryLifecycle, type HistoryFallbackOptions, type HistoryFallbackResu
 import { OrphanLifecycle } from "./orphanLifecycle.js";
 import { Diagnostics } from "./diagnostics.js";
 import { SyncReconciliation } from "./syncReconciliation.js";
+import { SyncStateBookkeeping } from "./syncStateBookkeeping.js";
+import { MissingBodyService } from "./missingBodyService.js";
 import { SettingsRepository } from "./settingsRepository.js";
 import { NoteExport } from "./noteExport.js";
 import { SchemaInit } from "./schemaInit.js";
@@ -223,10 +222,6 @@ export class Store {
   private orphanLifecycle: OrphanLifecycle;
   private diagnostics: Diagnostics;
   private syncReconciliation: SyncReconciliation;
-  /** v3（261027 P0 止血配套）：最近一次已发布到云端的文档 id 集合（内存态）。
-   *  「缺正文」面板的「可云恢复」判据读它（Del-6：v2 的 sync_base 账本已删，这里是唯一事实）；
-   *  重启后由下一次同步回填（首轮同步前保持空 = 退回「仅历史」）。 */
-  private remoteNoteIds = new Set<string>();
   /** Batch4-B：文件↔元数据对账报告的只读提供者（由 main 注入后台对账器；未启用 = null）。 */
   private fileReconcileReportProvider: (() => unknown) | null = null;
   private settingsRepository: SettingsRepository;
@@ -251,6 +246,10 @@ export class Store {
   get documentTags(): DocumentTagsService { return this._documentTags; }
   /** 261105 P1 第 4 项：同步记录账本（设备本地，不进 S3/git）。 */
   readonly syncConflicts: SyncConflictsRepository;
+  /** C-06：同步账本（markSynced 族归位/标记位/水线/断点续传；真逻辑见 syncStateBookkeeping.ts）。 */
+  readonly syncState: SyncStateBookkeeping;
+  /** C-06：缺正文清单/恢复队列/处置（判据见 src/core/missingBody；实现见 missingBodyService.ts）。 */
+  readonly missingBody: MissingBodyService;
   /** 261106 批量操作（A 方案）：树/父级/环/sortOrder 的只读端口 + 单事务入口。 */
   readonly batchNotes: BatchNotesRepository;
   /** 261109 日记：幂等打开某天的存储编排（笔记本 → 年组 → 月组 → 文档，单事务）。 */
@@ -396,6 +395,8 @@ export class Store {
       removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       listNotesForSync: () => this.noteQueries.listNotesForSync(),
     });
+    // C-06：同步账本（真逻辑 + 对账门面，复用同一 db；调用点一律走 store.syncState.*）。
+    this.syncState = new SyncStateBookkeeping({ db: this.db, reconciliation: this.syncReconciliation });
     // P1-3 启动自检：历史库可能已写入未来水线（时钟前跳）⇒ 归一后回写一次，避免「删除永不传播」。
     try { this.syncReconciliation.repairTombstonesWaterline(); } catch { /* 自检失败不阻断启动 */ }
     this.noteExport = new NoteExport({
@@ -429,6 +430,16 @@ export class Store {
       removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       resolveParentNotebook: () => this.resolveParentNotebook(),
       createGroup: (parentId, title) => this.noteMetadata.createGroup(parentId, title),
+    });
+    // C-06：缺正文服务（路径/写盘回调与 Store 内部同一实现；调用点一律走 store.missingBody.*）。
+    this.missingBody = new MissingBodyService({
+      db: this.db,
+      notePathFor: (noteId) => this.notePath(noteId),
+      writeNoteBody: (noteId, content) => this.atomicWrite(this.notePath(noteId), content),
+      hasRemoteCopy: (noteId) => this.syncState.hasRemoteNoteId(noteId),
+      getS3Settings: () => this.settingsRepository.getS3Settings(),
+      getSyncSettings: () => this.settingsRepository.getSyncSettings(),
+      trash: this.trashLifecycle,
     });
     this.schemaInit.seed();
     // M2 v2：增量账本；仅在账本缺失/与活跃文档数不符时全量重建，正常启动零重建。
@@ -1737,167 +1748,6 @@ export class Store {
     this.settingsRepository.saveS3Settings(settings);
   }
 
-  /** 正文文件是否缺失（只 stat，不读正文；启动跳过缺正文文档用）。 */
-  isNoteBodyMissing(id: string): boolean {
-    return !fs.existsSync(this.notePath(id));
-  }
-  /**
-   * 资源页「缺正文」清单（261023）：只 stat、不读正文；带历史快照数 / v3 云端事实 / 云配置，
-   * 供 UI 分组（云可恢复 / 仅历史 / 无备份）与处置。
-   */
-  listMissingBodies(): MissingBodyDoc[] {
-    const rows = this.db.prepare(`
-      SELECT n.id, n.title, n.kind, n.updated_at, n.parent_id,
-             (SELECT COUNT(*) FROM note_history h WHERE h.note_id = n.id) AS history_count,
-             (SELECT MAX(h.id) FROM note_history h WHERE h.note_id = n.id) AS last_history_id
-      FROM notes n
-      WHERE n.deleted_at IS NULL AND n.parent_id != ?
-    `).all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; kind: string | null; updated_at: string; parent_id: string | null; history_count: number; last_history_id: number | null }>;
-    // 可云恢复 = 已配置 S3 **且**允许出网（「关闭云同步 = 完全没配置」红线：关闭时任何路径不出网）。
-    // 只配置但关闭同步的库，这条判据为 false，UI 会归到"仅历史 / 无备份"，不会诱导点击后报"云同步不可用"。
-    const cloudConfigured = canTouchNetwork(cloudStateOf(this.getS3Settings() !== null, this.getSyncSettings()));
-    const out: MissingBodyDoc[] = [];
-    for (const row of rows) {
-      if (fs.existsSync(this.notePath(row.id))) continue;
-      const historyCount = Number(row.history_count) || 0;
-      // 「曾经同步过」的 v3 事实 = 上一轮成功同步后回填的云端文档集合（desktopSync → markRemoteNoteIds）。
-      // Del-6：删掉 sync_base 旧兜底后这是唯一判据（v3 从不写 sync_base，读它只会永远漏判）。
-      const hasSyncBase = this.remoteNoteIds.has(row.id);
-      out.push({
-        id: row.id,
-        title: row.title,
-        kind: normalizeNoteKind(row.kind) ?? "doc",
-        updatedAt: row.updated_at,
-        parentId: row.parent_id ?? null,
-        historyCount,
-        lastHistoryId: row.last_history_id ?? null,
-        hasSyncBase,
-        cloudConfigured,
-        recovery: missingBodyRecovery({ cloudConfigured, hasSyncBase, historyCount }),
-      });
-    }
-    out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-    // 事件驱动：体检确实发现了缺正文才入队（正常同步不扫描、零额外 IO）。
-    if (out.length > 0) this.markBodyRecoveryPending(out.map((d) => d.id));
-    return out;
-  }
-
-  /** 缺正文恢复队列（事件驱动）：只在体检/读失败时入队，同步侧只消费一个小数组，不做全库扫描。 */
-  markBodyRecoveryPending(ids: string[]): void {
-    if (ids.length === 0) return;
-    const cur = this.listBodyRecoveryPending();
-    const next = [...new Set([...cur, ...ids])];
-    this.db.prepare("INSERT INTO device_state(key,value) VALUES('body_recovery_pending',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(next));
-  }
-  listBodyRecoveryPending(): string[] {
-    const row = this.db.prepare("SELECT value FROM device_state WHERE key='body_recovery_pending'").get() as { value: string } | undefined;
-    if (!row) return [];
-    try { const arr = JSON.parse(row.value); return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []; } catch { return []; }
-  }
-  clearBodyRecoveryPending(): void {
-    this.db.prepare("DELETE FROM device_state WHERE key='body_recovery_pending'").run();
-  }
-
-  /** 从云端恢复正文时落盘（原子写 + fsync；调用方负责校验 hash 与记账）。 */
-  writeRestoredBody(noteId: string, content: string): void {
-    this.atomicWrite(this.notePath(noteId), content);
-  }
-
-  /**
-   * 彻底删除「缺正文」文档：先走正常删除流程移入回收站（保留 deleted_from_parent_id 语义），
-   * 再彻底删除（写 purge 墓碑 ⇒ 云端下架、不会复活）。正文文件本来就不存在，不涉及文件移动。
-   */
-  purgeMissingBodyNote(id: string): void {
-    this.trashLifecycle.deleteTreeNode(id);
-    this.trashLifecycle.purgeTrashItem(id);
-  }
-
-
-  /** v3 发布成功后批量标记已同步（只改同步账本/UI dirty，不碰正文）。 */
-  /**
-   * 261107（数据安全）：saveBaseline 的**守卫式**归位。只清「本地 updated_at 仍等于基线快照」的行；
-   * 同步窗口内被改名/移动/恢复的行保持 dirty / restore_pending_at，留给下一轮重传。
-   * 对比旧的 markNotesSynced（无条件清）——那是「窗口内编辑被标 synced 后永远不传」的根因。
-   */
-  markNotesSyncedIfUnchanged(entries: readonly { id: string; updatedAt: string }[]): { cleared: number; kept: number } {
-    const expected = new Map<string, string>();
-    for (const entry of entries) expected.set(entry.id, entry.updatedAt);
-    const ids = [...expected.keys()];
-    let cleared = 0;
-    let kept = 0;
-    for (let i = 0; i < ids.length; i += 400) {
-      const batch = ids.slice(i, i + 400);
-      const ph = batch.map(() => "?").join(",");
-      const current = new Map(
-        (this.db.prepare("SELECT id, updated_at FROM notes WHERE id IN (" + ph + ") AND is_purged=0").all(...batch) as Array<{ id: string; updated_at: string }>)
-          .map((row) => [row.id, row.updated_at] as const),
-      );
-      const good: string[] = [];
-      for (const id of batch) {
-        const now = current.get(id);
-        if (now === undefined) continue; // 已彻底删除：无需清 UI 标记
-        if (now === expected.get(id)) good.push(id);
-        else kept++;
-      }
-      cleared += good.length;
-      if (good.length === 0) continue;
-      const goodPh = good.map(() => "?").join(",");
-      this.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (" + goodPh + ") AND is_purged=0").run(...good);
-      this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + goodPh + ") AND is_purged=0").run(...good);
-    }
-    return { cleared, kept };
-  }
-
-  markNotesSynced(ids: readonly string[]): void {
-    const unique = [...new Set(ids)];
-    for (let i = 0; i < unique.length; i += 200) {
-      const batch = unique.slice(i, i + 200);
-      const ph = batch.map(() => "?").join(",");
-      // restore_pending_at 一并清：本批 = 已发布基线里的条目，代表「恢复已生效/已重新上传成功」。
-      // 不清会让恢复标记残留 ⇒ v3 每轮都判 restore-upload 重传（cloud_deleted 也永远等不到清除）。
-      this.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (" + ph + ") AND is_purged=0").run(...batch);
-      this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + ph + ") AND is_purged=0").run(...batch);
-    }
-  }
-
-  /**
-   * v3：把「远端已彻底删除、本机保留回收站副本」的 remotePurged 全集落到本地标记位。
-   * - 传进来的 id → cloud_deleted=1（notes + tree_nodes 同步打标，UI/属性/回收站列表都读它）；
-   * - 不在集合里的已标记行 → 清 0（恢复并重新上传成功、或他端恢复后跟随，徽标消失）。
-   * 只写有变化的行 ⇒ 稳态同步零 INSERT/UPDATE；独立于 is_purged（后者是抑制位，不是展示位）。
-   */
-  applyNotesCloudDeleted(ids: readonly string[]): void {
-    const next = new Set(ids.filter((id) => isSafePathSegment(id)));
-    const flagged = new Set(
-      (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1").all() as Array<{ id: string }>).map((r) => r.id),
-    );
-    // 261124 B8（审计④F6）：**目录行按节点 id 置位/清除**（tree_nodes.note_file_id=NULL）——
-    // 旧实现树行只按 note_file_id 匹配、flagged 只扫 notes ⇒ folder 徽标既立不上也清不掉
-    //（settleCloudDeleted 永不失效）。树行业务 id 归一 = note_file_id ?? id。
-    for (const row of this.db.prepare("SELECT id, note_file_id FROM tree_nodes WHERE cloud_deleted=1").all() as Array<{ id: string; note_file_id: string | null }>) {
-      flagged.add(row.note_file_id ?? row.id);
-    }
-    const setNote = this.db.prepare("UPDATE notes SET cloud_deleted=1 WHERE id=? AND cloud_deleted=0");
-    const clearNote = this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE id=? AND cloud_deleted=1");
-    const setNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=1 WHERE (note_file_id=? OR id=?) AND cloud_deleted=0");
-    const clearNode = this.db.prepare("UPDATE tree_nodes SET cloud_deleted=0 WHERE (note_file_id=? OR id=?) AND cloud_deleted=1");
-    const tx = this.db.transaction(() => {
-      for (const id of next) if (!flagged.has(id)) { setNote.run(id); setNode.run(id, id); }
-      for (const id of flagged) if (!next.has(id)) { clearNote.run(id); clearNode.run(id, id); }
-    });
-    tx();
-  }
-
-  /** 当前「云端已删除 · 仅本地」标记的文档 id（诊断/测试用；UI 走 listNoteSummaries/listTreeNodes）。 */
-  listCloudDeletedNoteIds(): string[] {
-    return (this.db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
-  }
-
-  /** 显式恢复标记（restore_pending_at）的本地文档 id：v3 adapter 用它填 state.restorePending。 */
-  listRestorePendingNoteIds(): string[] {
-    return (this.db.prepare("SELECT id FROM notes WHERE deleted_at IS NULL AND restore_pending_at IS NOT NULL ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id);
-  }
-
   contentHash(id: string): string {
     return this.syncReconciliation.contentHash(id);
   }
@@ -1910,33 +1760,6 @@ export class Store {
   /** 同步合并写入（远端锁状态按 editLockedAt LWW 后由调用方判定）。 */
   applyRemoteEditLock(id: string, locked: boolean, editLockedAt: string | null): void {
     this.noteMetadata.applyRemoteEditLock(id, locked, editLockedAt);
-  }
-
-  /** 本地同步快照保护（V5 §5.2）：仅当本地状态与快照一致才标记 synced（语义详见 syncReconciliation）。 */
-  markSyncedIfUnchanged(noteId: string, expected: {
-    contentHash: string; updatedAt: string; title: string; parentId: string | null;
-    sortOrder: number; isEditLocked: boolean; editLockedAt: string | null; icon: string | null;
-  }): boolean {
-    return this.syncReconciliation.markSyncedIfUnchanged(noteId, expected);
-  }
-
-  markSynced(id: string): void {
-    this.syncReconciliation.markSynced(id);
-  }
-
-  /** 目录/分组归位（V5 §5.1）：按构建 manifest 时的 updatedAt 快照条件归位。 */
-  markFolderSynced(id: string, expectedUpdatedAt: string): boolean {
-    return this.syncReconciliation.markFolderSynced(id, expectedUpdatedAt);
-  }
-
-  /** 是否处于"回收站恢复后待同步"状态（墓碑权威下唯一 local-wins 例外）。 */
-  isRestorePending(id: string): boolean {
-    return this.syncReconciliation.isRestorePending(id);
-  }
-
-  /** 是否处于待上传/本地未对齐状态（sync_state != synced）。 */
-  isSyncPending(id: string): boolean {
-    return this.syncReconciliation.isSyncPending(id);
   }
 
   getS3GcSettings(): S3GcSettings {
@@ -1953,49 +1776,6 @@ export class Store {
 
   saveSyncSettings(settings: SyncSettings): void {
     this.settingsRepository.saveSyncSettings(settings);
-  }
-
-  recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean): void {
-    this.syncReconciliation.recordS3GcLog(action, key, reason, commitId, deviceId, ok);
-  }
-
-  listS3GcLog(): Array<{ id: number; ts: string; action: string; key: string; reason: string; commitId: string | null; deviceId: string | null; ok: boolean }> {
-    return this.syncReconciliation.listS3GcLog();
-  }
-
-  markSyncComplete(at: string): void {
-    this.syncReconciliation.markSyncComplete(at);
-  }
-
-  recordSyncResult(json: string): void {
-    this.syncReconciliation.recordSyncResult(json);
-  }
-
-  /** SD-13：最近 3 轮 v3 同步诊断（device_state.sync_v3_reports；设置页「同步诊断」一键复制）。 */
-  recordV3SyncReport(report: S3v3DiagnosticReport): void {
-    this.syncReconciliation.recordV3SyncReport(report);
-  }
-
-  listV3SyncReports(): S3v3DiagnosticReport[] {
-    return this.syncReconciliation.listV3SyncReports();
-  }
-
-  /** P4：记录最近一次历史清理结果（自动/手动），供设置面板展示与排查 */
-  recordHistoryCleanup(result: HistoryCleanupResult): void {
-    this.syncReconciliation.recordHistoryCleanup(result);
-  }
-
-  getLastHistoryCleanup(): { at: string; deletedSnapshots: number; freedBytes: number } | null {
-    return this.syncReconciliation.getLastHistoryCleanup();
-  }
-
-  /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */
-  pruneTombstones(ids: string[]): void {
-    this.syncReconciliation.pruneTombstones(ids);
-  }
-
-  getSyncStatus(): { lastSyncedAt: string | null; lastResult: Record<string, unknown> | null } {
-    return this.syncReconciliation.getSyncStatus();
   }
 
   notePathFor(id: string): string {
@@ -2032,7 +1812,7 @@ export class Store {
     // A 拉取时若照常 importRemoteFolder，会在本机重建一个已 purge 的目录（= 删除不传播）。
     // **只拦 trashed 副本**：远端若是 active（trashedAt 空）= 他端**显式恢复**（AGENTS §3#4 的唯一
     // 例外，恢复会重新上传并传播），必须放行，否则两端永久不一致且每轮重试都失败。
-    if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
+    if (folder.trashedAt && this.syncState.isFolderPurged(folder.id)) return;
     // F-10/D4（261113）：远端 active = 他端显式恢复（AGENTS §3#4 唯一例外）⇒ 本地墓碑退役，
     // 否则之后他端再删除会被上面的 isFolderPurged 永久丢弃（删除不传播、被删的复活）。
     if (!folder.trashedAt) this.syncReconciliation.reviveTombstone(folder.id);
@@ -2042,7 +1822,7 @@ export class Store {
   /** v3：把合并结果里的目录元数据原样落库（含 updatedAt；不按新旧做条件）。 */
   applyRemoteFolderMeta(folder: SyncFolder): void {
     // 同 importRemoteFolder：只拦「已 purge 目录的 trashed 副本」；远端 active = 他端显式恢复，放行。
-    if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
+    if (folder.trashedAt && this.syncState.isFolderPurged(folder.id)) return;
     if (!folder.trashedAt) this.syncReconciliation.reviveTombstone(folder.id);
     this.noteMetadata.applyRemoteFolderMeta(folder);
   }
@@ -2093,89 +1873,6 @@ export class Store {
 
   listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; nodeType: string }> {
     return this.syncReconciliation.listDeletedNotesForSync();
-  }
-
-  /** v3 删除意图来源：已彻底删除（purged_at 非空）的墓碑；用于把本地 purge 传播到云端。 */
-  listPurgedTombstones(): Array<{ id: string; purgedAt: string | null }> {
-    return (this.db.prepare("SELECT id, purged_at FROM deleted_notes WHERE purged_at IS NOT NULL").all() as Array<{ id: string; purged_at: string | null }>)
-      .map((r) => ({ id: r.id, purgedAt: r.purged_at }));
-  }
-
-  /** v3 同步成功后回填：这批文档在云端有副本（缺正文时可尝试从云端拉回）。 */
-  markRemoteNoteIds(ids: string[]): void {
-    this.remoteNoteIds = new Set(ids);
-  }
-
-  /** Del-6（261029）：墓碑发布**水线**（替代逐行 published_at；desktopSync 成功后写入）。
-   * 待同步判据 = deleted_at > 水线（见 syncReconciliation）。 */
-  markTombstonesWaterline(at?: string): void {
-    this.syncReconciliation.markTombstonesWaterline(at);
-  }
-  getTombstonesWaterline(): string {
-    return this.syncReconciliation.getTombstonesWaterline();
-  }
-
-  /** P1-3 启动自检：历史库若已写入未来水线（时钟前跳），归一后回写一次（幂等）。 */
-  repairTombstonesWaterline(): void {
-    this.syncReconciliation.repairTombstonesWaterline();
-  }
-
-  /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */
-  getLastSeenCommitId(): string | null {
-    return this.syncReconciliation.getLastSeenCommitId();
-  }
-  setLastSeenCommitId(commitId: string): void {
-    this.syncReconciliation.setLastSeenCommitId(commitId);
-  }
-
-  /**
-   * 断点续传标记（261026）：一轮同步开始即置位，**成功结束才清除**。
-   * 进程被杀/崩溃/断网中断时标记残留 ⇒ 下次启动自动续传（不管 autoMode 是 interval/onOpenClose/manual）。
-   */
-  markSyncInterrupted(at: string): void {
-    this.db.prepare("INSERT INTO device_state(key,value) VALUES('sync_interrupted_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
-  }
-  clearSyncInterrupted(): void {
-    this.db.prepare("DELETE FROM device_state WHERE key='sync_interrupted_at'").run();
-  }
-  getSyncInterruptedAt(): string | null {
-    const row = this.db.prepare("SELECT value FROM device_state WHERE key='sync_interrupted_at'").get() as { value: string } | undefined;
-    return row?.value ?? null;
-  }
-
-  /** 本地上次同步时的墓碑签名（COUNT:MAX(deleted_at)），早退判定"是否新增了 purge"。 */
-  getLastTombstoneSig(): string {
-    return this.syncReconciliation.getLastTombstoneSig();
-  }
-  setLastTombstoneSig(sig: string): void {
-    this.syncReconciliation.setLastTombstoneSig(sig);
-  }
-  tombstoneSignature(): string {
-    return this.syncReconciliation.tombstoneSignature();
-  }
-
-  /** 廉价 pending 指纹（三个索引级 COUNT，微秒级）：IPC 层每次调用后 diff，变化才广播完整摘要。 */
-  pendingSignature(): string {
-    return this.syncReconciliation.pendingSignature();
-  }
-
-  getSyncPendingSummary(): { documents: number; folders: number; resources: number; generatedAt: string } {
-    return this.syncReconciliation.getSyncPendingSummary();
-  }
-
-  /** 是否有本地待上传变更（早退判定；详见 syncReconciliation）。 */
-  hasLocalPendingNotes(): boolean {
-    return this.syncReconciliation.hasLocalPendingNotes();
-  }
-
-  /** 本地已彻底删除（purge）过的 folder/group（永久判定，node_type='folder' 墓碑；详见 syncReconciliation）。 */
-  isFolderPurged(id: string): boolean {
-    return this.syncReconciliation.isFolderPurged(id);
-  }
-
-  /** 已彻底删除（purge）的墓碑：下次同步需立即删 S3 前缀。 */
-  listPurgedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; purgedAt: string }> {
-    return this.syncReconciliation.listPurgedNotesForSync();
   }
 
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录。 */

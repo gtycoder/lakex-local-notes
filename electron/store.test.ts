@@ -545,7 +545,7 @@ describe("目录树操作", () => {
     expect(store.readNote(note.id).content).toContain("v1");
     // 显式恢复是唯一例外：恢复后可正常保存（restore_pending_at → local-wins）
     store.restoreTrashItem(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(true);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(true);
     store.saveNote(note.id, "待编辑", "<p>恢复后编辑版</p>");
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
     expect(row.parentId).toBe(nb.id); // 回到原位置
@@ -584,12 +584,12 @@ describe("目录树操作", () => {
 
     store.deleteTreeNode(note.id);
     store.restoreTrashItem(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(true);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(true);
 
     // 恢复后未同步，再次删除：标记必须清除——残留会让上传方向以"恢复语义"（trashedAt:null）
     // 发布 active 条目 → 本地删除不传播、云端复活。
     store.deleteTreeNode(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(false);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(false);
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
     expect(row.parentId).toBe("notebook-trash");
     expect(row.trashedAt).not.toBeNull();
@@ -604,11 +604,11 @@ describe("目录树操作", () => {
 
     store.deleteTreeNode(note.id);
     store.restoreTrashItem(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(true);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(true);
 
     // 删分组 → 子笔记级联进回收站，标记必须一并清（同一残留问题）
     store.deleteTreeNode(group.id);
-    expect((store as any).isRestorePending(note.id)).toBe(false);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(false);
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
     expect(row.trashedAt).not.toBeNull();
   });
@@ -620,16 +620,16 @@ describe("目录树操作", () => {
     // A 彻底删除整册（写墓碑 + 物理删）→ 同步侧结算前缀删除（purged_at 清空，墓碑作永久保护）
     store.deleteTreeNode(nb.id);
     store.purgeTrashItem(nb.id);
-    expect(store.isFolderPurged(nb.id)).toBe(true);
+    expect(store.syncState.isFolderPurged(nb.id)).toBe(true);
     store.markPurgeSynced(nb.id);
-    expect(store.isFolderPurged(nb.id)).toBe(true);
+    expect(store.syncState.isFolderPurged(nb.id)).toBe(true);
 
     // B 端显式恢复并发布 active ⇒ A 拉取落库（261113 修复点：墓碑必须退役）
     store.importRemoteFolder({
       id: nb.id, title: "复活册", parentId: null, sortOrder: 0, nodeType: "notebook",
       icon: null, updatedAt: new Date().toISOString(), trashedAt: null, deletedFromParentId: null,
     });
-    expect(store.isFolderPurged(nb.id)).toBe(false);
+    expect(store.syncState.isFolderPurged(nb.id)).toBe(false);
 
     // 之后 B 再删一次必须能传播（旧行为：applyRemoteFolderMeta 被 isFolderPurged 丢弃 ⇒ A 保持活跃 ⇒ 复活）
     const t2 = new Date(Date.now() + 1000).toISOString();
@@ -665,7 +665,7 @@ describe("目录树操作", () => {
       id: nb.id, title: "未结算册", parentId: null, sortOrder: 0, nodeType: "notebook",
       icon: null, updatedAt: new Date().toISOString(), trashedAt: null, deletedFromParentId: null,
     });
-    expect(store.listPurgedNotesForSync().some((t) => t.id === nb.id)).toBe(true);
+    expect(store.syncState.listPurgedNotesForSync().some((t) => t.id === nb.id)).toBe(true);
   });
 
   it("审计 F-10：子项先单独删除、父随后删除，恢复父 ⇒ 子一并回到原位（子树恢复语义钉死）", () => {
@@ -699,10 +699,10 @@ describe("目录树操作", () => {
     store.saveNote(note.id, "子笔记", "<p>v1</p>");
     store.deleteTreeNode(note.id);
     store.restoreTrashItem(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(true);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(true);
 
     store.applyRemotePurge(note.id);
-    expect((store as any).isRestorePending(note.id)).toBe(false);
+    expect((store as any).syncState.isRestorePending(note.id)).toBe(false);
     const row = store.listNotesForSync().find((n) => n.id === note.id)!;
     expect(row.syncState).toBe("purged");
   });
@@ -799,7 +799,7 @@ describe("目录树操作", () => {
     expect(sync.syncState).toBe("local");
     expect(sync.icon).toBe("📌");
     // 下载对账路径（sync_state='synced' 的笔记才应用远端元数据）
-    store.markSynced(note.id);
+    store.syncState.markSynced(note.id);
     expect(store.listNotesForSync().find((n) => n.id === note.id)?.syncState).toBe("synced");
   });
 
@@ -854,7 +854,7 @@ describe("目录树操作", () => {
     // purge 后写墓碑（防复活 + M4 删云端前缀）
     expect(store.listDeletedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
     expect(store.listDeletedNotesForSync().some((d) => d.id === n2.id)).toBe(true);
-    expect(store.listPurgedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
+    expect(store.syncState.listPurgedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
   });
 });
 
@@ -1383,8 +1383,8 @@ describe("文档历史（快照，纯本地）", () => {
     expect(stats.snapshotCount).toBe(store.listNoteHistory(id).length);
     expect(stats.totalBytes).toBeGreaterThan(0);
     // 清理结果记录
-    store.recordHistoryCleanup({ deletedSnapshots: 2, freedBytes: 10 });
-    const last = store.getLastHistoryCleanup();
+    store.syncState.recordHistoryCleanup({ deletedSnapshots: 2, freedBytes: 10 });
+    const last = store.syncState.getLastHistoryCleanup();
     expect(last?.deletedSnapshots).toBe(2);
     expect(last?.freedBytes).toBe(10);
   });
@@ -1550,23 +1550,23 @@ describe("同步状态 / 导入", () => {
 
   it("markSynced / markSyncComplete / recordSyncResult / getSyncStatus", () => {
     const { id } = makeNote();
-    store.markSynced(id);
-    store.markSyncComplete("2026-08-02T10:00:00.000Z");
-    store.recordSyncResult(JSON.stringify({ uploaded: 1 }));
-    const status = store.getSyncStatus();
+    store.syncState.markSynced(id);
+    store.syncState.markSyncComplete("2026-08-02T10:00:00.000Z");
+    store.syncState.recordSyncResult(JSON.stringify({ uploaded: 1 }));
+    const status = store.syncState.getSyncStatus();
     expect(status.lastSyncedAt).toBe("2026-08-02T10:00:00.000Z");
     expect(status.lastResult).toEqual({ uploaded: 1 });
   });
 
   it("v3 同步诊断：最近 3 轮环形落 device_state，坏数据当空（SD-13）", () => {
     const build = (at: string) => buildS3v3DiagnosticReport({ at, ok: true, durationMs: 10, uploaded: 1 });
-    for (const at of ["a", "b", "c", "d"]) store.recordV3SyncReport(build(at));
-    expect(store.listV3SyncReports().map((r) => r.at)).toEqual(["b", "c", "d"]);
+    for (const at of ["a", "b", "c", "d"]) store.syncState.recordV3SyncReport(build(at));
+    expect(store.syncState.listV3SyncReports().map((r) => r.at)).toEqual(["b", "c", "d"]);
     // 结构损坏（外部写入/旧版本）⇒ 读回空列表，不抛错
     new Database(path.join(dir, "metadata.sqlite3"))
       .prepare("INSERT INTO device_state(key,value) VALUES('sync_v3_reports','{bad') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run();
-    expect(store.listV3SyncReports()).toEqual([]);
+    expect(store.syncState.listV3SyncReports()).toEqual([]);
   });
 
   it("pruneTombstones 剪除墓碑（墓碑仅 purge 产生；软删 = 移动无墓碑）", () => {
@@ -1577,9 +1577,9 @@ describe("同步状态 / 导入", () => {
     // purge 写墓碑 → 可剪除
     store.purgeTrashItem(id);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(true);
-    store.pruneTombstones([id]);
+    store.syncState.pruneTombstones([id]);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(false);
-    store.pruneTombstones([]); // 空数组安全
+    store.syncState.pruneTombstones([]); // 空数组安全
   });
 
   it("purge 墓碑带 node_type：文档=note（发布方向），笔记本/分组=folder（仅本地下载过滤）", () => {
@@ -1600,11 +1600,11 @@ describe("同步状态 / 导入", () => {
     const nb = store.createNotebook("待彻底删-永久判定");
     store.deleteTreeNode(nb.id);
     store.purgeTrashItem(nb.id);
-    expect(store.isFolderPurged(nb.id)).toBe(true);
+    expect(store.syncState.isFolderPurged(nb.id)).toBe(true);
     store.markPurgeSynced(nb.id); // 前缀删完：purged_at 清空
     expect((store as any).db.prepare("SELECT purged_at FROM deleted_notes WHERE id=?").get(nb.id).purged_at).toBeFalsy();
-    expect(store.isFolderPurged(nb.id)).toBe(true);
-    expect(store.isFolderPurged(store.createNotebook("未被删-永久判定").id)).toBe(false);
+    expect(store.syncState.isFolderPurged(nb.id)).toBe(true);
+    expect(store.syncState.isFolderPurged(store.createNotebook("未被删-永久判定").id)).toBe(false);
   });
 
   it("purge 时 notes 行缺失也必须写 note 墓碑（云端不下架就会被重新导入成孤儿）", () => {
@@ -1652,23 +1652,23 @@ describe("同步状态 / 导入", () => {
 
   it("Del-6：墓碑待同步判据 = deleted_at > 水线（成功同步后 markTombstonesWaterline 清零）；folder 墓碑不计", () => {
     // 基线（含 welcome-note 等本地待上传）；folder 墓碑永不计数
-    const base = store.getSyncPendingSummary().documents;
+    const base = store.syncState.getSyncPendingSummary().documents;
     const nb = store.createNotebook("待彻底删-计数");
     const note = store.createNoteIn(nb.id, "子笔记");
     store.saveNote(note.id, "子笔记", "<p>内容</p>");
     store.deleteTreeNode(nb.id);
     store.purgeTrashItem(nb.id);
     // 晚于水线的 note 墓碑 → +1（folder 墓碑不计入）
-    expect(store.getSyncPendingSummary().documents).toBe(base + 1);
-    expect(store.pendingSignature().split(":")[2]).toBe("1");
+    expect(store.syncState.getSyncPendingSummary().documents).toBe(base + 1);
+    expect(store.syncState.pendingSignature().split(":")[2]).toBe("1");
     // 成功同步后推进水线（逐行 published_at 已删）→ 回到基线（folder 墓碑仍不计）
-    store.markTombstonesWaterline(new Date(Date.now() + 60_000).toISOString());
-    expect(store.getSyncPendingSummary().documents).toBe(base);
-    expect(store.pendingSignature().split(":")[2]).toBe("0");
+    store.syncState.markTombstonesWaterline(new Date(Date.now() + 60_000).toISOString());
+    expect(store.syncState.getSyncPendingSummary().documents).toBe(base);
+    expect(store.syncState.pendingSignature().split(":")[2]).toBe("0");
   });
 
   it("P1-3：库里已有未来水线（时钟前跳）⇒ 读取归一为 0、墓碑重新待同步、可一次修复", () => {
-    const base = store.getSyncPendingSummary().documents;
+    const base = store.syncState.getSyncPendingSummary().documents;
     const nb = store.createNotebook("时钟前跳");
     const note = store.createNoteIn(nb.id, "子笔记");
     store.saveNote(note.id, "子笔记", "<p>x</p>");
@@ -1677,17 +1677,17 @@ describe("同步状态 / 导入", () => {
     const db = (store as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => unknown } } }).db;
     db.prepare("UPDATE device_state SET value=? WHERE key='tombstones_published_at'").run("2099-01-01T00:00:00.000Z");
     // 旧行为：deleted_at > 2099 恒 false ⇒ 删除永不传播。归一后必须重新待同步。
-    expect(store.getTombstonesWaterline()).toBe("0");
-    expect(store.getSyncPendingSummary().documents).toBe(base + 1);
-    store.repairTombstonesWaterline();
-    expect(store.getTombstonesWaterline()).toBe("0");
+    expect(store.syncState.getTombstonesWaterline()).toBe("0");
+    expect(store.syncState.getSyncPendingSummary().documents).toBe(base + 1);
+    store.syncState.repairTombstonesWaterline();
+    expect(store.syncState.getTombstonesWaterline()).toBe("0");
     // 单调：已推进过的水线不会被更早的时间倒退
-    store.markTombstonesWaterline("2026-11-05T07:00:00.000Z");
-    store.markTombstonesWaterline("2026-11-05T06:00:00.000Z");
-    expect(store.getTombstonesWaterline()).toBe("2026-11-05T07:00:00.000Z");
+    store.syncState.markTombstonesWaterline("2026-11-05T07:00:00.000Z");
+    store.syncState.markTombstonesWaterline("2026-11-05T06:00:00.000Z");
+    expect(store.syncState.getTombstonesWaterline()).toBe("2026-11-05T07:00:00.000Z");
     // 写未来值 ⇒ 夹到现在，绝不落未来
-    store.markTombstonesWaterline("2099-01-01T00:00:00.000Z");
-    expect(store.getTombstonesWaterline() <= new Date(Date.now() + 1000).toISOString()).toBe(true);
+    store.syncState.markTombstonesWaterline("2099-01-01T00:00:00.000Z");
+    expect(store.syncState.getTombstonesWaterline() <= new Date(Date.now() + 1000).toISOString()).toBe(true);
   });
 
   it("Del-6：水线键缺失直接写「0」（不回查 published_at 回填、不删旧列）⇒ 旧库墓碑行全部计待同步（幂等重发一轮）", () => {
@@ -1701,12 +1701,12 @@ describe("同步状态 / 导入", () => {
     const migrated = new Store(legacyRoot);
     try {
       // 水线键缺失 = 直接写「0」：不读 published_at 做历史回填（AGENTS §3#7 不为历史数据写迁移）
-      expect(migrated.getTombstonesWaterline()).toBe("0");
+      expect(migrated.syncState.getTombstonesWaterline()).toBe("0");
       // 旧列残留不清理（不写迁移/清理 DDL，AGENTS §3#7）
       const cols = (migrated as unknown as { db: { prepare: (sql: string) => { all: () => Array<{ name: string }> } } }).db.prepare("PRAGMA table_info(deleted_notes)").all();
       expect(cols.some((c) => c.name === "published_at")).toBe(true);
       // 全部旧墓碑行（含曾发布的）deleted_at > "0" ⇒ 计待同步：幂等重发一轮删除意图，方向安全
-      expect(migrated.pendingSignature().split(":")[2]).toBe("2");
+      expect(migrated.syncState.pendingSignature().split(":")[2]).toBe("2");
       expect(migrated.listDeletedNotesForSync().map((d) => d.id)).toEqual(expect.arrayContaining(["t-published", "t-pending"]));
     } finally {
       fs.rmSync(legacyRoot, { recursive: true, force: true });
@@ -2067,44 +2067,44 @@ describe("同步待处理摘要", () => {
     const filename = assetFilename();
     const content = `<p><img src="http://127.0.0.1:19876/${note.id}/${filename}"></p>`;
     store.saveNote(note.id, note.title, content, { plain: "摘要", markdown: content });
-    const summary = store.getSyncPendingSummary();
+    const summary = store.syncState.getSyncPendingSummary();
     expect(summary.documents).toBeGreaterThanOrEqual(1);
     expect(summary.resources).toBe(0);
     expect(summary.generatedAt).toMatch(/T/);
   });
 
   it("counts pending folder metadata separately", () => {
-    for (const n of store.listNotesForSync()) store.markSynced(n.id);
-    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
+    for (const n of store.listNotesForSync()) store.syncState.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.syncState.markFolderSynced(f.id, f.updatedAt);
     const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
     const group = store.createGroup(nb.id, "待同步目录");
-    const summary = store.getSyncPendingSummary();
+    const summary = store.syncState.getSyncPendingSummary();
     expect(summary.folders).toBeGreaterThanOrEqual(1);
     expect(summary.documents).toBe(0);
     store.setNodeIcon(group.id, "star");
-    expect(store.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
+    expect(store.syncState.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
   });
 
   it("counts a trashed folder as pending (aligns with listFoldersForSync)", () => {
-    for (const n of store.listNotesForSync()) store.markSynced(n.id);
-    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
+    for (const n of store.listNotesForSync()) store.syncState.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.syncState.markFolderSynced(f.id, f.updatedAt);
     const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
     const group = store.createGroup(nb.id, "被回收目录");
-    store.markFolderSynced(group.id, group.updatedAt);
-    expect(store.getSyncPendingSummary().folders).toBe(0);
+    store.syncState.markFolderSynced(group.id, group.updatedAt);
+    expect(store.syncState.getSyncPendingSummary().folders).toBe(0);
     // 移入回收站 = 移动即同步传播；发布后 markFolderSynced 才会归位，故入回收站后应计入待同步目录。
     store.deleteTreeNode(group.id);
     expect(store.listFoldersForSync().some((f) => f.id === group.id)).toBe(true);
-    expect(store.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
+    expect(store.syncState.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
   });
 
   it("counts a local delete tombstone as one pending document", () => {
     const note = store.createNote("待删除摘要");
-    store.markSynced(note.id);
-    const beforeDelete = store.getSyncPendingSummary().documents;
+    store.syncState.markSynced(note.id);
+    const beforeDelete = store.syncState.getSyncPendingSummary().documents;
     store.deleteTreeNode(note.id);
     // 删除会把已同步文档替换成墓碑；数量至少不应静默减少。
-    expect(store.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
+    expect(store.syncState.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
   });
 });
 
@@ -2155,9 +2155,9 @@ describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPe
    * 注意：个人笔记本初始化就是 local（store.ts:335），新 group 查询会命中它——
    * 这恰好证明 markFolderSynced 归位是必配项；基线用 listFoldersForSync + markFolderSynced 归位。 */
   function syncedBaseline() {
-    for (const n of store.listNotesForSync()) store.markSynced(n.id);
-    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
-    expect(store.hasLocalPendingNotes()).toBe(false); // 基线确认
+    for (const n of store.listNotesForSync()) store.syncState.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.syncState.markFolderSynced(f.id, f.updatedAt);
+    expect(store.syncState.hasLocalPendingNotes()).toBe(false); // 基线确认
   }
 
   it("纯 group 改名后 hasLocalPendingNotes() 应为 true（现状返回 false → 漏检）", () => {
@@ -2166,7 +2166,7 @@ describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPe
     const group = store.createGroup(nb.id, "项目A");
     // 纯目录改动：renameTreeNode 只写 tree_nodes.sync_state='local'，notes 侧是空更新（group 无 note_file_id）
     store.renameTreeNode(group.id, "项目B");
-    expect(store.hasLocalPendingNotes()).toBe(true);
+    expect(store.syncState.hasLocalPendingNotes()).toBe(true);
   });
 
   it("纯 group 图标变化后 hasLocalPendingNotes() 应为 true（现状返回 false → 漏检）", () => {
@@ -2174,7 +2174,7 @@ describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPe
     const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
     const group = store.createGroup(nb.id, "项目A");
     store.setNodeIcon(group.id, "🚀");
-    expect(store.hasLocalPendingNotes()).toBe(true);
+    expect(store.syncState.hasLocalPendingNotes()).toBe(true);
   });
 });
 
@@ -2197,7 +2197,7 @@ describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", 
     const snapshot = snapshotOf(note.id); // 同步开始快照
     await new Promise((r) => setTimeout(r, 5)); // 推进时间避免同毫秒 updated_at 撞车
     store.saveNote(note.id, "竞态笔记改", "<p>v2</p>"); // 上传期间编辑
-    const ok = store.markSyncedIfUnchanged(note.id, snapshot);
+    const ok = store.syncState.markSyncedIfUnchanged(note.id, snapshot);
     expect(ok).toBe(false);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("local");
   });
@@ -2208,7 +2208,7 @@ describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", 
     const snapshot = snapshotOf(note.id);
     await new Promise((r) => setTimeout(r, 5));
     store.renameTreeNode(note.id, "标题改了"); // meta 编辑
-    expect(store.markSyncedIfUnchanged(note.id, snapshot)).toBe(false);
+    expect(store.syncState.markSyncedIfUnchanged(note.id, snapshot)).toBe(false);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("local");
   });
 
@@ -2216,7 +2216,7 @@ describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", 
     const note = store.createNote("正常笔记");
     store.saveNote(note.id, "正常笔记", "<p>v1</p>");
     const snapshot = snapshotOf(note.id);
-    expect(store.markSyncedIfUnchanged(note.id, snapshot)).toBe(true);
+    expect(store.syncState.markSyncedIfUnchanged(note.id, snapshot)).toBe(true);
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("synced");
   });
 });
@@ -2328,7 +2328,7 @@ describe("手动删数据（正文文件缺失）的处置", () => {
   it("readNote 不抛 ENOENT：返回 bodyMissing + 空正文，isNoteBodyMissing=true", () => {
     const note = store.createNote("缺正文");
     fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
-    expect(store.isNoteBodyMissing(note.id)).toBe(true);
+    expect(store.missingBody.isNoteBodyMissing(note.id)).toBe(true);
     const doc = store.readNote(note.id);
     expect(doc.bodyMissing).toBe(true);
     expect(doc.content).toBe("");
@@ -2340,7 +2340,7 @@ describe("手动删数据（正文文件缺失）的处置", () => {
     const doc = store.readNote(note.id);
     expect(doc.bodyMissing).toBeUndefined();
     expect(doc.content.length).toBeGreaterThan(0);
-    expect(store.isNoteBodyMissing(note.id)).toBe(false);
+    expect(store.missingBody.isNoteBodyMissing(note.id)).toBe(false);
   });
 });
 
@@ -2351,21 +2351,21 @@ describe("缺正文文档清单与彻底删除（资源页 261023）", () => {
     const plain = store.createNote("无历史");
     fs.rmSync(path.join(dir, noteBodyRelativePath("doc", withHistory.id)));
     fs.rmSync(path.join(dir, noteBodyRelativePath("doc", plain.id)));
-    const rows = store.listMissingBodies();
+    const rows = store.missingBody.listMissingBodies();
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(withHistory.id)?.recovery).toBe("history");
     expect(byId.get(withHistory.id)?.historyCount).toBeGreaterThanOrEqual(1);
     expect(byId.get(withHistory.id)?.lastHistoryId).not.toBeNull();
     expect(byId.get(plain.id)?.recovery).toBe("none");
     const normal = store.createNote("正常");
-    expect(store.listMissingBodies().some((r) => r.id === normal.id)).toBe(false);
+    expect(store.missingBody.listMissingBodies().some((r) => r.id === normal.id)).toBe(false);
   });
 
   it("purgeMissingBodyNote：移入回收站后彻底删除，并写墓碑（不会复活）", () => {
     const note = store.createNote("待删");
     fs.rmSync(path.join(dir, noteBodyRelativePath("doc", note.id)));
-    store.purgeMissingBodyNote(note.id);
-    expect(store.listMissingBodies().some((r) => r.id === note.id)).toBe(false);
+    store.missingBody.purgeMissingBodyNote(note.id);
+    expect(store.missingBody.listMissingBodies().some((r) => r.id === note.id)).toBe(false);
     expect(() => store.readNote(note.id)).toThrow();
     const db = new Database(path.join(dir, "metadata.sqlite3"), { readonly: true });
     try {

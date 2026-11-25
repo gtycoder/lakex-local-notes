@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const main = ["./main.ts", "./boot/startupDecision.ts", "./boot/recoveryWiring.ts"].map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n"); // C-04：启动判定/恢复页外迁
 const recoveryWindow = readFileSync(new URL("./startupRecoveryWindow.ts", import.meta.url), "utf8");
 
 describe("启动恢复接线（main.ts 静态锁）", () => {
@@ -52,10 +52,10 @@ describe("启动恢复接线（main.ts 静态锁）", () => {
 
   it("P2-B：条件深检（启动标 dirty / 正常退出才写 clean）+ 备份目录统一 backups/", () => {
     expect(main).toContain("decideStartupCheckDepth(");
-    expect(main).toContain("readStartupRunHealth(userDataDir)");
-    expect(main).toContain("markStartupInProgress(userDataDir)");
+    expect(main).toContain("readStartupRunHealth(deps.userDataDir)");
+    expect(main).toContain("markStartupInProgress(deps.userDataDir)");
     // 启动标脏必须先于预检（预检阶段崩溃 ⇒ 下次深检）
-    expect(main.indexOf("markStartupInProgress(userDataDir)")).toBeLessThan(main.indexOf("inspectDatabaseForStartup("));
+    expect(main.indexOf("markStartupInProgress(deps.userDataDir)")).toBeLessThan(main.indexOf("inspectDatabaseForStartup("));
     expect(main).toContain('deep: startupCheckDepth === "deep"');
     // 只有正常启动跑通后，退出时才写「上次 OK」
     expect(main).toContain("markStartupClean(app.getPath(\"userData\"))");

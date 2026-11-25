@@ -56,7 +56,7 @@ function tmpLeftovers(root: string): string[] {
 
 describe("桌面 atomicWrite 补 fsync（261105 Batch3-C）", () => {
   it("writeRestoredBody：内容完整落盘，且不残留 tmp", () => {
-    store.writeRestoredBody("note-atomic-1", "正文内容-content");
+    store.missingBody.writeRestoredBody("note-atomic-1", "正文内容-content");
     const target = path.join(dir, "notes", "note-atomic-1.lake");
     expect(fs.readFileSync(target, "utf8")).toBe("正文内容-content");
     expect(tmpLeftovers(dir)).toEqual([]);
@@ -85,7 +85,7 @@ describe("桌面 atomicWrite 补 fsync（261105 Batch3-C）", () => {
       return original(from, to);
     }) as typeof fs.renameSync);
     try {
-      expect(() => store.writeRestoredBody("note-atomic-fail", "x")).toThrow("injected rename failure");
+      expect(() => store.missingBody.writeRestoredBody("note-atomic-fail", "x")).toThrow("injected rename failure");
     } finally {
       spy.mockRestore();
     }
@@ -98,7 +98,7 @@ describe("桌面 atomicWrite 补 fsync（261105 Batch3-C）", () => {
       throw new Error("injected fsync failure");
     });
     try {
-      expect(() => store.writeRestoredBody("note-atomic-fsync", "x")).toThrow("injected fsync failure");
+      expect(() => store.missingBody.writeRestoredBody("note-atomic-fsync", "x")).toThrow("injected fsync failure");
     } finally {
       spy.mockRestore();
     }

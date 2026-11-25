@@ -1,79 +1,53 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, Menu, shell } from "electron";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
-import { FILE_RECONCILE_DEFAULTS, FileMetadataReconciler } from "./fileMetadataReconcile.js";
-import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
-import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
-import { historyFallbackMinutes, shouldRunHistoryFallback } from "../src/core/historyFallbackPolicy.js";
-import { createLocalSecretCipher } from "./secretCipher.js";
-import { createUnavailableQuickNotesStore, QuickNotesStore } from "./quickNotes.js";
-import { migrateNoteTagLinksToQuickNotes } from "./tagStorage.js";
-import {
-  decideQuickNotesAvailability,
-  getQuickNotesAvailability,
-  quickNotesDegradedMessage,
-  setQuickNotesAvailability,
-} from "./quickNotesAvailability.js";
-import { currentAssetServerPort, startAssetServer } from "./assetServer.js";
-import { configurePreferredWebApiPort, createWebServerController, preferredWebApiPort, type WebServerController } from "./webApiServer.js";
-import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
+import type { FileMetadataReconciler } from "./fileMetadataReconcile.js";
+import { shouldSyncOnOpenClose } from "../src/core/syncModes.js";
+import type { QuickNotesStore } from "./quickNotes.js";
+import { getQuickNotesAvailability } from "./quickNotesAvailability.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import type { NoteDocument } from "../src/lib/types.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
-import { initLogger, currentLogLevels, log, logHeapPeak, logStartupInfo } from "./logger.js";
-import { isLevelEnabled } from "./logLevels.js";
-import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
-import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
-import { ConsoleNoiseFilter } from "./consoleNoise.js";
+import { initLogger, log, logHeapPeak, logStartupInfo } from "./logger.js";
+import { errorFields, formatLogFields } from "../src/core/logFormat.js";
 import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readSyncErrorInfo } from "./s3v3/syncErrorInfo.js";
-import { readDevS3Settings } from "./devConfig.js";
 import { installNativeSha256 } from "./sha256Native.js";
-import { prepareCloudRestore, readAndRemoveS3RestoreSeed, recoverInterruptedWorkspaceSwap } from "./workspaceBackup.js";
-import {
-  backupDatabaseForRecovery,
-  decideStartupCheckDepth,
-  decideStartupRecovery,
-  inspectDatabaseForStartup,
-  markStartupClean,
-  markStartupInProgress,
-  readCrashMarker,
-  readStartupRunHealth,
-  removeCrashMarker,
-  writeCrashMarker,
-} from "./startupRecovery.js";
-import { showRecoveryWindow } from "./startupRecoveryWindow.js";
-import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./workspaceRestoreFromBackup.js";
-import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
+import { markStartupClean, removeCrashMarker, writeCrashMarker } from "./startupRecovery.js";
+import { removeSafeModeState, type SafeModeState } from "./safeMode.js";
 import type { BackupIpcRunner } from "./ipc/registerBackupIpc.js";
-import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
-import { UpdateService } from "./update/updateService.js";
-import { pickBackupDatabaseDialog } from "./ipc/registerNotes.js";
+import type { UpdateService } from "./update/updateService.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import type { PortableExportProgress } from "../src/core/portable/portableFormat.js";
-import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
-import { buildMainWindowOptions, shouldHideMenuBar, titleBarOverlayFor } from "./mainWindowOptions.js";
-import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
-import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
+import type { WebServerController } from "./webApiServer.js";
+import { registerAppSchemePrivileges } from "./appProtocol.js";
 import { buildAppMenuTemplate } from "./appMenu.js";
 import { installTestDialogHooks } from "./testDialogHooks.js";
 import {
   APP_DISPLAY_NAME,
-  DEV_SERVER_URL,
   PROJECT_URL,
   applyUserDataPath,
   isDev,
-  logFilePath,
-  rendererDistDir,
-  rendererMode,
-  vendorCdnDir,
-  windowStatePath,
   workspaceRoot,
 } from "./boot/paths.js";
 import { registerIpc } from "./boot/ipcWiring.js";
-import { appDirOf, bootSplashPath, preloadPath } from "./buildTarget.js";
+import { appDirOf } from "./buildTarget.js";
+// C-04 批次 B：装配外迁（boot/* = 启动接线、window/* = 窗口层；单例仍留本文件，见各 wiring 的 deps）。
+import { markNativeSha256Installed, markUserDataPathApplied, assertNativeSha256Installed, assertUserDataPathApplied } from "./boot/startupOrder.js";
+import { readStartupSignals, rollbackInterruptedWorkspaceSwap, openStoreWithStartupProbe, backfillS3Seed } from "./boot/startupDecision.js";
+import { enterStartupRecovery } from "./boot/recoveryWiring.js";
+import { openQuickNotesWorkspace } from "./boot/quickNotesWiring.js";
+import { startFileReconciler } from "./boot/fileReconcileWiring.js";
+import { startAutoBackup } from "./boot/backupWiring.js";
+import { assembleUpdateService } from "./boot/updateWiring.js";
+import { startAssetServices, startWebClient } from "./boot/protocolWiring.js";
+import { startTimerWiring } from "./boot/timerWiring.js";
+import { syncOnAppOpen } from "./boot/syncWiring.js";
+import { createBootWindow, type BootSplashDeps } from "./window/bootSplash.js";
+import { createWindow, type MainWindowDeps } from "./window/createMainWindow.js";
+import { createSenderValidator } from "./window/windowSecurity.js";
 
 /** 构建产物目录（= dist-electron 的运行时绝对路径，**唯一**依赖入口位置的路径）。
  *  boot.html / preload / dist / CDN 镜像都从它派生：派生规则集中在 `electron/buildTarget.ts`
@@ -88,15 +62,18 @@ let bootWindow: BrowserWindow | null = null;
 
 /** 应用根目录（asar 内一级目录）：dist / public 的定位锚点。 */
 const APP_DIR = appDirOf(BUILD_DIR);
-// userData 隔离必须在 app ready 前生效，且早于任何 userDataDir()/workspaceRoot() 读取。
+// userData 隔离必须在 app ready 前生效，且早于任何 userDataDir()/workspaceRoot() 读取（时序②）。
 applyUserDataPath();
+markUserDataPathApplied();
 
-// 私有协议必须在 app ready 之前注册（Electron 要求）。
+// 时序①：私有协议必须在 app ready 之前注册（Electron 硬要求）⇒ 只能留在模块顶层，断言防搬移。
+if (app.isReady()) throw new Error("[startup-order] registerAppSchemePrivileges 必须在 app ready 前（模块顶层）执行");
 registerAppSchemePrivileges();
 
 // CORE-06：桌面进程内 SHA-256 走 node:crypto（core 默认纯 JS）。必须在任何正文/资产
-// hash 计算（同步、索引、历史）之前注入 —— 放在 app ready 之前的模块初始化段。
+// hash 计算（同步、索引、历史）之前注入 —— 放在 app ready 之前的模块初始化段（时序④）。
 installNativeSha256();
+markNativeSha256Installed();
 // 仅 dev/测试：用环境变量替换原生文件对话框（生产 isPackaged 强制忽略）。
 if (installTestDialogHooks({ dialog: dialog as unknown as Parameters<typeof installTestDialogHooks>[0]["dialog"], isPackaged: app.isPackaged, env: process.env })) {
   console.warn("[test-hook] 原生文件对话框已被 LAKE_TEST_PICK_FILE/DIR/SAVE_FILE 替换（仅开发环境）");
@@ -189,10 +166,11 @@ function clearQuitDeadline(): void {
 }
 
 async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
+  assertNativeSha256Installed("runFullSync"); // 时序④：hash 计算前必须已注入原生 sha256
   if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
   syncInFlight = true;
   // 断点续传标记：开始即置位，成功结束才清（中断/被杀/断网时残留，下次启动自动续）。
-  try { store.markSyncInterrupted(new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
+  try { store.syncState.markSyncInterrupted(new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
   const fullSyncStart = Date.now();
   log.sync.info("[perf] runFullSync start");
   try {
@@ -206,11 +184,11 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       quickNotes.markTargetNotesSynced();
       // 小记已随 v3 同一轮同步；旧 quick-notes 通道已移除。
       result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
-      store.recordSyncResult(JSON.stringify(result));
+      store.syncState.recordSyncResult(JSON.stringify(result));
       // 验收发现（261028）：v3 路径只写了 last_sync_result，从没写过 last_synced_at ⇒
       // 同步浮窗/状态栏的「上次同步」一直是旧值（新机器上则永远为空）。两条都写。
-      try { store.markSyncComplete(result.completedAt ?? new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
-      try { store.clearSyncInterrupted(); } catch { /* 同上 */ }
+      try { store.syncState.markSyncComplete(result.completedAt ?? new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
+      try { store.syncState.clearSyncInterrupted(); } catch { /* 同上 */ }
       // Batch4-B：同步成功 = 对账的触发点（不立即跑；等进程空闲 + 冷却，只报告不写入）。
       try { fileReconciler?.onSyncComplete(); } catch { /* 对账打点失败不阻断同步 */ }
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
@@ -236,107 +214,26 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
 /** 本应用创建的窗口 webContents 白名单（防导航到其他页面后仍调用 IPC） */
 const trustedWebContents = new Set<number>();
 
-/** 应用自身页面的 URL 判定：dev = 固定 dev server；prod = 打包 dist/index.html */
-function isAppPageUrl(url: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return false; }
-  // 私有协议：只信任 lakexlocalnotes://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
-  // 判定走 isAppOriginUrl（比 scheme+host）——非特殊 scheme 在 Node 里 URL.origin 恒为 "null"。
-  if (rendererMode === "scheme") return isAppOriginUrl(url);
-  return parsed.origin === DEV_SERVER_URL;
+/** window/bootSplash 装配依赖（boot 窗口单例本体在本文件，getter 形式 —— S-5）。 */
+function bootSplashDeps(): BootSplashDeps {
+  return {
+    buildDir: BUILD_DIR,
+    getBootWindow: () => bootWindow,
+    setBootWindow: (w) => { bootWindow = w; },
+  };
 }
 
-/**
- * 资源本地化只接管已随应用镜像的 Lake 运行时资源。gw.alipayobjects.com 同时
- * 承载用户粘贴图片，若按 host 全量重定向，未镜像的 /zos/skylark/... 会变成本地 404。
- */
-function registerCdnRedirect() {
-  // W-5：镜像清单启动时一次性读入内存（目录随包固定），回调内零 I/O。
-  const mirrored = scanMirroredCdnFiles(vendorCdnDir(APP_DIR));
-  session.defaultSession.webRequest.onBeforeRequest(
-    { urls: ["*://gw.alipayobjects.com/*"] },
-    (details, callback) => {
-      // 端口用实时值（固定端口，启动时解析一次）；回调内读，避免注册时机与端口解析耦合。
-      const redirectURL = resolveMirroredCdnRedirect(details.url, currentAssetServerPort(), (relativePath) => mirrored.has(relativePath));
-      // 未镜像的资源保持原请求：例如用户粘贴的 gw /zos/skylark 图片。
-      callback(redirectURL ? { redirectURL } : {});
-    }
-  );
-}
-
-/**
- * Lake 会为部分图片预加载请求临时追加 `crossOrigin=true`，不会保留正文中的
- * 查询参数。主进程在受信任窗口发出的本地资源请求上补回当前启动 token，
- * 这样既保持正文 URL 稳定，又不让 CORS 预加载被资源服务器拒绝。
- */
-function registerAssetTokenRedirect() {
-  session.defaultSession.webRequest.onBeforeRequest(
-    // 必须是**实际**监听端口；本函数在 await startAssetServer 之后才注册。
-    { urls: [`http://127.0.0.1:${currentAssetServerPort()}/*`] },
-    (details, callback) => {
-      if (details.webContentsId === undefined || !trustedWebContents.has(details.webContentsId)) {
-        callback({});
-        return;
-      }
-      try {
-        const url = new URL(details.url);
-        if (url.searchParams.get("token") !== assetToken) {
-          url.searchParams.set("token", assetToken);
-          callback({ redirectURL: url.toString() });
-          return;
-        }
-      } catch {
-        // 非法 URL 交给资源服务器按原有规则处理。
-      }
-      callback({});
-    },
-  );
-}
-
-
-/**
- * 思源式 boot 窗口：主进程一启动就显示本地 HTML（内嵌 APNG），
- * 主窗口保持 show:false，等渲染层首帧信号后再显示并销毁 boot 窗口。
- */
-function createBootWindow() {
-  if (bootWindow && !bootWindow.isDestroyed()) return;
-  const windowStateFile = windowStatePath();
-  const workArea = screen.getPrimaryDisplay().workArea;
-  const restored = clampWindowState(readWindowState(windowStateFile), workArea);
-  const boot = new BrowserWindow({
-    x: restored.x,
-    y: restored.y,
-    width: restored.width,
-    height: restored.height,
-    show: false,
-    frame: false,
-    resizable: false,
-    movable: true,
-    title: "LakexLocalNotes",
-    // 261120 用户点单「都统一白色」：浅色档启动底 = 纯白（与 boot.html / 移动端一致；深色档仍 #1e2126）。
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#FFFFFF",
-    webPreferences: {
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  bootWindow = boot;
-  if (restored.maximized) boot.maximize();
-  if (restored.fullscreen) boot.setFullScreen(true);
-  boot.once("ready-to-show", () => {
-    if (boot.isDestroyed()) return;
-    boot.show();
-    log.app.info("[boot] splash shown");
-  });
-  boot.on("closed", () => {
-    if (bootWindow === boot) bootWindow = null;
-  });
-  void boot.loadFile(bootSplashPath(BUILD_DIR)).catch((error) => {
-    log.app.warn(`[boot] splash load failed: ${(error as Error).message}`);
-    if (!boot.isDestroyed()) boot.destroy();
-    if (bootWindow === boot) bootWindow = null;
-  });
+/** window/createMainWindow 装配依赖（main/boot 窗口与白名单单例本体在本文件 —— S-5）。 */
+function mainWindowDeps(): MainWindowDeps {
+  return {
+    buildDir: BUILD_DIR,
+    bootStartedAt: BOOT_STARTED_AT,
+    getMainWindow: () => mainWindow,
+    setMainWindow: (w) => { mainWindow = w; },
+    getBootWindow: () => bootWindow,
+    setBootWindow: (w) => { bootWindow = w; },
+    trustedWebContents,
+  };
 }
 
 /** 启动计时基准（main.js 加载即开始）：[perf] boot.ready 用它算到主窗口首帧的耗时。 */
@@ -359,196 +256,6 @@ function installCrashLogging(userDataDir: string): void {
   process.on("unhandledRejection", (reason) => {
     log.app.error("[crash] unhandledRejection" + formatLogFields(errorFields(reason)));
   });
-}
-
-async function createWindow() {
-  // macOS 关窗后从 Dock 重开时也要先有 boot 窗口，否则主窗口会隐藏到 renderer-ready 才出现。
-  if (!bootWindow || bootWindow.isDestroyed()) createBootWindow();
-  const windowStateFile = windowStatePath();
-  const workArea = screen.getPrimaryDisplay().workArea;
-  const restored = clampWindowState(readWindowState(windowStateFile), workArea);
-  // 窗口选项（含 win32 融合标题栏 / macOS 红绿灯居中等平台差异）= 纯函数构造，见 electron/mainWindowOptions.ts。
-  const win = new BrowserWindow(buildMainWindowOptions({
-    platform: process.platform,
-    bounds: { x: restored.x, y: restored.y, width: restored.width, height: restored.height },
-    dark: nativeTheme.shouldUseDarkColors,
-    preload: preloadPath(BUILD_DIR, app.isPackaged),
-  }));
-  // win32 融合标题栏：菜单栏只藏视觉、保留默认菜单的快捷键（shouldHideMenuBar 单一判据）；
-  // 窗口 show:false 到 renderer-ready，不会闪出菜单栏。
-  if (shouldHideMenuBar(process.platform)) win.setMenuBarVisibility(false);
-
-  mainWindow = win;
-  let mainWindowRevealed = false;
-  let bootFallback: NodeJS.Timeout | null = null;
-  const revealMainWindow = (reason: string) => {
-    if (mainWindowRevealed || win.isDestroyed()) return;
-    mainWindowRevealed = true;
-    if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
-    const boot = bootWindow;
-    // 顺序固定：先藏 boot，再显示主窗，最后销毁 boot。
-    // 反过来（先 destroy）会让 macOS 在两者切换间短暂暴露一块空白 backing window。
-    if (boot && !boot.isDestroyed()) boot.hide();
-    bootWindow = null;
-    win.show();
-    win.focus();
-    if (boot && !boot.isDestroyed()) boot.destroy();
-    log.app.info(`[boot] main window shown (${reason})`);
-    log.perf.info(perfMessage("boot.ready", Date.now() - BOOT_STARTED_AT, { reason }));
-  };
-  /** macOS 原生全屏（独立 Space）时系统把标题栏/红绿灯一起隐藏 ⇒ 把全屏状态广播给渲染层，
-   *  让顶栏不再为红绿灯让位（避免左侧 82px 空缺口）。 */
-  const sendWindowFullscreen = () => {
-    if (!win.isDestroyed()) win.webContents.send("window-fullscreen", win.isFullScreen());
-  };
-  const onRendererReady = (event: IpcMainEvent) => {
-    if (event.sender.id !== win.webContents.id) return;
-    revealMainWindow("renderer-ready");
-    // 启动即全屏（从 window-state 恢复）时，渲染层靠这条拿到初始态
-    sendWindowFullscreen();
-  };
-  ipcMain.on("renderer-ready", onRendererReady);
-  /** win32 融合标题栏：渲染层把主题色阶（light/dark 档）上报给原生窗口控制按钮配色（setTitleBarOverlay）。
-   *  只收两档字符串（白名单校验，渲染层输入不直接下传）；非 win32 / 主进程外发件方一律忽略。 */
-  const onTitleBarOverlayScheme = (event: IpcMainEvent, scheme: unknown) => {
-    if (event.sender.id !== win.webContents.id) return;
-    if (process.platform !== "win32" || win.isDestroyed()) return;
-    if (scheme !== "light" && scheme !== "dark") return;
-    win.setTitleBarOverlay(titleBarOverlayFor(scheme));
-  };
-  ipcMain.on("set-title-bar-overlay", onTitleBarOverlayScheme);
-  bootFallback = setTimeout(() => revealMainWindow("fallback-timeout"), 8_000);
-  win.once("closed", () => {
-    if (mainWindow === win) mainWindow = null;
-    if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
-    ipcMain.removeListener("renderer-ready", onRendererReady);
-    ipcMain.removeListener("set-title-bar-overlay", onTitleBarOverlayScheme);
-    if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
-    bootWindow = null;
-  });
-
-  const persistWindowState = () => {
-    if (win.isDestroyed()) return;
-    const bounds = win.getNormalBounds();
-    writeWindowState(windowStateFile, {
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-      maximized: win.isMaximized(),
-      fullscreen: win.isFullScreen(),
-    });
-  };
-  win.on("resize", persistWindowState);
-  win.on("move", persistWindowState);
-  win.on("maximize", persistWindowState);
-  win.on("unmaximize", persistWindowState);
-  win.on("enter-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
-  win.on("leave-full-screen", () => { persistWindowState(); sendWindowFullscreen(); });
-  // win32 的 F11 全屏不触发 enter/leave-full-screen（那对事件只在 macOS 触发）⇒ 用 resize 边沿检测补广播，
-  // 渲染层才能在全屏时撤掉融合标题栏的窗口控制按钮让位（window-chrome.css 同款收口）。
-  if (process.platform === "win32") {
-    let lastFullScreen = win.isFullScreen();
-    win.on("resize", () => {
-      const fs = win.isFullScreen();
-      if (fs !== lastFullScreen) { lastFullScreen = fs; sendWindowFullscreen(); }
-    });
-  }
-  win.on("close", persistWindowState);
-  if (restored.maximized) win.maximize();
-  if (restored.fullscreen) win.setFullScreen(true);
-
-  // 审计 #6：窗口导航与 window.open 全部受控——阻止导航到应用页之外的任何地址；
-  // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
-  trustedWebContents.add(win.webContents.id);
-  // 渲染进程日志统一落盘：console-message 转发到主进程 logger（scope=renderer）。
-  // CSP 拦截通知折叠（261023）：粘贴整页网页时内核会为每张远程图各打一条通知（实测 103 行），
-  // 逐条落盘会把同期真正需要的日志冲掉 ⇒ 折叠成一行汇总（consoleNoise.ts，排查见 TROUBLESHOOTING §M）。
-  const consoleNoise = new ConsoleNoiseFilter({ emit: (line) => log.renderer.info(line) });
-  win.on("closed", () => consoleNoise.flush());
-  // Electron 44 事件签名（electron.d.ts WebContentsConsoleMessageEventParams）：event 对象恒带
-  // { message, level, lineNumber, sourceId }；旧式 (event, level, message) 兜底已删（261125 核实恒为新形状）。
-  win.webContents.on("console-message" as unknown as "console-message", (event: unknown) => {
-    const e = event as { message?: unknown };
-    const msg = typeof e?.message === "string" ? e.message : "";
-    if (!msg) return;
-    // 过滤 DevTools 样式占位与空消息
-    if (msg.includes("%c") || msg.length > 4000) return;
-    if (consoleNoise.observe(msg)) return;
-    // 级别映射（261023）：渲染层 error/warn 不能被压成 info；正式环境 debug 不落盘，避免调试噪音把日志冲掉。
-    const rendererLevel = mapRendererConsoleLevel(event as { level?: unknown });
-    if (!isLevelEnabled(currentLogLevels().renderer, rendererLevel)) return;
-    if (rendererLevel === "error") log.renderer.error(msg);
-    else if (rendererLevel === "warn") log.renderer.warn(msg);
-    else if (rendererLevel === "debug") log.renderer.debug(msg);
-    else log.renderer.info(msg);
-  });
-  win.webContents.on("will-navigate", (event, url) => {
-    if (isAppPageUrl(url)) return;
-    event.preventDefault();
-    log.app.warn("[security] 阻止窗口导航" + formatLogFields({ url }));
-  });
-  win.webContents.on("destroyed", () => { trustedWebContents.delete(win.webContents.id); });
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    try {
-      const parsed = new URL(url);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        void shell.openExternal(url);
-      }
-    } catch { /* 非法 URL 忽略 */ }
-    return { action: "deny" };
-  });
-
-  // 崩溃自动恢复：渲染进程异常退出（非 clean-exit）短暂延迟后 reload；
-  // 30s 内连续崩溃超过 3 次则停止自动恢复（避免崩溃循环），留档待查。
-  let rendererCrashCount = 0;
-  let lastRendererCrashAt = 0;
-  win.webContents.on("render-process-gone", (_event, details) => {
-    if (details.reason === "clean-exit") return;
-    const now = Date.now();
-    if (now - lastRendererCrashAt > 30_000) rendererCrashCount = 0;
-    lastRendererCrashAt = now;
-    rendererCrashCount += 1;
-    log.app.warn(`[crash] render-process-gone reason=${details.reason} exitCode=${details.exitCode} count=${rendererCrashCount}`);
-    if (rendererCrashCount > 3) {
-      log.app.error("[crash] 连续崩溃超过 3 次，停止自动恢复，请检查日志/Crashpad 转储");
-      return;
-    }
-    // reload 期间 renderer 没有任何可绘制内容：把主窗藏起来、重新显示 boot，
-    // 新渲染进程发出 renderer-ready 后走同一个 reveal 流程。避免用户看到一块白色窗口。
-    mainWindowRevealed = false;
-    win.hide();
-    createBootWindow();
-    if (bootFallback) clearTimeout(bootFallback);
-    bootFallback = setTimeout(() => revealMainWindow("crash-fallback-timeout"), 8_000);
-    setTimeout(() => {
-      try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
-    }, 800);
-  });
-  win.webContents.on("did-fail-load", (_event, code, description, validatedURL, isMainFrame) => {
-    if (!isMainFrame) return;
-    log.app.error(`[boot] did-fail-load code=${code} description=${description} url=${validatedURL}`);
-  });
-  win.webContents.on("preload-error", (_event, preloadFile, error) => {
-    log.app.error("[crash] preload-error" + formatLogFields({ path: preloadFile, ...errorFields(error) }));
-  });
-  win.on("unresponsive", () => log.app.warn("[ui] 窗口无响应（unresponsive）"));
-  win.on("responsive", () => log.app.info("[ui] 窗口恢复响应（responsive）"));
-
-  if (rendererMode === "scheme") {
-    await win.loadURL(`${APP_ORIGIN}/index.html`);
-  } else {
-    await win.loadURL(DEV_SERVER_URL);
-  }
-}
-
-/** IPC 只接受本应用窗口（精确 URL + webContents 白名单）发来的调用。
- * 审计 #6：不再信任任意 file://、任意 localhost 端口、devtools://、about:blank——
- * 页面被导航到恶意本地页后 preload 暴露的全量能力即失效。 */
-function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebContents): boolean {
-  if (!frame) return false;
-  if (!trustedWebContents.has(sender.id)) return false;
-  return isAppPageUrl(frame.url);
 }
 
 /** 便携包导出进度（窗口 + Web 客户端 SSE）。 */
@@ -619,333 +326,52 @@ if (!app.requestSingleInstanceLock()) {
       })));
     }
     initLogger({ isPackaged: app.isPackaged });
+    assertUserDataPathApplied("whenReady"); // 时序②：userData 路径必须已固定
     const userDataDir = app.getPath("userData");
     // 崩溃标记必须在任何启动动作之前读：上次运行留下未捕获异常时，本次启动（含恢复页）要能提示。
     installCrashLogging(userDataDir);
-    createBootWindow();
+    createBootWindow(bootSplashDeps());
     logStartupInfo();
     log.app.info("app ready: initLogger done" + formatLogFields({ bootMs: Date.now() - BOOT_STARTED_AT }));
-    // P1-5：**先做完整性预检，再建 Store**。坏库/打不开时不再继续普通启动
-    //（旧实现先构造 Store 再弹阻塞式 dialog，Store 构造抛错时会直接卡死在 boot splash）。
-    const crashMarker = readCrashMarker(userDataDir);
-    if (crashMarker) {
-      log.app.warn("[crash] 上次运行捕获到未捕获异常" + formatLogFields({ time: crashMarker.time, occurrences: crashMarker.occurrences, reason: crashMarker.reason }));
-    }
-    // Batch3-B：崩溃反复出现（occurrences>=2 或 30 分钟内连续 2 次）⇒ 本次进安全模式：
-    // 不自动同步 / 不恢复上次标签页 / 不预热内核；主界面照常可用可编辑（语义见 electron/safeMode.ts）。
-    const safeModeDecision = decideSafeMode({ previous: readSafeModeState(userDataDir), crashMarker, now: new Date() });
+    // C+D：崩溃标记/安全模式/换位回滚 + 条件深检 + 完整性预检 + Store 打开 + 恢复决策
+    //（boot/startupDecision；P1-5：**先做完整性预检，再建 Store**，坏库不进普通启动）。
+    const { crashMarker, safeModeDecision } = readStartupSignals(userDataDir);
     safeModeActive = safeModeDecision.active;
     safeModeState = safeModeDecision.active ? safeModeDecision.state : null;
-    if (safeModeDecision.active) {
-      writeSafeModeState(userDataDir, safeModeDecision.state);
-      log.app.warn("[safe-mode] 本次启动进入安全模式（不自动同步/不恢复标签页/不预热内核）"
-        + formatLogFields({ reason: safeModeDecision.reason, occurrences: crashMarker?.occurrences ?? 0 }));
-    }
-    // 261201（P2-A）：中断的工作区换位（便携包导入/整库恢复在 materialize 中途崩溃）先回滚到换位前，
-    // 再做启动预检（对齐移动侧「中断自动回滚」契约 §3 第 2 条；幂等，无标记零开销）。
-    const swapRecovery = recoverInterruptedWorkspaceSwap(workspaceRoot());
-    if (swapRecovery.recovered) {
-      log.app.warn("[workspace] 检测到中断的工作区换位，已恢复" + formatLogFields({ restored: swapRecovery.restored }));
-    }
-    // 261105 P2-B：条件深检（只读打开）。上次正常退出且无 crash-marker ⇒ 轻量检查（只读打开 + 关键表）；
-    // 上次脏退出/有崩溃标记 ⇒ 才跑全库 quick_check + foreign_key_check。
-    // 启动开始即标 dirty：进程在本次启动/运行中崩溃 ⇒ 下次自动深检；正常退出才写「上次 OK」。
-    const previousRun = readStartupRunHealth(userDataDir);
-    markStartupInProgress(userDataDir);
-    const startupCheckDepth = decideStartupCheckDepth({ crashMarker, previousRun });
-    log.app.info("[store] 启动预检深度=" + startupCheckDepth + formatLogFields({ previousRun: previousRun?.lastRun ?? "unknown", crashMarker: !!crashMarker }));
-    const startupIntegrity = inspectDatabaseForStartup(path.join(workspaceRoot(), "metadata.sqlite3"), { deep: startupCheckDepth === "deep" });
-    let startupOpenError: unknown = null;
-    let openedStore: Store | null = null;
-    if (startupIntegrity.ok) {
-      try {
-        openedStore = new Store(workspaceRoot(), createLocalSecretCipher(userDataDir), log);
-      } catch (error) {
-        startupOpenError = error;
-        log.app.error("[store] 打开本地数据库失败" + formatLogFields(errorFields(error)));
-      }
-    } else {
-      log.app.error("[store] 启动完整性预检未通过" + formatLogFields({ detail: startupIntegrity.detail }));
-    }
-    const startupDecision = decideStartupRecovery({ integrity: startupIntegrity, openError: startupOpenError, crashMarker });
-    if (startupDecision.mode === "recovery" || !openedStore) {
-      // 恢复模式：销毁 splash，换成一个可操作的最小恢复页（备份后重试 / 云端恢复 / 打开目录 / 退出）。
-      log.app.error("[store] 进入启动恢复模式" + formatLogFields({ cause: startupDecision.cause, detail: startupDecision.detail }));
-      if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
-      bootWindow = null;
-      showRecoveryWindow({
-        reason: startupDecision.reason || "无法打开本地数据库",
-        detail: startupDecision.detail,
-        dataDir: userDataDir,
-        workspacePath: workspaceRoot(),
-        logPath: logFilePath(),
-        // P2-B：与自动备份同一目录口径（<userData>/backups/），恢复页不再展示另一个目录。
-        backupDir: path.join(userDataDir, "backups"),
-        crashMarker: startupDecision.crashMarker,
-      }, {
-        async backupAndRetry() {
-          const backup = backupDatabaseForRecovery({ dbPath: path.join(workspaceRoot(), "metadata.sqlite3"), userDataDir });
-          if (!backup.ok) return { ok: false, message: backup.message };
-          // 备份成功后**重试打开**（完整走一次 Store 构造/迁移）；成功后重启走正常启动路径。
-          try {
-            const probe = new Store(workspaceRoot(), createLocalSecretCipher(userDataDir), log);
-            probe.close();
-          } catch (error) {
-            log.app.error("[recovery] 备份后重试打开仍失败" + formatLogFields(errorFields(error)));
-            return { ok: false, message: backup.message + "；但重试打开仍失败：" + (error instanceof Error ? error.message : String(error)) };
-          }
-          return { ok: true, message: backup.message + "；重试打开通过，正在重启…", restart: true };
-        },
-        async cloudRestore() {
-          try {
-            // 复用 A2：把当前 workspace 改名隔离保留 → 空库重启。坏库读不到 S3 凭据，重启后需重新配置。
-            const { quarantinePath } = prepareCloudRestore(workspaceRoot());
-            log.app.info("[recovery] 云端恢复：原数据已隔离到 " + quarantinePath);
-            return {
-              ok: true,
-              message: "原数据已隔离保留在 " + quarantinePath + "，将以全新空库重启；重启后需在设置里重新配置云同步，再从云端拉回。正在重启…",
-              restart: true,
-            };
-          } catch (error) {
-            log.app.error("[recovery] 云端恢复准备失败" + formatLogFields(errorFields(error)));
-            return { ok: false, message: "云端恢复准备失败：" + (error instanceof Error ? error.message : String(error)) };
-          }
-        },
-        async restoreFromBackup() {
-          // Batch4-A：从整库备份导入恢复。文件选择框在主进程（渲染层拿不到任意路径），
-          // defaultPath 与设置入口共用同一个选择框（autoBackup.backupsDir 单一来源）。
-          const chosen = await pickBackupDatabaseDialog(userDataDir, { buttonLabel: "用此备份恢复" });
-          if (!chosen) return { ok: false, message: "已取消选择备份文件" };
-          if (!rememberRestoreCandidate(chosen)) {
-            return { ok: false, message: "备份文件无效：请选择由本应用「整库备份/导出」产生的 metadata*.sqlite3 文件（其他文件名不支持）" };
-          }
-          const result = restoreMainDatabaseFromBackup({
-            backupPath: chosen,
-            currentDbPath: path.join(workspaceRoot(), "metadata.sqlite3"),
-            userDataDir,
-          });
-          if (!result.ok) {
-            log.app.error("[recovery] 从备份恢复失败" + formatLogFields({ reason: result.reason ?? "", rolledBack: result.rolledBack ?? false }));
-            return { ok: false, message: "从备份恢复失败：" + (result.message ?? result.reason ?? "未知原因") };
-          }
-          log.app.info("[recovery] 从备份恢复成功，原库隔离到 " + result.quarantinePath);
-          return { ok: true, message: result.message ?? "已从备份恢复，正在重启…", restart: true };
-        },
-        async openDataFolder() {
-          const openError = await shell.openPath(userDataDir);
-          return openError
-            ? { ok: false, message: "打开数据目录失败：" + openError }
-            : { ok: true, message: "已打开数据目录：" + userDataDir };
-        },
-        restart() { app.relaunch(); app.exit(0); },
-        quit() { app.quit(); },
-      });
+    rollbackInterruptedWorkspaceSwap(workspaceRoot());
+    const startupProbe = openStoreWithStartupProbe({ userDataDir, workspaceRoot, crashMarker });
+    const startupDecision = startupProbe.startupDecision;
+    if (startupDecision.mode === "recovery" || !startupProbe.openedStore) {
+      // E：恢复模式 = 销毁 splash，换成可操作的最小恢复页（boot/recoveryWiring）。
+      enterStartupRecovery({ userDataDir, workspaceRoot, getBootWindow: () => bootWindow, setBootWindow: (w) => { bootWindow = w; } }, startupDecision);
       return;
     }
     // 正常启动判定完成；崩溃标记等**启动真正跑通**（建主窗口前）再消费，避免半途失败时丢掉线索。
-    store = openedStore;
-    // Batch4-B/D（261105）：文件↔元数据对账 = **低频只报告**（默认每 24h，设置里可改、0 = 关闭）。
-    // 仍由同步成功打点 + 进程空闲（≥5min）门控，与同步/GC 共用维护域串行队列；报告经 runDataHealthCheck 暴露。
-    // 旧环境变量保留：LAKE_FILE_RECONCILE=0 强制关闭（=1 是历史开关，语义等同使用设置里的间隔）。
-    const startFileReconciler = () => {
-      fileReconciler?.dispose();
-      const configured = store.getFileScanSettings().intervalHours;
-      const enabledByEnv = process.env.LAKE_FILE_RECONCILE !== "0";
-      const intervalHours = enabledByEnv ? configured : 0;
-      const enabled = intervalHours > 0;
-      fileReconciler = new FileMetadataReconciler({
-        root: workspaceRoot(),
-        listKnownNoteIds: () => store.listNotesSyncMeta().map((n) => n.id),
-        getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
-        enqueueMaintenance,
-        enabled,
-        intervalHours,
-        cooldownMs: intervalHours > 0 ? Math.max(1, intervalHours * 3600_000) : FILE_RECONCILE_DEFAULTS.cooldownMs,
-        // P2-B：上次成功扫描时间跨重启持久化（settings；缺失/损坏按未跑过）。
-        loadLastRunAt: () => store.getFileReconcileState().lastScanAt,
-        saveLastRunAt: (at) => store.saveFileReconcileState({ lastScanAt: at }),
-        log: (message) => log.app.info(message),
-      });
-      store.setFileReconcileReportProvider(() => fileReconciler?.getLastReport() ?? null);
-      log.app.info("[reconcile] 文件↔元数据对账" + (enabled ? "已启用（间隔 " + intervalHours + "h，只报告）" : "已关闭（0h / LAKE_FILE_RECONCILE=0）"));
-    };
-    startFileReconciler();
-    restartFileScanReconciler = startFileReconciler;
-    // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
-    // 原样写回新库再删除——secretAccessKey 保持密文形态（绝不明文落盘）；非 enc:v2: 前缀存量（含旧钥匙串 enc:v1:）按未配置读出（261204），用户重填即转 v2。
-    try {
-      const seed = readAndRemoveS3RestoreSeed(workspaceRoot());
-      if (seed && typeof seed === "string" && !store.getS3Settings()) {
-        store.importS3SettingsRow(seed);
-        log.app.info("[restore] S3 凭据（密文行）已从恢复 seed 回填新库");
-      }
-    } catch (e) { log.app.warn(`[restore] S3 seed 回填失败: ${(e as Error).message}`); }
-    // 开发版可选 S3 seed（多端联调用）：凭据只从环境变量读取；
-    // 没有配置时保持纯本地模式，不把共享密钥打进源码或新开发数据。
-    if (isDev && !store.getS3Settings()) {
-      const devS3Settings = readDevS3Settings();
-      if (devS3Settings) store.saveS3Settings(devS3Settings);
-      else log.app.info("dev S3 seed skipped: credentials are not configured");
-    }
-    // Batch3-A（261105）：小记**独立库**损坏不得卡住整个应用。QuickNotesStore 单独 try/catch：
-    // 失败 ⇒ 降级「无小记」模式（主库/文档/表格照常启动），小记相关 IPC 返回可读错误、v3 同步暂停；
-    // 绝不把整库判为坏库（启动恢复页只管主库，语义见 startupRecovery）。
-    let quickNotesOpenError: unknown = null;
-    try {
-      quickNotes = new QuickNotesStore(workspaceRoot(), log);
-    } catch (error) {
-      quickNotesOpenError = error;
-    }
-    const quickNotesAvailability = decideQuickNotesAvailability({ openError: quickNotesOpenError });
-    setQuickNotesAvailability(quickNotesAvailability);
-    if (quickNotesAvailability.mode === "degraded") {
-      const degradedMessage = quickNotesDegradedMessage(quickNotesAvailability);
-      quickNotes = createUnavailableQuickNotesStore(degradedMessage);
-      log.app.error("[quick-notes] 小记库不可用，进入降级模式（文档/表格不受影响）"
-        + formatLogFields({ reason: quickNotesAvailability.reason, detail: quickNotesAvailability.detail }));
-      log.sync.warn("[sync] 小记库降级中：v3 同步已暂停（避免空小记世界被误判为删除）；出口见 设置→同步诊断");
-    } else {
-      // 只有正常打开时才注册给 v3：降级替身的空世界会被同步判成删除/下载（desktopSync 另有前置断言）。
-      setQuickNotesStoreForV3(quickNotes);
-      quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
-      // 261107（上线前最后一批）：标签存储统一 —— 文档标签关系一次性迁入小记库，成功后把 documentTags 切到小记库；
-      // 失败则保持主库旧关系（可回退），并在下次启动重试；旧表保留一个版本，不删除。
-      try {
-        const migration = migrateNoteTagLinksToQuickNotes({
-          mainDbPath: store.databasePath,
-          quickDb: quickNotes.databaseHandle,
-          log: (message) => log.app.info(message),
-        });
-        if (migration.ok) {
-          store.attachDocumentTagsDatabase(quickNotes.databaseHandle);
-          if (!migration.already) log.app.info("[tags] 标签存储已统一到小记库（moved=" + migration.moved + "）");
-        } else {
-          log.app.warn("[tags] 标签存储迁移失败，继续使用主库旧关系：" + (migration.reason ?? "unknown"));
-        }
-      } catch (error) {
-        log.app.warn("[tags] 标签存储迁移异常，继续使用主库旧关系：" + (error as Error).message);
-      }
-      // 261105 P1：启动自检清理「文档关系指向不存在标签」的孤儿行（目录唯一来源 = 小记库 tags）。
-      try {
-        const cleanup = store.documentTags.cleanupOrphans(new Set(quickNotes.tags.list().map((tag) => tag.id)));
-        if (cleanup.links > 0) log.app.warn("[tags] 启动清理孤儿文档标签关系 " + cleanup.links + " 行（" + cleanup.tags + " 个标签）");
-      } catch (error) { log.app.warn("[tags] 孤儿文档标签关系清理失败：" + (error as Error).message); }
-    }
-    drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
-    // 261105 Batch4-E：自动备份（主库 + 小记库）。就绪后**每 6h tick，启动不立即跑**；单飞 + 维护域串行，
-    // 内容未变（size+mtime）跳过；轮转保留 N 份/总大小上限。失败只记日志，绝不阻断主流程。
-    {
-      let autoBackupBusy = false;
-      const runBackup = async (manual: boolean): Promise<{ state: ReturnType<typeof store.getAutoBackupState>; message: string }> => {
-        if (autoBackupBusy) return { state: store.getAutoBackupState(), message: "已有备份正在进行中" };
-        autoBackupBusy = true;
-        try {
-          // 维护域串行（与同步/GC 互斥）：runBackupCycle 做 VACUUM INTO + 轮转，不在写域、不阻塞本地保存。
-          return await enqueueMaintenance(async () => {
-            const settings = store.getAutoBackupSettings();
-            const state = store.getAutoBackupState();
-            const mainDbPath = path.join(workspaceRoot(), "metadata.sqlite3");
-            const decision = decideAutoBackup({
-              enabled: settings.enabled,
-              busy: false,
-              nowMs: Date.now(),
-              lastBackupAtMs: state ? Date.parse(state.lastBackupAt) || null : null,
-              intervalDays: settings.intervalDays,
-              fingerprint: readDatabaseFingerprint(mainDbPath),
-              lastFingerprint: state?.fingerprint ?? null,
-              manual,
-            });
-            if (!decision.run) {
-              log.app.info("[backup] 本轮跳过（" + decision.reason + "）");
-              return { state, message: "未备份（" + (manual ? "内容未变" : decision.reason) + "）" };
-            }
-            const result = runBackupCycle({
-              userDataDir: app.getPath("userData"),
-              mainDbPath,
-              // 小记库降级（损坏）时不带路径 ⇒ 不备份小记库，结果明说「小记库不可用」。
-              quickNotesDbPath: getQuickNotesAvailability().mode === "ok" ? path.join(workspaceRoot(), "quick-notes", "metadata.sqlite3") : null,
-              settings,
-              log: (message) => log.app.info(message),
-            });
-            if (result.state) {
-              try { store.saveAutoBackupState(result.state); } catch (error) { log.app.warn("[backup] 状态落盘失败：" + (error as Error).message); }
-            }
-            return { state: result.state, message: result.message };
-          });
-        } catch (error) {
-          log.app.warn("[backup] 备份失败（不阻断主流程）：" + (error as Error).message);
-          return { state: store.getAutoBackupState(), message: "备份失败：" + (error as Error).message };
-        } finally {
-          autoBackupBusy = false;
-        }
-      };
-      autoBackupRunner = {
-        getSettings: () => store.getAutoBackupSettings(),
-        getState: () => store.getAutoBackupState(),
-        saveSettings: (settings) => store.saveAutoBackupSettings(settings),
-        runNow: () => runBackup(true),
-      };
-      // 每 6h tick；首 tick 在 6h 后（启动不立即跑，避免抢首屏/首同步 IO）。
-      const timer = setInterval(() => { void runBackup(false); }, AUTO_BACKUP_TICK_MS);
-      timer.unref?.();
-    }
-    // 261109 桌面更新中心：只认 GitHub 稳定版 latest.json；自动检查/自动下载默认开（设置项本机、不进 S3）。
-    // 网络失败/坏清单只提示，不阻断启动；下载由主进程流式落盘 userData/updates，**不静默安装**。
-    updateService = new UpdateService({
-      userData: userDataDir,
-      currentVersion: app.getVersion(),
-      platform: process.platform,
-      arch: process.arch,
-      settings: {
-        get: () => store.getUpdateSettings(),
-        save: (settings) => store.saveUpdateSettings(settings),
-      },
-      onState: (state) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!trustedWebContents.has(win.webContents.id)) continue;
-          try { win.webContents.send("update-state", state); } catch { /* 窗口已关闭 */ }
-        }
-        webServerController?.broadcast("update-state", state);
-      },
-      log: { info: (message) => log.app.info(message), warn: (message) => log.app.warn(message) },
+    store = startupProbe.openedStore;
+    // F：文件↔元数据对账（低频只报告；boot/fileReconcileWiring）。
+    restartFileScanReconciler = startFileReconciler({
+      store,
+      workspaceRoot,
+      enqueueMaintenance,
+      getReconciler: () => fileReconciler,
+      setReconciler: (r) => { fileReconciler = r; },
     });
-    // 资源服务端口（261117 生产 bug 修复）：
-    // ① 默认端口按构建形态分开 —— dev 19877 / packaged 19876（同机双开不再互抢）；env 覆盖优先（隔离测试用）。
-    // ② 固定端口（261118 简化）：同一构建形态双开时第二个实例明确报错，不做自动回退。
-    // ③ **必须 await 到 listening** 才继续：固定端口写回 env 供 preload/渲染层使用（
-    //    src/lib/assetPort 从 process.env.LAKE_ASSET_PORT 取），webRequest 过滤器与 assetPort 注入也要用实际值。
-    // ④ 失败不再静默：监听失败在这里记 error，主窗口照常启动（图片降级，其余可用）。
-    const preferredAssetPort = Number(process.env.LAKE_ASSET_PORT) || (app.isPackaged ? 19876 : 19877);
-    // 先写回 env（即使监听失败也保持固定端口一致）：preload/渲染层在创建窗口时读它。
-    process.env.LAKE_ASSET_PORT = String(preferredAssetPort);
-    try {
-      await startAssetServer(
-        path.join(workspaceRoot(), "note-assets"),
-        vendorCdnDir(APP_DIR),
-        path.join(workspaceRoot(), "quick-notes"),
-        assetToken,
-        {
-          preferredPort: preferredAssetPort,
-          log: {
-            info: (message) => log.app.info(message),
-            warn: (message) => log.app.warn(message),
-            error: (message) => log.app.error(message),
-          },
-        },
-      );
-      // 端口已在 listen 前固定并写回 env（见上）；这里只确认模块级值一致。
-    } catch (error) {
-      // 降级：服务没起来时图片/附件不可用，但文档、同步、编辑全部照常（别让启动卡死）。
-      log.app.error("[asset-server] 启动失败，图片/附件将不可用" + formatLogFields(errorFields(error)));
-    }
-    // 浏览器端（Web 客户端）端口同样按构建形态分开：packaged 19880 / dev 19881（env LAKE_WEB_PORT 优先）。
-    // 真实监听发生在设置页打开开关时（默认关闭）；固定端口，占用则设置页明确报错。
-    const preferredWebApiPortValue = Number(process.env.LAKE_WEB_PORT) || (app.isPackaged ? 19880 : 19881);
-    configurePreferredWebApiPort(preferredWebApiPortValue);
-    log.app.info("[ports] asset=" + currentAssetServerPort() + " webApi=" + preferredWebApiPortValue + "（dev 19877/19881，packaged 19876/19880）");
-    registerCdnRedirect();
-    registerAssetTokenRedirect();
-    // IPC 接线依赖**全部显式传入**（单例仍在 main：token/窗口白名单/定时器/控制器都不搬家）。
+    // G：A2 云端恢复 seed 回填 + 开发版可选 S3 seed（boot/startupDecision）。
+    backfillS3Seed({ workspaceRoot, store });
+    // H：小记库打开/降级 + 标签迁移 + 孤儿清理（boot/quickNotesWiring；降级不注册 v3）。
+    quickNotes = openQuickNotesWorkspace({
+      workspaceRoot,
+      store,
+      registerQuickNotesForV3: (q) => setQuickNotesStoreForV3(q),
+    });
+    drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
+    // J：自动备份 runner + 6h tick（boot/backupWiring；启动不立即跑）。
+    autoBackupRunner = startAutoBackup({ store, enqueueMaintenance, workspaceRoot });
+    // K：更新中心装配 + onState 广播（boot/updateWiring）。
+    updateService = assembleUpdateService({ userDataDir, store, trustedWebContents, getWebServerController: () => webServerController });
+    // L：资产服务（固定端口）+ CDN/资产 token 重定向（boot/protocolWiring）。
+    await startAssetServices({ workspaceRoot, appDir: APP_DIR, assetToken, trustedWebContents });
+    // M：IPC 接线依赖**全部显式传入**（单例仍在 main：token/窗口白名单/定时器/控制器都不搬家）。
     const webApiRegistry = registerIpc({
       store,
       quickNotes,
@@ -964,155 +390,52 @@ if (!app.requestSingleInstanceLock()) {
       restartSyncTimers: () => restartSyncTimers?.(),
       restartFileScanReconciler: () => restartFileScanReconciler?.(),
       quickNotesAvailability: () => getQuickNotesAvailability(),
-      validateSender: (frame, sender) => isTrustedSenderFrame(frame, sender),
+      validateSender: createSenderValidator({ trustedWebContents }),
       isTrustedWebContents: (id) => trustedWebContents.has(id),
       getSafeModeState: () => safeModeState,
       onSafeModeExit: () => { safeModeActive = false; safeModeState = null; },
     });
-    // 浏览器端（桌面附属窗口）：默认不启动（纯内存态，不落盘；每次启动都从关闭开始）。
-    // 设置里打开/关闭即时起停服务；只绑 127.0.0.1、不做局域网伺服；复用同一批 IPC handler。
-    serveAppDist(rendererDistDir(APP_DIR));
-    webServerController = createWebServerController({
-      distDir: rendererDistDir(APP_DIR),
-      registry: webApiRegistry,
-      token: webApiToken,
-      assetToken,
-      assetPort: currentAssetServerPort(),
-      port: preferredWebApiPort(),
-      log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },
-    });
+    // N：浏览器端（Web 客户端）服务装配（boot/protocolWiring；serveAppDist 先于 createWindow）。
+    webServerController = startWebClient({ appDir: APP_DIR, registry: webApiRegistry, webApiToken, assetToken });
     // 正常启动已跑通 ⇒ 消费崩溃标记（它已在启动日志里提示过；恢复模式不会走到这里，保留给恢复页）。
     // 正常启动已跑通 ⇒ 消费崩溃标记（旧语义）；安全模式**不清**标记（诊断线索保留到用户显式退出）。
     if (startupDecision.crashMarker && !safeModeActive) removeCrashMarker(userDataDir);
     // 正常启动顺手清掉遗留状态文件：别让下一次启动误读上一次的 active:true。
     if (!safeModeActive) removeSafeModeState(userDataDir);
-    createWindow();
+    void createWindow(mainWindowDeps());
     // 更新中心：启动后延迟一次自动检查 + 每 N 小时（安全模式不联网检查）；失败只记状态，不阻断启动。
     if (!safeModeActive) updateService?.start();
     // P2-B：正常启动已跑通；「上次 OK」在正常退出（will-quit）时落盘，运行中崩溃保持 dirty ⇒ 下次深检。
     normalStartupCompleted = true;
     logHeapPeak("startup");
 
-    // U1/Batch4-C：定时兜底快照（默认 10 分钟，0 = 关闭）+ 启动兜底清理（P5 低频巡检）
-    // 启动兜底：清理一次过期快照（惰性清理在创建快照后也会触发，这里是兜底）
-    try {
-      const r = store.cleanupHistory();
-      store.recordHistoryCleanup(r);
-      if (r.deletedSnapshots > 0) log.history.info(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
-    } catch (error) { console.warn("[history] 启动兜底清理失败:", error); }
-    // 定时器管理：配置变更（设置面板保存）后重启定时器
-    let snapshotTimer: NodeJS.Timeout | null = null;
-    let cleanupTimer: NodeJS.Timeout | null = null;
-    /** Batch4-C：兜底快照单飞（上一轮还没跑完就跳过本轮；绝不会叠跑/重入）。 */
-    let historyFallbackRunning = false;
-    const startHistoryTimers = () => {
-      if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
-      if (cleanupTimer) { clearInterval(cleanupTimer); cleanupTimer = null; }
-      const cfg = store.getHistorySettings();
-      const fallbackMinutes = historyFallbackMinutes(cfg.snapshotIntervalMinutes);
-      // Batch4-C 定时兜底快照（默认 10 分钟，0 = 关闭）：只挑「自上次兜底后有正文变化」的文档
-      //（持久账本 history_fallback_state + 正文 mtime，重启不丢）；24h 同 hash 去重/引用保护/
-      // 保留期清理沿用既有实现。**启动不立即跑**：首轮 = 就绪后一个间隔，避免和启动抢磁盘。
-      if (shouldRunHistoryFallback(fallbackMinutes)) {
-        snapshotTimer = setInterval(() => {
-          if (historyFallbackRunning) return;
-          historyFallbackRunning = true;
-          // P2-A：分片 + 20s 预算的异步兜底（每 chunk 让出事件循环）。单飞标记覆盖整个异步窗口。
-          void store.runHistoryFallback()
-            .then((result) => {
-              if (result.created > 0 || result.failed > 0) {
-                log.history.info("[history] 兜底快照：" + result.created + " 份（正文变化 " + result.changed + " 篇"
-                  + (result.failed > 0 ? "，失败 " + result.failed + " 篇（已退避）" : "")
-                  + (result.bootstrap ? "，首轮游标 " + (result.cursor ?? "已完成") : "") + "）");
-              }
-            })
-            .catch((error) => {
-              // 兜底本身绝不影响启动/保存：失败只记日志，等下一个间隔。
-              log.history.warn("[history] 兜底快照失败（不阻断）：" + (error instanceof Error ? error.message : String(error)));
-            })
-            .finally(() => { historyFallbackRunning = false; });
-        }, fallbackMinutes * 60 * 1000);
-      }
-      if (cfg.cleanupIntervalHours > 0) {
-        cleanupTimer = setInterval(() => {
-          try {
-            const r = store.cleanupHistory();
-            store.recordHistoryCleanup(r);
-            if (r.deletedSnapshots > 0) log.history.info(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
-          } catch (error) { console.warn("[history] 定期清理失败:", error); }
-        }, cfg.cleanupIntervalHours * 3600 * 1000);
-      }
-    };
-    startHistoryTimers();
-    restartHistoryTimers = startHistoryTimers;
-
-    // 自动同步（interval）定时器：仅在云同步开启且模式为 interval 时运行。
+    // P+Q+S：历史兜底/清理、自动同步（interval）、回收站过期三组定时器（boot/timerWiring）。
     /** 小记库降级 ⇒ 不做自动同步：整轮同步已被 desktopSync 前置断言拦住，定时器只会反复刷失败；
      *  手动同步仍会当场给出可读错误（用户知道为什么 + 去哪恢复）。 */
     const autoSyncAllowed = getQuickNotesAvailability().mode === "ok";
-    let syncTimer: NodeJS.Timeout | null = null;
-    const startSyncTimers = () => {
-      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
-      // Batch3-B：安全模式不自动同步（手动 syncNow 仍可用；用户显式退出后本进程也不重启定时器）。
-      if (safeModeActive) return;
-      if (!autoSyncAllowed) return;
-      const cfg = store.getSyncSettings();
-      // CORE-14：interval 判据单一来源 = core/syncModes.autoSyncIntervalMs（与设置归一/移动端同口径）。
-      const intervalMs = autoSyncIntervalMs(cfg);
-      if (intervalMs === null) return;
-      syncTimer = setInterval(() => {
-        void runFullSync().catch((error) => {
-          const msg = error instanceof Error ? error.message : String(error);
-          console.warn("[sync] 自动同步失败:", msg);
-          // 261028 P1：广播里带上分类 ⇒ 渲染层能把「另一台设备在发布」当软提示，不弹红。
-          const info = readSyncErrorInfo(error);
-          broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg, errorCode: info.code, errorClass: info.className });
-        });
-      }, intervalMs);
-    };
-    startSyncTimers();
-    restartSyncTimers = startSyncTimers;
-
-    // 开启应用时对齐一次（261013：interval 也含在内；manual 不补）+ 断点续传（261026）。
-    // 续传优先级最高：上次同步没跑完（进程被杀/崩溃/断网）⇒ 启动就续上，**不受 autoMode 影响**
-    // （manual 也一样——用户点过同步，退出再进来必须接着下，而不是等他自己再点一次）。
-    const syncCfgOpen = store.getSyncSettings();
-    const interruptedAt = store.getSyncInterruptedAt();
-    // 两条判据都走单一来源：能不能出网 = core/cloudState（没配置 或 关闭云同步 ⇒ 不出网）；
-    // 该不该在开/关时补一次 = core/syncModes 的 shouldSyncOnOpenClose（enabled 且 autoMode ≠ "manual"）。
-    // Batch3-B：安全模式不自动同步，也不续传上次未完成的同步（那是网络动作；手动同步仍可用）。
-    if (!safeModeActive && autoSyncAllowed && canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && (interruptedAt !== null || shouldSyncOnOpenClose(syncCfgOpen))) {
-      if (interruptedAt !== null) log.app.info("[sync] 上次同步未完成（" + interruptedAt + "），启动自动续传" + formatLogFields({ backend: "v3" }));
-      void runFullSync().catch((error) => {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.warn("[sync] 开启同步失败:", msg);
-        const info = readSyncErrorInfo(error);
-        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg, errorCode: info.code, errorClass: info.className });
-      });
-    }
-
-    // 回收站自动过期（trashAutoPurgeDays 默认 90；0=关闭）。本地操作：启动即查一次 + 每天一次。
-    let trashTimer: NodeJS.Timeout | null = null;
-    const startTrashTimer = () => {
-      if (trashTimer) { clearInterval(trashTimer); trashTimer = null; }
-      const cfg = store.getS3GcSettings();
-      if (cfg.trashAutoPurgeDays <= 0) return;
-      const run = () => {
-        try {
-          const { purged, skipped } = store.autoPurgeExpiredTrash(cfg.trashAutoPurgeDays);
-          if (purged > 0 || skipped > 0) {
-            log.trash.info(`[trash] 自动过期 purge ${purged} 项（>${cfg.trashAutoPurgeDays} 天）` + (skipped > 0 ? `，跳过 ${skipped} 项（日记本不可删除）` : ""));
-          }
-        } catch (error) { console.warn("[trash] 自动过期失败:", error); }
-      };
-      run();
-      trashTimer = setInterval(run, 24 * 3600 * 1000);
-    };
-    startTrashTimer();
-    restartGcTimers = () => { startTrashTimer(); };
+    const timers = startTimerWiring({
+      store,
+      runFullSync,
+      broadcastSyncProgress,
+      classifySyncError: readSyncErrorInfo,
+      isSafeModeActive: () => safeModeActive,
+      autoSyncAllowed,
+    });
+    restartHistoryTimers = timers.restartHistoryTimers;
+    restartSyncTimers = timers.restartSyncTimers;
+    restartGcTimers = timers.restartGcTimers;
+    // R：开应用对齐一次 + 断点续传（boot/syncWiring）。
+    syncOnAppOpen({
+      store,
+      runFullSync,
+      broadcastSyncProgress,
+      classifySyncError: readSyncErrorInfo,
+      isSafeModeActive: () => safeModeActive,
+      autoSyncAllowed,
+    });
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) void createWindow(mainWindowDeps());
     });
   });
 }

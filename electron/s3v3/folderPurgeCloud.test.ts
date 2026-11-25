@@ -93,7 +93,7 @@ describe("task-77 F-01b：purge 目录后云端 folders[] 不残留（桌面 A �
     expect(await remote.list("objects/f01b-n1-")).toHaveLength(0);
 
     // 缺口①的现场证据：目录 purge 墓碑在 → loadState 投影成意图（folderPurgeIntents 的来源）
-    expect(a.store.listPurgedTombstones().map((t) => t.id)).toContain(g.id);
+    expect(a.store.syncState.listPurgedTombstones().map((t) => t.id)).toContain(g.id);
     const aState = (await a.device.loadState())!;
     expect(aState.intents.map((i) => i.noteId)).toContain(g.id);
 

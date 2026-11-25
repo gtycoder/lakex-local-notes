@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * 背景：崩溃标记（crash-marker.json）此前只写日志提示，没有安全模式 ⇒ 崩溃循环里用户既没界面也没出口。
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
-const MAIN = read("./main.ts");
+const MAIN = ["./main.ts", "./boot/startupDecision.ts", "./boot/timerWiring.ts", "./boot/syncWiring.ts"].map(read).join("\n"); // C-04：安全模式判据散布在这四件
 const PRELOAD = read("./preload.cjs");
 const WEB = read("./webApiServer.ts");
 const NATIVE = read("../src/lib/native.ts");
@@ -26,9 +26,9 @@ describe("主进程：安全模式判定 + 跳过自动动作（Batch3-B）", ()
 
   it("不自动同步：定时器 / 开应用对齐+续传 / 退出前同步 三处都跳过", () => {
     // ① interval 定时器
-    expect(MAIN).toMatch(/if \(safeModeActive\) return;\n\s+if \(!autoSyncAllowed\) return;/);
+    expect(MAIN).toMatch(/if \(deps\.isSafeModeActive\(\)\) return;\n\s+if \(!deps\.autoSyncAllowed\) return;/);
     // ② 开启应用时对齐 + 未完成同步续传
-    expect(MAIN).toContain("if (!safeModeActive && autoSyncAllowed && canTouchNetwork(");
+    expect(MAIN).toContain("if (!deps.isSafeModeActive() && deps.autoSyncAllowed && canTouchNetwork(");
     // ③ before-quit 那次
     expect(MAIN).toMatch(/if \(safeModeActive\) return;\n\s+const cfg = store\.getSyncSettings\(\);/);
   });

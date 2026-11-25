@@ -24,18 +24,18 @@ describe("saveBaseline 守卫式归位（261107 数据安全）", () => {
     const { root, store } = await freshStore();
     try {
       const before = updatedAtOf(store, "n1");
-      const pendingBefore = store.getSyncPendingSummary().documents;
+      const pendingBefore = store.syncState.getSyncPendingSummary().documents;
       expect(pendingBefore).toBeGreaterThan(0);
-      expect(store.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }])).toEqual({ cleared: 1, kept: 0 });
+      expect(store.syncState.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }])).toEqual({ cleared: 1, kept: 0 });
       // 只归位这一篇：窗口内其它脏行（如有）不受影响。
-      expect(store.getSyncPendingSummary().documents).toBe(pendingBefore - 1);
+      expect(store.syncState.getSyncPendingSummary().documents).toBe(pendingBefore - 1);
 
       // 模拟同步窗口内改名：updated_at 变了，旧 baseline 不得把它标 synced。
       store.renameTreeNode("n1", "Renamed in window");
       const after = updatedAtOf(store, "n1");
       expect(after).not.toBe(before);
-      expect(store.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }])).toEqual({ cleared: 0, kept: 1 });
-      expect(store.getSyncPendingSummary().documents).toBeGreaterThan(0);
+      expect(store.syncState.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }])).toEqual({ cleared: 0, kept: 1 });
+      expect(store.syncState.getSyncPendingSummary().documents).toBeGreaterThan(0);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -45,13 +45,13 @@ describe("saveBaseline 守卫式归位（261107 数据安全）", () => {
     const { root, store } = await freshStore();
     try {
       const before = updatedAtOf(store, "n1");
-      store.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }]);
+      store.syncState.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }]);
       store.deleteNote("n1");
       store.restoreTrashItem("n1");
-      expect(store.listRestorePendingNoteIds()).toContain("n1");
-      const result = store.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }]);
+      expect(store.syncState.listRestorePendingNoteIds()).toContain("n1");
+      const result = store.syncState.markNotesSyncedIfUnchanged([{ id: "n1", updatedAt: before }]);
       expect(result.kept).toBe(1);
-      expect(store.listRestorePendingNoteIds()).toContain("n1");
+      expect(store.syncState.listRestorePendingNoteIds()).toContain("n1");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

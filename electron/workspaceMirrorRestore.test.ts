@@ -256,12 +256,14 @@ describe("换位崩溃恢复（261201 P2-A）", () => {
     expect(fs.existsSync(swapPendingMarkerPath(ws))).toBe(false);
   });
 
-  it("启动接线钉法：main.ts 在启动预检前调用 recoverInterruptedWorkspaceSwap", () => {
+  it("启动接线钉法：换位回滚在启动预检前执行（C-04 后经 boot/startupDecision 装配）", () => {
     const source = fs.readFileSync(path.join(__dirname, "main.ts"), "utf8");
-    const recover = source.indexOf("recoverInterruptedWorkspaceSwap(workspaceRoot())");
-    const inspect = source.indexOf("inspectDatabaseForStartup(path.join"); // 比**调用点**而非 import 行
+    const decision = fs.readFileSync(path.join(__dirname, "boot", "startupDecision.ts"), "utf8");
+    const recover = source.indexOf("rollbackInterruptedWorkspaceSwap(workspaceRoot())"); // main：调用点
+    const inspect = source.indexOf("openStoreWithStartupProbe("); // 其内部做启动预检（inspectDatabaseForStartup）
     expect(recover).toBeGreaterThan(-1);
     expect(inspect).toBeGreaterThan(-1);
     expect(recover).toBeLessThan(inspect);
+    expect(decision, "回滚实现必须真调 recoverInterruptedWorkspaceSwap").toContain("recoverInterruptedWorkspaceSwap(workspaceRoot)");
   });
 });

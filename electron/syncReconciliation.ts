@@ -1,3 +1,17 @@
+/**
+ * S3 同步对账域（Store 协作类）：hash 账本 / 同步标记 markSynced 族 / 远端应用 applyRemote* / 墓碑 /
+ * 游标水线 / GC pending / 同步状态记录（设备本地审计账本，不进 S3）。
+ *
+ * 边界（不做什么）：不做合并判定（core/s3v3Decision|s3v3Merge）、不做传输/发布（core/s3v3Engine）、
+ * 不做回收站生命周期动作（trashLifecycle）——本文件只写「同步账本 + 远端镜像」。
+ *
+ * 单一来源指针：水线 core/syncWaterline；回收站子树 SQL 片段 electron/sql/treeFragments（UNION 防环）；
+ * gone 判据 core/syncDecisions.isGoneRow；诊断报告 core/s3v3Report。
+ *
+ * 调用方分类（AGENTS §3#23）：applyRemote 族 / markSynced 族 = **S 同步专用镜像写路径**（允许写回收站行、
+ * 不经用户守卫）；查询面供 U 用户 / M 维护调用。红线引注：AGENTS §3#1/#2/#4/#15、§7#4（markSynced
+ * 必须同改 tree_nodes.sync_state）；冲突留档语义 docs/SYNC-PROTOCOL.md §9.6/§9.9。
+ */
 import fs from "node:fs";
 import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";

@@ -76,7 +76,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       markRecoverySeen: (seen: boolean) => { this.sawRecoverySeen = seen; },
       recoveryConsumed: () => {
         if (!this.sawRecoverySeen) return;
-        try { this.store.clearBodyRecoveryPending(); } catch { /* 清理失败不影响同步结果 */ }
+        try { this.store.missingBody.clearBodyRecoveryPending(); } catch { /* 清理失败不影响同步结果 */ }
         this.sawRecoverySeen = false;
       },
       flushAssetDirDeletion: async (noteId: string) => {
@@ -153,7 +153,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     await this.writeAtomic(this.baselineFile, gzipSync(Buffer.from(JSON.stringify(baseline)), { level: 1 }));
     // baseline 只在发布成功后写 ⇒ 这里清 UI dirty；但必须守卫：只清本地 updated_at 仍等于基线快照的行，
     // 同步窗口内改名/移动/恢复的行保持 dirty，避免「标已同步后编辑永远不传」（261107 数据安全）。
-    this.store.markNotesSyncedIfUnchanged(baseline.lake.notes.map((n) => ({ id: n.id, updatedAt: n.updatedAt })));
+    this.store.syncState.markNotesSyncedIfUnchanged(baseline.lake.notes.map((n) => ({ id: n.id, updatedAt: n.updatedAt })));
   }
 
   /**
@@ -166,7 +166,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     try {
       const doc = this.store.readNote(id);
       if (doc.bodyMissing) {
-        this.store.markBodyRecoveryPending([id]);
+        this.store.missingBody.markBodyRecoveryPending([id]);
         return null;
       }
       return new TextEncoder().encode(doc.content);
@@ -207,7 +207,7 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
 
   /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清信封标记 + DB cloud_deleted 投影。 */
   async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
-    try { this.store.applyNotesCloudDeleted(markers.remotePurged); } catch { /* 投影失败不阻断 */ }
+    try { this.store.syncState.applyNotesCloudDeleted(markers.remotePurged); } catch { /* 投影失败不阻断 */ }
     // E3-1 信封化后：必须把标记并进 envelope（spread 旧 JSON + 覆盖顶层键会静默丢标记）。
     const persisted = migratePersisted(await this.readJson<unknown>(this.stateFile));
     if (!persisted) return;

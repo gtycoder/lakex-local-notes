@@ -25,7 +25,7 @@ describe("buildMainWindowOptions 平台分支", () => {
     expect(o.trafficLightPosition).toBeUndefined();
     // 菜单栏只藏视觉（保留默认菜单快捷键）：判据 shouldHideMenuBar + main.ts 的 setMenuBarVisibility 接线
     expect(shouldHideMenuBar("win32")).toBe(true);
-    const main = readFileSync(path.join(ROOT, "electron/main.ts"), "utf8");
+    const main = readFileSync(path.join(ROOT, "electron/window/createMainWindow.ts"), "utf8"); // C-04：主窗装配外迁
     expect(main).toContain("if (shouldHideMenuBar(process.platform)) win.setMenuBarVisibility(false);");
   });
 

@@ -93,8 +93,8 @@ export interface IpcWiringDeps {
 function portableIpcAvailability(store: Store, quickNotes: QuickNotesStore): PortableExportAvailability {
   try {
     const sync = store.getSyncSettings();
-    const status = store.getSyncStatus();
-    const pending = store.getSyncPendingSummary();
+    const status = store.syncState.getSyncStatus();
+    const pending = store.syncState.getSyncPendingSummary();
     const quickPending = getQuickNotesAvailability().mode === "ok" ? quickNotes.getPendingSyncSummary() : { items: 0 };
     return portableExportAvailability({
       s3Configured: store.getS3Settings() !== null,
@@ -140,10 +140,10 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
       } catch { /* 忽略 */ }
     }
     try {
-      const sig = `${store.pendingSignature()}:${quickNotes.getPendingSyncSummary().items}`;
+      const sig = `${store.syncState.pendingSignature()}:${quickNotes.getPendingSyncSummary().items}`;
       if (sig === lastPendingSig) return;
       lastPendingSig = sig;
-      const lake = store.getSyncPendingSummary();
+      const lake = store.syncState.getSyncPendingSummary();
       const quick = quickNotes.getPendingSyncSummary();
       const summary = { documents: lake.documents, folders: lake.folders, resources: 0, quickNotes: quick.items, total: lake.documents + lake.folders + quick.items, generatedAt: new Date().toISOString() };
       for (const win of BrowserWindow.getAllWindows()) {
@@ -264,7 +264,7 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
     cloudState: () => {
       try {
         const sync = store.getSyncSettings();
-        const status = store.getSyncStatus();
+        const status = store.syncState.getSyncStatus();
         const input = {
           s3Configured: store.getS3Settings() !== null,
           sync: { enabled: sync.enabled, autoMode: sync.autoMode },

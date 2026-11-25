@@ -11,13 +11,13 @@ const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 
 describe("sync status wiring（主进程）", () => {
   it("runFullSync 成功路径同时记录结果与时间", () => {
-    expect(main).toContain("store.recordSyncResult(JSON.stringify(result));");
-    expect(main).toContain("store.markSyncComplete(");
+    expect(main).toContain("store.syncState.recordSyncResult(JSON.stringify(result));");
+    expect(main).toContain("store.syncState.markSyncComplete(");
   });
 
   it("markSyncComplete 在 recordSyncResult 之后（同一成功分支）", () => {
-    const at = main.indexOf("store.recordSyncResult(JSON.stringify(result));");
-    const mark = main.indexOf("store.markSyncComplete(");
+    const at = main.indexOf("store.syncState.recordSyncResult(JSON.stringify(result));");
+    const mark = main.indexOf("store.syncState.markSyncComplete(");
     expect(at).toBeGreaterThan(0);
     expect(mark).toBeGreaterThan(at);
     expect(mark - at).toBeLessThan(600); // 同一分支内紧邻
@@ -25,7 +25,7 @@ describe("sync status wiring（主进程）", () => {
 
   it("Del-6：v3 成功同步后写墓碑水线（Lake + 小记），不再逐行 markTombstonesPublished", () => {
     const sync = readFileSync(new URL("./s3v3/desktopSync.ts", import.meta.url), "utf8");
-    expect(sync).toContain("store.markTombstonesWaterline(");
+    expect(sync).toContain("store.syncState.markTombstonesWaterline(");
     expect(sync).toContain("quickNotes?.markTombstonesWaterline(");
     expect(sync).not.toContain("markTombstonesPublished");
   });

@@ -39,9 +39,9 @@ const ROOT = path.resolve(ELECTRON_DIR, "..");
  * 允许出现的一级子目录（A-3）。**新增一级目录必须同时在这里和 ALLOWED_DEPENDENCIES 登记**，
  * 否则 R2 直接失败 —— 这是思源「allowedDependencies 未登记即失败」的做法。
  *
- * 批次 B（窗口层外迁）落地时才加 `window`；现在提前登记会让「目录还不存在」的规则静默失效。
+ * 261205 批次 B（C-04 装配外迁）落地：新增 `window`（窗口层，只许依赖 domain/boot）。
  */
-const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "sql", "testing", "update", "webApi"] as const;
+const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "sql", "testing", "update", "webApi", "window"] as const;
 type Subdir = (typeof REGISTERED_SUBDIRS)[number];
 type Layer = "entry" | "domain" | Subdir;
 
@@ -59,7 +59,7 @@ type Layer = "entry" | "domain" | Subdir;
  */
 const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   // 入口：唯一的装配点，可以 import 任何层（它就是把它们装起来的那个文件）。
-  entry: ["domain", "ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "update", "webApi"],
+  entry: ["domain", "ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "update", "webApi", "window"],
   // 领域层：可依赖子系统。现状只有三类边，都是「门面 re-export」或「编排委托」：
   //   - domain→webApi（7 条）= electron/webApiServer.ts 门面 re-export electron/webApi/*
   //   - domain→quickNotes（2 条）= electron/quickNotes.ts 门面 re-export electron/quickNotes/*
@@ -94,6 +94,9 @@ const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   update: ["domain", "update"],
   // 浏览器端：复用同一批 IPC handler（webApi/bridge.ts → ipc/errors.ts 的错误编码）。
   webApi: ["domain", "ipc", "webApi"],
+  // 窗口层（C-04 批次 B）：splash/主窗/安全面装配。只许依赖 domain（领域件）与 boot（paths/
+  // startupOrder 等启动契约）——**不得 import ipc/**（窗口层不装配 IPC，审计 §5 批次 B 规则）。
+  window: ["domain", "boot"],
 };
 
 /**
