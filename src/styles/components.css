@@ -18,7 +18,17 @@
 .sync-status-section dl { display: grid; gap: var(--lake-space-sm); margin: 0; }
 .sync-status-section dl > div { display: grid; grid-template-columns: 4em minmax(0, 1fr); gap: var(--lake-space-lg); font-size: var(--lake-font-size-small); }
 .sync-status-section dt { color: var(--lake-text-2); }
-.sync-status-section dd { margin: 0; min-width: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.sync-status-section dd { margin: 0; min-width: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 261205 用户定稿 B'（行列互换）：行=↑上传/↓下载、列=类型；table-layout:fixed + 全格 nowrap ⇒ 恒单行（用户红线：不许换行）。 */
+.sync-stats-grid { width: 100%; margin: 11px 0 0; border-collapse: collapse; table-layout: fixed; font-size: var(--lake-font-size-small); font-variant-numeric: tabular-nums; }
+.sync-stats-grid th, .sync-stats-grid td { padding: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-stats-grid thead th { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); text-align: right; }
+.sync-stats-grid thead th:first-child, .sync-stats-grid tbody th { text-align: left; }
+.sync-stats-grid tbody th { color: var(--lake-text-2); font-weight: var(--lake-font-weight-regular); }
+.sync-stats-grid td { text-align: right; color: var(--lake-text-1); }
+.sync-stats-grid th:first-child { width: 4.2em; }
+.sync-stats-grid th:last-child, .sync-stats-grid td:last-child { width: 23%; }
+.sync-stats-grid .muted { color: var(--lake-text-3); }
 .sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); line-height: var(--lake-line-height-snug); }
 .sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-tiny); }
 .sync-status-history-note div { display: grid; gap: var(--lake-space-xs); }

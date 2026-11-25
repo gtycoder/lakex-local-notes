@@ -169,6 +169,16 @@ export function SyncStatusPopover({
   const downTags = stats?.downloadedTags ?? 0;
   const upBytes = stats?.uploadedBytes ?? 0;
   const downBytes = stats?.downloadedBytes ?? 0;
+  /** B' 统计格：0 显示「–」弱化；流量列给 bytes。全格 nowrap（CSS 兜底，值再大也不换行）。 */
+  const statCell = (n?: number, bytes?: number) => {
+    const text = bytes !== undefined ? (bytes > 0 ? formatBytesCompact(bytes) : null) : (n && n > 0 ? String(n) : null);
+    return text === null ? <span className="muted">–</span> : text;
+  };
+  /** 待同步值：只列非零项（261205 智能省略随 B' 一并保留）；标签与数字紧排省宽（禁换行红线 ⇒ 极端值也要单行放得下）。 */
+  const pendingText = model.pendingTotal === 0
+    ? "全部已同步"
+    : model.pendingTotal + " 项（" + ([["文档", pendingDocuments], ["目录", pendingFolders], ["小记", pendingQuickNotes], ["标签", pendingTags]] as Array<[string, number]>)
+        .filter(([, n]) => n > 0).map(([label, n]) => label + n).join("，") + "）";
 
   const icon = localOnly ? <HardDrive size={14} /> : model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <CloudUpload size={14} /> : <Cloud size={14} />;
 
@@ -226,18 +236,42 @@ export function SyncStatusPopover({
           <section className="sync-status-section">
             <dl>
               <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}{stats?.durationMs ? `（${formatDuration(stats.durationMs)}）` : ""}</dd></div>
-              {/* 上传/下载细分：用户要求始终展示（0 也显示）；字节仅统计正文+资源。 */}
-              <div>
-                <dt>上传</dt>
-                <dd>文档 {upDocs}，目录 {upFolders}，小记 {upQuick}，标签 {upTags}，{formatBytesCompact(upBytes)}</dd>
-              </div>
-              <div>
-                <dt>下载</dt>
-                <dd>文档 {downDocs}，目录 {downFolders}，小记 {downQuick}，标签 {downTags}，{formatBytesCompact(downBytes)}</dd>
-              </div>
+              {/* 261205 用户定稿 B'（行列互换）：行=↑上传/↓下载、列=类型；0 显示「–」；全表禁止换行（table-layout:fixed + nowrap）。 */}
+            </dl>
+            <table className="sync-stats-grid">
+              <thead>
+                <tr>
+                  <th scope="col"><span className="a11y-visually-hidden">方向</span></th>
+                  <th scope="col">文档</th>
+                  <th scope="col">目录</th>
+                  <th scope="col">小记</th>
+                  <th scope="col">标签</th>
+                  <th scope="col">流量</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">↑ 上传</th>
+                  <td>{statCell(upDocs)}</td>
+                  <td>{statCell(upFolders)}</td>
+                  <td>{statCell(upQuick)}</td>
+                  <td>{statCell(upTags)}</td>
+                  <td>{statCell(undefined, upBytes)}</td>
+                </tr>
+                <tr>
+                  <th scope="row">↓ 下载</th>
+                  <td>{statCell(downDocs)}</td>
+                  <td>{statCell(downFolders)}</td>
+                  <td>{statCell(downQuick)}</td>
+                  <td>{statCell(downTags)}</td>
+                  <td>{statCell(undefined, downBytes)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <dl>
               <div>
                 <dt>待同步</dt>
-                <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments}，目录 ${pendingFolders}，小记 ${pendingQuickNotes}，标签 ${pendingTags}）`}</dd>
+                <dd title={pendingText}>{pendingText}</dd>
               </div>
             </dl>
           </section>
