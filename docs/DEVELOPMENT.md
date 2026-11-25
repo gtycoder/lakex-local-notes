@@ -87,7 +87,7 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm test   # vitest run，82 
 - 测试文件：`electron/{ssrf,sync,store}.test.ts` + `src/features/editor/clipboardHtml.test.ts`
 - better-sqlite3 13.x 为 N-API 单二进制，vitest 直接用仓库内构建，无需双 ABI 基建；
   `electron/store.test.ts` 里 `vi.mock("electron")` 提供 safeStorage/net 替身（store.ts 模块加载即 import electron）
-- Store 层测试用真实 SQLite 临时目录 + 另开只读连接验证落盘内容（如 S3 密钥是否 `enc:v1:`）
+- Store 层测试用真实 SQLite 临时目录 + 另开只读连接验证落盘内容（如 S3 密钥是否 `enc:v2:`）
 
 ### 原生文件对话框测试钩子（仅 dev）
 

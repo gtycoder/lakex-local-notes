@@ -10,7 +10,7 @@
 1. [README.md](README.md) —— 项目是什么、怎么装、怎么跑。
 2. [docs/HANDOFF.md](docs/HANDOFF.md) —— **唯一交接文档**：当前基线（§1）、跨批次风险（§2）、真实待办（§3）。分支/版本/计数等易过期事实**只**看这里。
 3. [AGENTS.md](AGENTS.md) —— **长期红线与机制**（必读）：单一来源、设计系统、门禁分层、依赖准入、踩坑记录。
-4. 用户视角：[guide/README.md](guide/README.md)（19 章中文手册）；要改用户可见行为时先对照手册，改完同步更新。
+4. 用户视角：[guide/README.md](guide/README.md)（20 章中文手册）；要改用户可见行为时先对照手册，改完同步更新。
 
 安全问题的报告方式见 [SECURITY.md](SECURITY.md)（**不要**开公开 issue 贴可利用细节）。
 

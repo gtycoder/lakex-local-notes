@@ -12,12 +12,21 @@
 
 [![editor 编辑器](https://img.shields.io/badge/editor%20%E7%BC%96%E8%BE%91%E5%99%A8-Lakex%20v1.99.0%20pinned-blue?style=flat-square)](docs/lakexEditor-developer-docs/)
 [![sync 同步](https://img.shields.io/badge/sync%20%E5%90%8C%E6%AD%A5-S3%20%E5%85%BC%E5%AE%B9%20%C2%B7%20%E5%8D%8F%E8%AE%AE%20v3-blue?style=flat-square)](docs/SYNC-PROTOCOL.md)
-[![guide 手册](https://img.shields.io/badge/guide%20%E6%89%8B%E5%86%8C-19%20%E7%AB%A0%20%C2%B7%2019%20chapters-informational?style=flat-square)](guide/README.md)
+[![guide 手册](https://img.shields.io/badge/guide%20%E6%89%8B%E5%86%8C-20%20%E7%AB%A0%20%C2%B7%2020%20chapters-informational?style=flat-square)](guide/README.md)
 [![update 更新](https://img.shields.io/badge/update%20%E6%9B%B4%E6%96%B0-%E5%86%85%E7%BD%AE%E6%9B%B4%E6%96%B0%E4%B8%AD%E5%BF%83-informational?style=flat-square)](docs/UPDATE-CENTER.md)
 
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
 > 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核以 **vendored** 形式随本仓库公开分发（未经语雀/蚂蚁授权，风险自担，见 `NOTICE`）。
+
+## 📥 下载与安装
+
+安装包在 **[GitHub Releases](https://github.com/gtycoder/lakex-local-notes/releases)**：
+
+- **macOS**：下载 `.dmg`，打开后把应用拖进「应用程序」。首次打开请**右键 →「打开」**：发布的包为 ad-hoc 签名、未公证，直接双击会被系统拦截
+- **Android**：下载 `.apk` 安装，需要 **Android 7.0+**（minSdk 24）
+
+第一次用？接着看[使用说明（用户手册）](guide/README.md)。
 
 ## 📖 使用说明（用户手册）
 
@@ -234,13 +243,16 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 基线 / 待办 / 踩坑 |
 | [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
 | [guide/README.md](guide/README.md) | **中文用户使用手册**（按桌面与 Android 分步说明，含截图） |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 参与贡献：环境、门禁、提交与 PR 规则 |
+| [SECURITY.md](SECURITY.md) | 安全问题的报告方式 |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | 产品定位与边界（文案红线：不写推荐语 / 定价 / 路线图承诺） |
 
 > **文档索引只有一份**：全部说明文档（架构 / 同步 / 存储 / 内核 / 表格 / 移动端 / 发布 / 更新中心 / 便携包 / 日记 / AI 写作 / 排错…）统一登记在 [docs/HANDOFF.md §1 文档地图](docs/HANDOFF.md)。新文档先登记到那张地图，不要在这里再维护第二份列表。
 
 ## 数据与隐私
 
 - 无账号、无云端登录；数据默认只在本机
-- S3 凭证保存在本机（桌面 AES-256-GCM 本机加密 + 本地钥匙文件，防误读、非安全边界 / Android Keystore），不会写入正文或日志
+- S3 凭证保存在本机，密钥一律由应用自管理加密存储（不进系统钥匙串 / Keystore）：桌面 AES-256-GCM + 本地钥匙文件，Android 应用私有密钥文件 + AES-GCM；防误读、非安全边界，不会写入正文或日志
 - 迁移码内层加密仅用于防误读，**不是安全边界**；不要外传
 - 仓库内不含任何真实笔记数据或密钥
 

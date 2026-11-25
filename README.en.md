@@ -12,7 +12,7 @@
 
 [![editor 编辑器](https://img.shields.io/badge/editor%20%E7%BC%96%E8%BE%91%E5%99%A8-Lakex%20v1.99.0%20pinned-blue?style=flat-square)](docs/lakexEditor-developer-docs/)
 [![sync 同步](https://img.shields.io/badge/sync%20%E5%90%8C%E6%AD%A5-S3%20%E5%85%BC%E5%AE%B9%20%C2%B7%20%E5%8D%8F%E8%AE%AE%20v3-blue?style=flat-square)](docs/SYNC-PROTOCOL.md)
-[![guide 手册](https://img.shields.io/badge/guide%20%E6%89%8B%E5%86%8C-19%20%E7%AB%A0%20%C2%B7%2019%20chapters-informational?style=flat-square)](guide/README.md)
+[![guide 手册](https://img.shields.io/badge/guide%20%E6%89%8B%E5%86%8C-20%20%E7%AB%A0%20%C2%B7%2020%20chapters-informational?style=flat-square)](guide/README.md)
 [![update 更新](https://img.shields.io/badge/update%20%E6%9B%B4%E6%96%B0-%E5%86%85%E7%BD%AE%E6%9B%B4%E6%96%B0%E4%B8%AD%E5%BF%83-informational?style=flat-square)](docs/UPDATE-CENTER.md)
 
 > This English README is a translation of the Chinese README.md; the Chinese version is the source of truth and this file follows its updates. The user manual and docs are in Chinese.
@@ -20,6 +20,15 @@
 **Local-first notes app built on the Yuque Lakex editor kernel (unofficial)** — macOS + Android; your local data is the single source of truth, S3 is only a multi-device mirror.
 
 > Unofficial project, **not affiliated with Yuque / Ant Group**. The closed-source Lakex kernel is vendored and redistributed without authorization — use at your own risk, see `NOTICE`.
+
+## 📥 Download & Install
+
+Installers are on **[GitHub Releases](https://github.com/gtycoder/lakex-local-notes/releases)**:
+
+- **macOS**: download the `.dmg` and drag the app into "Applications". The first launch needs **right-click → Open**: published builds are ad-hoc signed and unnotarized, so double-clicking is blocked by the system
+- **Android**: install the `.apk`; requires **Android 7.0+** (minSdk 24)
+
+First time here? Continue with the [user manual](guide/README.md).
 
 ## 📖 User Manual
 
@@ -236,13 +245,16 @@ CI releases produce `assembleRelease` APKs **signed with the release keystore** 
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **The single handoff document**: current status / baselines / to-dos / pitfalls |
 | [AGENTS.md](AGENTS.md) | **Long-term red lines and mechanisms** (must-read at session start) |
 | [guide/README.md](guide/README.md) | **Chinese user manual** (step-by-step for desktop and Android, with screenshots) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributing: environment, gates, commit and PR rules |
+| [SECURITY.md](SECURITY.md) | How to report security issues |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | Product positioning and boundaries (copy red lines: no testimonials / pricing / roadmap promises) |
 
 > **There is only one documentation index**: every explanatory document (architecture / sync / storage / kernel / Sheets / mobile / release / update center / portable package / Diary / AI Writing / troubleshooting…) is registered in [docs/HANDOFF.md §1 documentation map](docs/HANDOFF.md). Register new documents in that map first; do not maintain a second list here.
 
 ## Data & Privacy
 
 - No accounts and no cloud login; data stays on the local machine by default
-- S3 credentials are kept on the local machine (desktop AES-256-GCM local encryption with a local key file (obfuscation, not a security boundary) / Android Keystore) and are never written into note bodies or logs
+- S3 credentials are kept on the local machine and managed by the app's own encrypted storage (never in the OS keychain / Keystore): desktop AES-256-GCM with a local key file, Android app-private key file + AES-GCM; obfuscation, not a security boundary; never written into note bodies or logs
 - The inner encryption of the transfer code only guards against misreading and is **not a security boundary**; do not share it
 - The repository contains no real note data or keys
 
