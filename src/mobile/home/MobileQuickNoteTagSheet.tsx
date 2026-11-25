@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Search, Tag } from "lucide-react";
+import { Check, ChevronDown, Plus, Tag } from "lucide-react";
 import { normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { MobileSheet } from "../ui/MobileSheet";
 
@@ -83,7 +83,7 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
           type="button"
           className="qn-tag-sheet__search-toggle"
           onClick={() => { setSearchOpen(true); window.setTimeout(() => inputRef.current?.focus(), 80); }}
-        ><Search size={16} /><span>搜索或新建标签</span></button>
+        ><ChevronDown size={16} /><span>搜索或新建标签</span></button>
       )}
       {searchOpen && <div className="qn-tag-sheet__input-row">
         <span className="mb-input qn-tag-sheet__input">
