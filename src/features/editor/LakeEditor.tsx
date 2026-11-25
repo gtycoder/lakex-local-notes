@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, retryFailedDocumentImageUploads, resumePendingDocumentImageUploads, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
-import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
-import { subscribeUploadJournal } from "./uploadJournal";
-import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
+import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, resumePendingDocumentImageUploads, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
+import { repairUploadCards } from "./uploadCardRepair";
+import { useUploadJournalRecovery } from "./useUploadJournalRecovery";
 import { upgradePastedHtml } from "./clipboardHtml";
-import { attachSelectionClipboard } from "./selectionClipboard";
+import { attachSelectionClipboard, deleteSelectionKernelFirst } from "./selectionClipboard";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
@@ -68,42 +67,23 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
   // 书签卡工具条需要编辑器实例（ref 变化不触发渲染，所以额外存一份 state）。
   const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
   const kernelDark = useKernelDarkTheme();
-  const retryTimersRef = useRef<Set<number>>(new Set());
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
-  // 移动端：长按卡片 → 卡片菜单（触屏没有右键；桌面此处由 EditorTab 的右键处理）。
-  // preview 档（Q07A）：只读宿主不提供菜单（重命名/剪切/另存都是写操作）。
   /**
    * 可恢复图片上传（261114 二批，移动端文档编辑器 journalRecovery=true）：
    * 晚到的下载结果 → 正文仍存在同一 taskId 的未解决图卡时重建一次；失败项按退避后台补拉。
-   * 判据与桌面 EditorTab 完全同源，避免两端对「什么时候自愈」有两套口径。
+   * 判据与桌面 EditorTab 是**同一份**（useUploadJournalRecovery，D-02 收口），别再复制第二份。
    */
-  useEffect(() => {
-    if (!journalRecovery || mode !== "editor") return;
-    const timers = retryTimersRef.current;
-    const off = subscribeUploadJournal((entry) => {
-      if (entry.noteId !== noteId) return;
-      if (entry.status === "error") {
-        const delay = uploadRetryDelayForEntry(entry);
-        if (delay != null) {
-          const timer = window.setTimeout(() => {
-            timers.delete(timer);
-            retryFailedDocumentImageUploads(noteId);
-          }, delay);
-          timers.add(timer);
-        }
-      }
-      if (entry.status === "pending") return;
-      if (!hasUnresolvedImageTask(latestDocumentRef.current, entry.taskId)) return;
-      setRecoveryTick((tick) => tick + 1);
-    });
-    return () => {
-      off();
-      for (const timer of timers) window.clearTimeout(timer);
-      timers.clear();
-    };
-  }, [journalRecovery, mode, noteId]);
+  useUploadJournalRecovery({
+    noteId,
+    enabled: journalRecovery && mode === "editor",
+    getLatestDocument: () => latestDocumentRef.current,
+    onNeedRebuild: () => setRecoveryTick((tick) => tick + 1),
+  });
+
+  // 移动端：长按卡片 → 卡片菜单（触屏没有右键；桌面此处由 EditorTab 的右键处理）。
+  // preview 档（Q07A）：只读宿主不提供菜单（重命名/剪切/另存都是写操作）。
 
   useEffect(() => {
     const host = hostRef.current;
@@ -122,7 +102,10 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
 
     // 复制/剪切 = 应用侧统一管线（图片来源见 selectionClipboard.ts 文件头；单一来源，别在这里再写一份）。
     // preview 档（Q07A）：只读预览不接管 copy/cut（内核原生只读选区行为保留）。
-    const detachSelectionClipboard = previewOnly ? () => undefined : attachSelectionClipboard(host);
+    // cut 删除与 EditorTab/共享桥同走 deleteSelectionKernelFirst（内核命令优先、DOM 兜底，260917）。
+    const detachSelectionClipboard = previewOnly
+      ? () => undefined
+      : attachSelectionClipboard(host, { deleteSelection: () => deleteSelectionKernelFirst(editorRef.current) });
     const pasteHandler = (event: ClipboardEvent) => {
       const dt = event.clipboardData;
       if (!dt) return;

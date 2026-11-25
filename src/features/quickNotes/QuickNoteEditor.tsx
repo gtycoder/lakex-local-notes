@@ -5,7 +5,7 @@ import { imageThumbAllowFiles } from "../../core/quickNoteImageThumb.js";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { createLakeDocument, type LakeEditorInstance } from "../editor/lakeRuntime";
 import { installMediaCardCategoryRouter } from "../editor/mediaCardRouting";
-import { attachSelectionClipboard } from "../editor/selectionClipboard";
+import { attachSelectionClipboard, deleteSelectionKernelFirst } from "../editor/selectionClipboard";
 import { attachImagePreviewClick, extractImagesFromContent } from "../editor/imagePreview";
 import { isDesktop } from "../../lib/native";
 
@@ -121,7 +121,8 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
     );
     // 复制/剪切 = 应用侧统一管线（与文档编辑器同一份）：小记里显示的图可能带 ?w=1024，
     // 直接交给内核/WebView 会把**显示缩略**写进剪贴板（粘到微信就糊）；这里统一物化成原图 data URL。
-    const detachSelectionClipboard = attachSelectionClipboard(host);
+    // cut 删除与其它宿主同走 deleteSelectionKernelFirst（内核命令优先、DOM 兜底，260917）。
+    const detachSelectionClipboard = attachSelectionClipboard(host, { deleteSelection: () => deleteSelectionKernelFirst(editor) });
     // 图片放大预览（261112 用户定稿：**移动端单击看大图、双击编辑**；桌面保持双击看图）。
     // 小记写作卡是独立内核实例（不走 LakeEditor/EditorTab）⇒ 这条入口要单独接。
     // 画廊列表取自正文（写作卡不虚拟渲染，但仍按统一口径走 resolver，未保存的新插图也在）。

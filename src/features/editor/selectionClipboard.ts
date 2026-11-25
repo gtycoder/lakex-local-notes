@@ -10,7 +10,8 @@
  * 交回内核 —— 内核写私有 `ne-clipboard` 片段，站内粘贴才能还原卡片语义；我们把整段 HTML 归一化后
  * 会丢掉这个片段（表格/画板/思维导图粘回来会降级），所以不能无条件接管。
  * 单一来源：LakeEditor（文档 + 移动端文档编辑器）与 QuickNoteEditor（小记写作卡）都挂这一份，
- * 不要再各写一遍 copy/cut 处理器。
+ * 不要再各写一遍 copy/cut 处理器。唯一例外 = 桌面 `EditorTab` 的独立 copy 管线（**显式契约例外**，
+ * 全量接管待裁决点 C；但 cut 删除两套管线同走 deleteSelectionKernelFirst，见下）。
  */
 import { buildClipboardPayload } from "./clipboardHtml";
 import { matrixFromTableElement, payloadFromMatrix, tableIndexInHost, tableMatrixFromBody } from "./tableClipboardModel";
@@ -144,7 +145,8 @@ async function writeTableClipboard(payload: { html: string; plain: string }): Pr
 
 /**
  * 只接管「整表/多格选择」的复制（261122）：**独立可挂**，因为文档编辑器 `EditorTab` 有自己的 copy 管线
- * （不走 attachSelectionClipboard）。两个宿主都挂这一份，避免再写第二套。
+ * （不走 attachSelectionClipboard）——这是**显式契约例外**（全量接管是外发微信/Word 的历史口径，
+ * 语义是否合并 = 裁决点 C，未裁决前不合并、也不算漂移）。两个宿主都挂这一份，避免再写第二套。
  * 数据源 = **内核正文**（`getBody`）：表格是虚拟渲染的，DOM 里只有视口附近的行。
  */
 export function attachTableCopy(host: HTMLElement, getBody?: () => string | null): () => void {
@@ -187,8 +189,35 @@ export function attachTableCopy(host: HTMLElement, getBody?: () => string | null
   };
 }
 
+/**
+ * cut 后删除选区的**统一删除实现**（260917 实测：`document.execCommand("delete")` 只删 DOM、
+ * 内核模型不变，点块即被重绘回来）——必须先走内核命令让模型同步，DOM 删除仅作兜底。
+ * 桌面 EditorTab 的 cutHandler 与共享桥的 deleteSelection 回调同走这一份，别再内联第二份判据。
+ * 入参 = 编辑器命令面（kernel/execCommand 子集，见 lakeRuntime.LakeEditorInstance）。
+ */
+export function deleteSelectionKernelFirst(
+  editor: { kernel?: { execCommand?(name: string, ...args: unknown[]): unknown }; execCommand?(name: string, ...args: unknown[]): unknown } | null | undefined,
+): void {
+  try {
+    // 删除必须走内核命令（与 style/insertCard 同一入口），内核模型才会同步
+    if (editor?.kernel?.execCommand) editor.kernel.execCommand("delete");
+    else if (editor?.execCommand) editor.execCommand("delete");
+    else document.execCommand("delete");
+  } catch {
+    try { document.execCommand("delete"); } catch { /* 内核可能自行处理 */ }
+  }
+}
+
+export interface SelectionClipboardOptions {
+  /**
+   * cut 写完剪贴板后的删除回调：宿主传 deleteSelectionKernelFirst 的「内核优先」实现
+   * （`() => deleteSelectionKernelFirst(editorRef.current)`）；缺省 = 仅 DOM 兜底（等价旧行为）。
+   */
+  deleteSelection?: () => void;
+}
+
 /** 给编辑宿主挂 copy/cut 接管；返回清理函数（随实例卸载调用）。 */
-export function attachSelectionClipboard(host: HTMLElement): () => void {
+export function attachSelectionClipboard(host: HTMLElement, options: SelectionClipboardOptions = {}): () => void {
   // 表格复制 = 与 EditorTab 共用的同一份接管（这里组合进来，避免两处各写一份）。
   const detachTableCopy = attachTableCopy(host);
   const onCopy = (event: ClipboardEvent): void => {
@@ -221,7 +250,9 @@ export function attachSelectionClipboard(host: HTMLElement): () => void {
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    try { document.execCommand("delete"); } catch { /* 内核可能自行处理 */ }
+    // 删除走「内核命令优先、DOM 兜底」的统一实现（deleteSelectionKernelFirst）：
+    // 只删 DOM 时内核模型不变，点块即被重绘回来（260917 实测，editorCut.test.ts 钉住）。
+    try { (options.deleteSelection ?? ((): void => deleteSelectionKernelFirst(null)))(); } catch { /* 内核可能自行处理 */ }
   };
   host.addEventListener("copy", onCopy, true);
   host.addEventListener("cut", onCut, true);

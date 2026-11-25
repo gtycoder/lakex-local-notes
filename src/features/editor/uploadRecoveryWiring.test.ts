@@ -13,6 +13,8 @@ describe("图片上传自愈接线", () => {
   const runtime = read("./lakeRuntime.ts");
   const editorTab = read("./EditorTab.tsx");
   const resourceUpload = read("./resourceUpload.ts");
+  // 261125 D-02：订阅/判据/退避收口在 useUploadJournalRecovery（此前 EditorTab 与 LakeEditor 各一份逐字复制 = 漂移源）
+  const recoveryHook = read("./useUploadJournalRecovery.ts");
 
   it("文档编辑器 image 插件用 createUploadTask（可恢复）；必须清掉 vendor 默认 createUploadPromise 桩", () => {
     expect(runtime).toContain("createUploadTask:");
@@ -23,11 +25,14 @@ describe("图片上传自愈接线", () => {
     expect(runtime).toContain("createUploadPromise:");
   });
 
-  it("EditorTab 挂载时按 taskId 回填正文，并订阅晚到结果触发重建", () => {
+  it("EditorTab 挂载时按 taskId 回填正文，并经共享 hook 订阅晚到结果触发重建", () => {
     expect(editorTab).toContain("repairUploadCards(latestDocumentRef.current, noteId)");
     expect(editorTab).toContain("resumePendingDocumentImageUploads(noteId)");
-    expect(editorTab).toContain("subscribeUploadJournal");
-    expect(editorTab).toContain("hasUnresolvedImageTask");
+    // 订阅/判据收口在 useUploadJournalRecovery（D-02）：宿主只留 rebuild tick
+    expect(editorTab).toContain("useUploadJournalRecovery(");
+    expect(editorTab).toMatch(/onNeedRebuild: \(\) => setRebuildTick/);
+    expect(recoveryHook).toContain("subscribeUploadJournal");
+    expect(recoveryHook).toContain("hasUnresolvedImageTask");
   });
 
   it("交互式远程图下载预算（15s×3）且渲染层不再叠加重试", () => {
@@ -43,8 +48,8 @@ describe("图片上传自愈接线", () => {
   });
 
   it("失败图有后台补拉与点击重试（attempts 预算 + 退避调度 + ne-image-error 点击）", () => {
-    expect(editorTab).toContain("uploadRetryDelayForEntry");
-    expect(editorTab).toContain("retryFailedDocumentImageUploads(noteId)");
+    expect(recoveryHook).toContain("uploadRetryDelayForEntry");
+    expect(recoveryHook).toContain("retryFailedDocumentImageUploads(noteId)");
     expect(runtime).toContain("retryFailedDocumentImageUploads");
     expect(runtime).toContain("forceRetryImageUploadTask(");
     expect(runtime).toContain("attachImageErrorRetryClick");
@@ -59,7 +64,9 @@ describe("图片上传自愈接线", () => {
     expect(lakeEditor).toContain("journalRecovery");
     expect(lakeEditor).toContain("repairUploadCards(");
     expect(lakeEditor).toContain("resumePendingDocumentImageUploads(noteId)");
-    expect(lakeEditor).toContain("subscribeUploadJournal");
+    // 自愈订阅与桌面共用同一 hook（enabled = journalRecovery×mode 判据，行为与旧内联效果等价）
+    expect(lakeEditor).toContain("useUploadJournalRecovery(");
+    expect(lakeEditor).toMatch(/enabled: journalRecovery && mode === "editor"/);
     expect(documentEditor).toContain("journalRecovery");
   });
 });

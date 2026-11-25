@@ -17,8 +17,10 @@ import { attachImagePreviewClick, closeImagePreview, subscribeImagePreview, type
 
 // jsdom 环境里 import.meta.url 不是 file: 协议（vite 注入 http 地址）⇒ 用仓库根拼绝对路径读源码。
 const readSrc = (rel: string) => readFileSync(path.resolve(process.cwd(), rel), "utf8");
+// 读取面 = 三宿主全量（AGENTS §4 记录过「历史护栏只测 LakeEditor 漏 EditorTab」的同型事故：别只测一个宿主）
 const EDITOR_TAB_SRC = readSrc("src/features/editor/EditorTab.tsx");
 const LAKE_EDITOR_SRC = readSrc("src/features/editor/LakeEditor.tsx");
+const NOTE_EDITOR_SRC = readSrc("src/features/quickNotes/QuickNoteEditor.tsx");
 
 let host: HTMLDivElement | null = null;
 let detach: (() => void) | null = null;
@@ -80,11 +82,13 @@ describe("文档图片预览：画廊列表来自正文（261112）", () => {
     expect(homeSrc).toMatch(/if \(suppressTap\.current\) \{ suppressTap\.current = false; return; \}/);
     expect(homeSrc).toMatch(/if \(selecting\) \{ onToggleSelect\(\); return; \}/);
     expect(tagSrc).toContain("openImagePreview(shots.map");
-    // 小记写作卡是独立内核实例（不走 LakeEditor/EditorTab）：移动端也要接 tap 预览
-    const noteEditorSrc = readSrc("src/features/quickNotes/QuickNoteEditor.tsx");
-    expect(noteEditorSrc).toContain("attachImagePreviewClick(");
-    expect(noteEditorSrc).toContain("{ tap: true }");
-    expect(noteEditorSrc).toContain("isDesktop()");
+    // 小记写作卡是独立内核实例（不走 LakeEditor/EditorTab）：移动端也要接 tap 预览，
+    // 且画廊列表同样取自**正文**（resolver）——裸挂 = DOM 收集 = 虚拟渲染下数不到视口外的图
+    expect(NOTE_EDITOR_SRC).toContain("attachImagePreviewClick(");
+    expect(NOTE_EDITOR_SRC).toContain('extractImagesFromContent(editor.getDocument("text/lake"))');
+    expect(NOTE_EDITOR_SRC).not.toMatch(/attachImagePreviewClick\(host\)/);
+    expect(NOTE_EDITOR_SRC).toContain("{ tap: true }");
+    expect(NOTE_EDITOR_SRC).toContain("isDesktop()");
   });
 
   it("resolver 给全量 ⇒ 条数 = 正文条数，索引按 DOM 子序列对齐（同一张图出现两次也不跳错）", () => {
@@ -157,5 +161,36 @@ describe("文档图片预览：画廊列表来自正文（261112）", () => {
     detach = attachImagePreviewClick(h);
     doubleClick(h.querySelector("img.ne-image")!);
     expect(state?.images.length).toBe(1);
+  });
+});
+
+/**
+ * 三宿主「交互面挂载清单」（docs/audit-261125/02-desktop-ui.md D-03 保守护栏）：同一组 attach
+ * 在三个宿主按**各宿主允许集**出现；差异 = 有意参数（QuickNoteEditor 不挂 file 卡/菜单/书签条），
+ * 挂载清单本身不允许漏挂/误挂漂移。历史事故：护栏只测一个宿主 ⇒ 漏挂在别的宿主复发
+ * （图片预览漏 EditorTab、书签条删挂载变「没有菜单的死卡」，见 AGENTS §4）。
+ */
+describe("三宿主交互面挂载清单（防漏挂/误挂漂移）", () => {
+  const REQUIRED: Array<[string, string, string[]]> = [
+    ["EditorTab（桌面文档编辑器）", EDITOR_TAB_SRC,
+      ["upgradePastedHtml", "attachImagePreviewClick", "attachFileCardClick", "installMediaCardCategoryRouter", "BookmarkToolbar"]],
+    ["LakeEditor（共享文档编辑器）", LAKE_EDITOR_SRC,
+      ["upgradePastedHtml", "attachImagePreviewClick", "attachFileCardClick", "installMediaCardCategoryRouter", "BookmarkToolbar"]],
+    ["QuickNoteEditor（小记写作卡）", NOTE_EDITOR_SRC,
+      ["attachImagePreviewClick", "installMediaCardCategoryRouter"]],
+  ];
+
+  it("必须出现的挂载按各宿主允许集齐装（漏挂 = 能力丢失）", () => {
+    for (const [host, src, names] of REQUIRED) {
+      for (const name of names) {
+        expect(src, host + " 必须挂 " + name + "（漏挂只会在运行时以死卡/丢能力形式复发）").toContain(name);
+      }
+    }
+  });
+
+  it("允许集外不得出现（有意不挂 = 参数差异；确实要加就先改这里再改宿主）", () => {
+    for (const name of ["attachFileCardClick", "BookmarkToolbar", "upgradePastedHtml", "createCardHoverResidueCleaner"]) {
+      expect(NOTE_EDITOR_SRC, "QuickNoteEditor（小记写作卡）不挂 " + name + "（有意差异，见 D-03）").not.toContain(name);
+    }
   });
 });

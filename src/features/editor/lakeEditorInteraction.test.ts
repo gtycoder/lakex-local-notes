@@ -24,8 +24,8 @@ describe("LakeEditor interaction=preview（Q07A）", () => {
   it("preview 档跳过卡片长按菜单与 copy/cut 接管", () => {
     // 长按：previewOnly 直接 return（不挂 attachLongPress）
     expect(LAKE_EDITOR).toMatch(/if \(!host \|\| previewOnly\) return;/);
-    // 复制/剪切：preview 档不挂 attachSelectionClipboard
-    expect(LAKE_EDITOR).toMatch(/const detachSelectionClipboard = previewOnly \? \(\) => undefined : attachSelectionClipboard\(host\);/);
+    // 复制/剪切：preview 档不挂 attachSelectionClipboard；挂时 cut 删除走内核优先实现（D-01②）
+    expect(LAKE_EDITOR).toMatch(/const detachSelectionClipboard = previewOnly\s*\? \(\) => undefined\s*: attachSelectionClipboard\(host, \{ deleteSelection: \(\) => deleteSelectionKernelFirst\(editorRef\.current\) \}\);/);
     // 两个 effect 都要把 interaction 纳入依赖（切档必须重挂监听）
     expect(LAKE_EDITOR).toContain("}, [previewOnly]);");
     // 261114 二批：journalRecovery / recoveryTick 也进依赖（移动端可恢复图片上传要能触发重建）

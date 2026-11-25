@@ -8,16 +8,14 @@ import {
   lakeBridge,
   refreshTocSidebar,
   resolveScrollNode,
-  retryFailedDocumentImageUploads,
   resumePendingDocumentImageUploads,
   type LakeEditorInstance,
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
-import { attachTableCopy } from "./selectionClipboard";
-import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
-import { subscribeUploadJournal } from "./uploadJournal";
-import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
+import { attachTableCopy, deleteSelectionKernelFirst } from "./selectionClipboard";
+import { repairUploadCards } from "./uploadCardRepair";
+import { useUploadJournalRecovery } from "./useUploadJournalRecovery";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
@@ -122,41 +120,18 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   const kernelDark = useKernelDarkTheme();
   const [rebuildTick, setRebuildTick] = useState(0);
 
-  /** 失败图的自动补拉定时器（随组件卸载清理；判据见 uploadRetryScheduler）。 */
-  const retryTimersRef = useRef<Set<number>>(new Set());
-
   /**
-   * 上传晚到的自愈（261114）+ 失败自动补拉（261114 二批）：
-   * - 编辑器挂载时若正文里还是「加载中/unknown error」的图卡，等 uploadJournal 记下真实结果后重建一次，
-   *   让 uploadCardRepair 把资产/真实原因回填；正常上传（挂载时正文里还没有该 taskId）不会触发重建。
-   * - error 条目按退避（3s/10s/30s/2min/10min，上限 5 轮）后台重下；attempts 由 journal 累计，
-   *   超预算才真正判失败。点失败卡（ne-image-error）由 lakeRuntime 的点击监听立即重试。
+   * 上传晚到的自愈（261114）+ 失败自动补拉（261114 二批）：订阅 → 晚到结果命中正文未解决图卡
+   * 时重建一次（正常上传不触发）、error 条目按退避后台重下（点失败卡 ne-image-error 另有
+   * lakeRuntime 点击监听立即重试）。判据/退避/订阅收口在 useUploadJournalRecovery（D-02，
+   * 与 LakeEditor 同一份，别再复制）；这里只留 rebuild tick。
    */
-  useEffect(() => {
-    const timers = retryTimersRef.current;
-    const off = subscribeUploadJournal((entry) => {
-      if (entry.noteId !== noteId) return;
-      if (entry.status === "error") {
-        const delay = uploadRetryDelayForEntry(entry);
-        if (delay != null) {
-          const timer = window.setTimeout(() => {
-            timers.delete(timer);
-            retryFailedDocumentImageUploads(noteId);
-          }, delay);
-          timers.add(timer);
-        }
-      }
-      if (entry.status === "pending") return;
-      const stale = latestDocumentRef.current;
-      if (!hasUnresolvedImageTask(stale, entry.taskId)) return;
-      setRebuildTick((tick) => tick + 1);
-    });
-    return () => {
-      off();
-      for (const timer of timers) window.clearTimeout(timer);
-      timers.clear();
-    };
-  }, [noteId]);
+  useUploadJournalRecovery({
+    noteId,
+    enabled: true,
+    getLatestDocument: () => latestDocumentRef.current,
+    onNeedRebuild: () => setRebuildTick((tick) => tick + 1),
+  });
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
@@ -287,11 +262,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       if (upgraded !== html) dt.setData("text/html", upgraded);
     };
     // 剪切：与 copy 同源序列化写入剪贴板，再删除选区。
-    // ⚠️ 删除必须走**内核命令**（`kernel.execCommand("delete")`）让模型同步：早前用
-    // `document.execCommand("delete")` 只删 DOM、内核模型不变，点击块时被模型重绘回来
-    // （260917 实测：选区文字消失 → 点块恢复），转换后的内容同样受影响。
+    // ⚠️ 删除必须走**内核命令**让模型同步（260917 实测：DOM 级删除只删 DOM、内核模型不变，
+    // 点块即被重绘回来，转换后的内容同样受影响）。删除判据收口在 selectionClipboard
+    // 的 deleteSelectionKernelFirst（内核命令优先、DOM 兜底），与共享桥同一实现（D-01②）。
     // 本 handler 在 capture 阶段 stopImmediatePropagation，会抢在内核 cut 事件处理之前，
-    // 所以要自己调用内核命令，不能依赖内核默认 cut 路径（那会把剪贴板改写成内核序列化）。
+    // 所以要自己删选区，不能依赖内核默认 cut 路径（那会把剪贴板改写成内核序列化）。
     const cutHandler = (event: ClipboardEvent) => {
       const selection = window.getSelection();
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
@@ -302,15 +277,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       event.clipboardData.setData("text/plain", plain);
       event.preventDefault();
       event.stopImmediatePropagation();
-      try {
-        // 删除必须走内核命令（与 style/insertCard 同一入口），内核模型才会同步
-        const ed = editorRef.current;
-        if (ed?.kernel?.execCommand) ed.kernel.execCommand("delete");
-        else if (ed?.execCommand) ed.execCommand("delete");
-        else document.execCommand("delete");
-      } catch {
-        try { document.execCommand("delete"); } catch { /* 忽略 */ }
-      }
+      deleteSelectionKernelFirst(editorRef.current);
     };
     // 画板卡片交互（选择、删除、工具栏）偶发把 Lake 滚动容器重置到顶部。
     // 先记录交互前位置，若后续渲染发生大幅回跳则恢复；仅作用于画板卡片。
