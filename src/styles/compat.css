@@ -128,9 +128,11 @@
 }
 .ln-label__text { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
-/* 侧栏卡片几何（原 b3/layout.css：抑制边框/阴影的材质部分）。
- * margin 已收单到 styles/app/shell.css 的 .sidebar.sidebar-docked —— 这里再写一份会因 legacy 层内
- * 本文件加载更晚而压掉那边的值（261017 修侧栏溢出时就这么踩到：bottom 仍是 4px）。 */
+/* 侧栏面板几何 = 平面版（261125 用户裁决 S-02 / A，用户看图选定；原 b3/layout.css 的材质部分）。
+ * **面 / 边 / 影 / 圆角的唯一来源 = 本规则**（面板底 / border: 0 / 无影 / radius-md）：
+ * legacy 层内本文件后加载 ⇒ 同名压过 app/shell.css 的历史副本，那边的「卡片派」规则已随本裁决删除。
+ * margin 的唯一来源 = styles/app/shell.css 的 .sidebar.sidebar-docked —— 勿在本文件再写 margin
+ *（261017 踩过：本文件后加载会压掉那边的值）。 */
 .sidebar.sidebar-docked {
   background: var(--lake-bg-panel);
   border: 0;

@@ -24,6 +24,9 @@ const entry = readFileSync(path.join(SRC, "styles/index.css"), "utf8");
 const PINS: Array<[string, string]> = [
   ["button.ln-btn { color: var(--lake-text-2); }", "ln-btn"],
   ["button.ln-btn--primary { color: var(--lake-text-on-accent); }", "ln-btn--primary"],
+  // 261125 用户裁决 7（审计 T-06）：primary+danger = 实心危险（红底白字），按下翻 danger-soft ⇒ 文字色也要两态补钉。
+  ["button.ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); }", "ln-btn--danger"],
+  ["button.ln-btn--primary.ln-btn--danger:active:not(:disabled) { color: var(--lake-status-error); }", "ln-btn--primary"],
   ["button.ln-btn--outlined, button.ln-btn--link { color: var(--lake-accent-text); }", "ln-btn--link"],
   ["button.ln-btn--danger, button.ln-btn--danger-text { color: var(--lake-status-error); }", "ln-btn--danger"],
   ["button.ln-btn--secondary { color: var(--lake-text-2); }", "ln-btn--secondary"],

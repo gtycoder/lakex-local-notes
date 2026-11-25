@@ -62,6 +62,16 @@ describe("动效契约", () => {
     expect(outline).not.toContain("260ms");
   });
 
+  it("大纲内容盒过渡只动入场/位移（box-shadow/border-radius 装饰性过渡已清，261125 审计 R-02 遗留点）", () => {
+    // DESIGN Motion 规则 6：面/边/影与圆角瞬时切换；过渡只留 opacity/transform/visibility。
+    const outline = stripComments(read("../features/outline/outline.css"));
+    // 锚定基座规则（行首选择器）；拖拽 resize 时的 transition: none 杀过渡规则不在本断言范围。
+    const m = outline.match(/^\.outline-sidebar__content \{[^}]*?transition: ([^;]+);/m);
+    expect(m, "outline-sidebar__content 应保留入场/位移过渡").toBeTruthy();
+    const props = m![1].split(",").map((item) => item.trim().split(/\s+/)[0]);
+    expect(props).toEqual(["opacity", "transform", "visibility"]);
+  });
+
   it("浮层入场只有一套来源（legacy lake-pop-in 已收编）", () => {
     expect(stripComments(read("app/shell.css"))).not.toContain("lake-pop-in");
     expect(stripComments(read("components.css"))).not.toContain("@keyframes lake-pop-in");

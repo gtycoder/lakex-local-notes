@@ -146,6 +146,11 @@ button.ln-btn { color: var(--lake-text-2); }
 button.ln-btn--primary { color: var(--lake-text-on-accent); }
 button.ln-btn--outlined, button.ln-btn--link { color: var(--lake-accent-text); }
 button.ln-btn--danger, button.ln-btn--danger-text { color: var(--lake-status-error); }
+/* 261125 用户裁决 7（审计 T-06）：primary+danger 实心危险组合的两态文字色 ——
+ * 默认白字须压过 button.ln-btn--danger 的红字（同为未分层，靠更高特异性），
+ * 按下翻 danger-soft 时文字随三件翻转回红字。 */
+button.ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); }
+button.ln-btn--primary.ln-btn--danger:active:not(:disabled) { color: var(--lake-status-error); }
 button.ln-btn--secondary { color: var(--lake-text-2); }
 button.ln-btn--ghost { color: var(--lake-text-2); }
 /* 261110 第二批按钮审计：原 7 条按旧类名（.quick-note-tag*）补钉，已随 chip / 勾选框 / 菜单行迁到 kit 原语

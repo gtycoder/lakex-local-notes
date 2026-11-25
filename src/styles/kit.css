@@ -67,6 +67,11 @@
 .ln-btn--danger:hover:not(:disabled) { background: var(--lake-status-error-soft); }
 .ln-btn--danger.ln-btn--ghost, .ln-btn--danger-text { border-color: transparent; color: var(--lake-status-error); }
 .ln-btn--danger-text:hover:not(:disabled), .ln-btn--danger.ln-btn--ghost:hover:not(:disabled) { background: var(--lake-status-error-soft); }
+/* L1×L5 组合（261125 用户裁决 7 / 审计 T-06）：破坏性主按钮 = 实心危险（红底白字，确认框「删除」）；
+ * 按下翻 danger-soft（底/字/边三件翻转）。与移动端 .mb-btn--primary.mb-btn--danger 同一模型（两端同模型）。 */
+.ln-btn--primary.ln-btn--danger,
+.ln-btn--primary.ln-btn--danger:hover:not(:disabled) { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }
+.ln-btn--primary.ln-btn--danger:active:not(:disabled) { background: var(--lake-status-error-soft); border-color: var(--lake-status-error); color: var(--lake-status-error); }
 /* 选中/切换态：同一套令牌，不给某一层另造视觉。 */
 .ln-btn--secondary.is-selected, .ln-btn--outlined.is-selected, .ln-btn--ghost.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
 .ln-btn--secondary.is-selected:hover:not(:disabled), .ln-btn--outlined.is-selected:hover:not(:disabled), .ln-btn--ghost.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }

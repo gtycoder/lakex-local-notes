@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: 1px solid var(--lake-border-1);
+  border: var(--bt-panel-border);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-panel);
   overflow: hidden;
@@ -41,7 +41,7 @@
   padding: 0;
   background: var(--lake-bg-hover);
   border: 0;
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: var(--bt-panel-border);
   font: inherit;
   overflow: hidden;
 }

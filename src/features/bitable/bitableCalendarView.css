@@ -31,7 +31,7 @@
   grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: 1px;
   overflow: hidden;
-  border: 1px solid var(--lake-border-1);
+  border: var(--bt-panel-border);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-border-1);
 }

@@ -70,6 +70,21 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
     expect(read("features/outline/outline.css")).not.toContain("112px");
   });
 
+  it("侧栏面板材质单一来源 = compat.css 平面版（261125 用户裁决 S-02，零视觉变化）", () => {
+    const compat = read("styles/compat.css");
+    const shell = read("styles/app/shell.css");
+    // 用户看图选定 A 平面版 = 面 panel / 无边 / 无影 / radius-md（即现状生效值）。
+    expect(compat).toMatch(
+      /\.sidebar\.sidebar-docked \{[^}]*background: var\(--lake-bg-panel\);[^}]*border: 0;[^}]*box-shadow: none;[^}]*border-radius: var\(--lake-radius-md\);/,
+    );
+    // 「卡片派」副本（0.5px 边 + radius-card + 双层阴影）与同值重复项已删，禁止回流。
+    expect(shell).not.toMatch(/\.sidebar\.sidebar-docked \{[^}]*(border|box-shadow|border-radius)/);
+    expect(shell).not.toContain("var(--lake-radius-card)");
+    // 小记工作区圆角只由 compat 给（0）；shell 侧双写已收单。
+    expect(compat).toMatch(/\.app-shell\.quick-notes-active \.workspace,[\s\S]{0,240}?border-radius: 0;/);
+    expect(shell).not.toMatch(/\.app-shell\.quick-notes-active \.workspace \{[^}]*border-radius/);
+  });
+
   it("固定目录高度 = 网格区 − margin，不溢出窗口（261017 修）", () => {
     const css = read("styles/app/shell.css");
     // height:100% + 上下 margin ⇒ 比可用高度高 38px，窗口变矮时目录最后几行滚到底也看不到。

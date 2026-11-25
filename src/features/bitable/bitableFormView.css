@@ -32,7 +32,7 @@
   flex-direction: column;
   gap: 5px;
   padding: 10px 0;
-  border-top: 1px solid var(--lake-border-1);
+  border-top: var(--bt-panel-border);
 }
 
 .bt-form-field-label { font-size: var(--lake-font-size-body); color: var(--lake-text-1); }

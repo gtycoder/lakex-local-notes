@@ -17,7 +17,7 @@
   gap: var(--lake-space-sm);
   min-height: 32px;
   padding: 0 var(--lake-space-lg);
-  border: 1px solid var(--lake-border-1);
+  border: var(--bt-panel-border);
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-3);
   background: var(--lake-bg-panel);
@@ -27,18 +27,18 @@
 .bt-rel-search input { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 
 /* 筛选 / 排序：弹窗内的**内联条**（不嵌气泡——嵌套气泡会被外层面板压住且被外点关闭误伤）。 */
-.bt-rel-config { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); background: var(--lake-bg-subtle); border-top: 1px solid var(--lake-border-2); }
+.bt-rel-config { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); background: var(--lake-bg-subtle); border-top: var(--bt-panel-border-w) solid var(--lake-border-2); }
 .bt-rel-config-title { flex: 0 0 auto; font-size: var(--lake-font-size-small); font-weight: 600; color: var(--lake-text-2); }
 .bt-rel-config .bt-filter-editor { flex: 1 1 100%; padding: 0; }
 .bt-rel-view-filter { flex: 1 1 100%; display: flex; align-items: flex-start; gap: var(--lake-space-sm); }
 .bt-rel-view-filter .bt-filter-editor { flex: 1 1 auto; }
 .bt-rel-config .bt-rule-row { flex: 1 1 auto; min-width: 0; }
 .bt-rel-config .bt-rule-row.is-view { flex: 0 1 auto; color: var(--lake-text-3); }
-.bt-rel-rule-badge { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); flex: 0 0 auto; padding: 2px var(--lake-space-sm); font-size: var(--lake-font-size-tiny); font-weight: 500; color: var(--lake-text-3); background: var(--lake-bg-panel); border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); }
+.bt-rel-rule-badge { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); flex: 0 0 auto; padding: 2px var(--lake-space-sm); font-size: var(--lake-font-size-tiny); font-weight: 500; color: var(--lake-text-3); background: var(--lake-bg-panel); border: var(--bt-panel-border-w) solid var(--lake-border-2); border-radius: var(--lake-radius-xs); }
 .bt-rel-rule-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lake-font-size-small); }
 
 /* 主区域：完整数据的窗口投影；表头吸顶，列宽来自字段，超长省略 + title 全文。 */
-.bt-rel-body { flex: 1 1 auto; min-height: 0; overflow: auto; border-top: 1px solid var(--lake-border-2); }
+.bt-rel-body { flex: 1 1 auto; min-height: 0; overflow: auto; border-top: var(--bt-panel-border-w) solid var(--lake-border-2); }
 .bt-rel-grid { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--lake-font-size-small); }
 .bt-rel-grid th {
   position: sticky;
@@ -99,5 +99,5 @@
 
 .bt-rel-empty { margin: 0; padding: var(--lake-space-huge); text-align: center; font-size: var(--lake-font-size-body); color: var(--lake-text-3); }
 
-.bt-rel-foot { flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); border-top: 1px solid var(--lake-border-2); }
+.bt-rel-foot { flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl); border-top: var(--bt-panel-border-w) solid var(--lake-border-2); }
 .bt-rel-count { flex: 1 1 auto; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }

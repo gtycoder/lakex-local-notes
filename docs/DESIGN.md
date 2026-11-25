@@ -306,6 +306,8 @@ components:
 
 边界一律 **0.5px**（发丝线与表面边框）。例外只有**必须被看见的图形描边**：`outline` 焦点环（2px，`--lake-focus-ring-width`）、对勾/勾选符号、进度环与画板笔迹。**文档正文/编辑器内部等「具体内容区」不参与这条统一**（markdown 引用竖线、表格线等保持内容语义原值）。**禁止 >1px 的单侧色条**（卡片、列表项、提示条上的左侧粗色条是 AI 生成界面的典型痕迹）。
 
+**例外登记：多维表密集数据面板件 = 1px 边框（261125 用户裁决 5：保持 1px 不改，合理化为专用原语 `--bt-panel-border`）** —— 多维表面板件（抽屉 / 面板 / 筛选 / 表单 / 选项浮层 / 触发器 / 卡片等）维持 **1px** 边框：密集数据面经 261120 字号批等多轮用户验收，0.5px 在该面可读性不足。宽度单一来源 = `--bt-panel-border-w`、标准面 = `--bt-panel-border`（定义在 `src/features/bitable/bitableEditor.css` 顶部，颜色走既有 `--lake-*` 令牌）。**内容区表格线（`.bt-grid th/td`、`.bt-group-*`、`.bt-rel-grid`）不参与**，保持内容语义原值。
+
 **同心圆角（261029 用户定稿，光学对齐）**：贴在外层表面角落里的内层表面，半径 = **外层半径 − 外层到内层的间距**，**下限 2px**。内外同半径会让悬停/选中底色在四角与边上留白不匀（角上窄、边上宽）——那正是"看起来圆、实际不对齐"的来源。
 
 | 外层表面 | 外层半径 | 内距 | 内层半径 | 现行落点 |
@@ -339,6 +341,7 @@ components:
 
 - **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 **26**（`--lake-ctl-h-sm`；261111 厚度 review：22 → 26，与标准档只差 1px，全站「薄一档」观感消失）、内距 `0 9px`。**按钮只有两档尺寸，不新增第三档**；**唯一登记例外 = AI composer 的圆形主操作 `.ln-send-circle` 32×32**（纯图标、无文字、只服务 AI 输入卡，见下节 Composer，不并入按钮梯队）；设置页表单控件仍走 `--lake-ctl-h-settings`（32，管理档）。
 - **六态（每层同一套）**：default / hover（`bg-hover`，字色升一档）/ active（`bg-press` + 0.5px 下沉 + 0.98 缩放）/ focus-visible（2px `accent` 环 + offset 0）/ is-selected（`bg-selected` + `fg-selected` + 600）/ disabled（`opacity: .45`，hover 不改底色）。
+- **primary+danger = 实心危险（红底白字）**（261125 用户裁决 7）：确认框「删除」这类破坏性主操作 = `.ln-btn--primary.ln-btn--danger`（`status-error` 实心底 + `text-on-accent` 白字），按下翻 `status-error-soft`（底/字/边三件翻转）；**两端同模型**（移动端 `mb-btn--primary.mb-btn--danger`）——是 L1 的破坏性组合，不是第五档语义。
 - **基座 `.ln-btn` = L4 口径**（无框灰字）：任何裸用也有 hover，不得再出现「点了没反应」的按钮。
 - 图标钮（`.ln-iconbtn` 27 / `--compact` **26**）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。危险图标钮 `.ln-iconbtn--danger` = 与 `--danger-text` 同一套令牌口径（红字 + 红柔底只在 hover），**不是第二种危险长相**。
 - **列表勾选** `.ln-check`：20×20、绿色 `status-ok` 实心选中（用于小记卡片/列表行左槽位；与表单勾选 15×15 主色分开，不并入）。

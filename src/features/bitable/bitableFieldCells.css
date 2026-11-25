@@ -41,5 +41,5 @@
 /* 关联字段（T02B.2）：单元格 chip / 搜索列表**复用 .bt-option-* 单元格原语**（单一来源），这里只补选择器的行与页脚。 */
 .bt-relation-row { display: flex; align-items: center; gap: 2px; }
 .bt-relation-row .bt-option-item { flex: 1; }
-.bt-relation-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--lake-border-1); }
+.bt-relation-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-top: var(--bt-panel-border); }
 .bt-relation-count { margin-right: auto; font-size: var(--lake-font-size-small); color: var(--lake-text-3); }

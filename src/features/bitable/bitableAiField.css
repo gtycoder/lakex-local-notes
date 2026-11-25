@@ -38,7 +38,7 @@
   align-items: center;
   gap: var(--lake-space-xs);
   padding: var(--lake-space-xxs) var(--lake-space-md);
-  border: 1px solid var(--lake-border-2);
+  border: var(--bt-panel-border-w) solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
   background: transparent;
   color: var(--lake-text-2);

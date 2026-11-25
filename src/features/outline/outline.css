@@ -145,7 +145,7 @@
   border: 0;
   color: var(--lake-text-3);
   background: transparent;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .outline-sidebar__activity-button:hover {
   color: var(--lake-accent);
@@ -186,7 +186,8 @@
   box-shadow: none;
   opacity: 1;
   transform: translateX(0);
-  transition: opacity var(--lake-motion-slow) var(--lake-ease-standard), transform var(--lake-motion-slow) var(--lake-ease-standard), visibility var(--lake-motion-slow), box-shadow var(--lake-motion-slow) ease-out, border-radius var(--lake-motion-slow) var(--lake-ease-standard);
+  /* 按 DESIGN Motion 规则 6：面/边/影与圆角瞬时切换，过渡只留入场/位移（261125 审计 R-02 遗留点）。 */
+  transition: opacity var(--lake-motion-slow) var(--lake-ease-standard), transform var(--lake-motion-slow) var(--lake-ease-standard), visibility var(--lake-motion-slow);
 }
 
 /* 收起：悬停整条 rail 后才以浮层方式预览，不挤压正文。 */
@@ -287,9 +288,11 @@
   color: var(--lake-text-1);
   background: var(--lake-bg-hover);
 }
+/* 选中 = DESIGN「UI 选中」三件套（bg-selected 底 + fg-selected 字 + 600），与目录行/页签同语义；
+ * 左侧 3px 主色条已删（DESIGN Shapes 禁止 >1px 单侧色条；261125 用户裁决 4 / 审计 R-01）。 */
 .outline-item--selected {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
+  color: var(--lake-fg-selected);
+  background: var(--lake-bg-selected);
   font-weight: var(--lake-font-weight-semibold);
   border-radius: 6px;
 }
@@ -410,7 +413,6 @@
   font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
 }
-.outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
 
 /* 收起（悬停预览）：盒几何完全由上方内容盒决定（顶 = --lake-editor-top、底 = pane 底），
    这里只留过渡与「从触发条滑进面板」的走廊（宽窄共用）。 */

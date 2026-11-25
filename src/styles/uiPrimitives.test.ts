@@ -86,6 +86,39 @@ describe("UI 原语门禁", () => {
 });
 
 /**
+ * 按钮梯队组合语义（261125 用户裁决 7 / 审计 T-06）。
+ * 桌面 .ln-btn 曾缺「primary+danger」实心危险组合（红底白字）——同时挂两档会叠出「墨蓝底红字」。
+ * 口径 = 与移动端 .mb-btn--primary.mb-btn--danger 同一模型：实心 error 底 + on-accent 字，按下翻 danger-soft。
+ */
+describe("按钮梯队组合语义（primary+danger 实心危险）", () => {
+  const KIT = readFileSync(path.join(SRC, "styles/kit.css"), "utf8");
+  const M_KIT = readFileSync(path.join(SRC, "mobile/kit.css"), "utf8");
+
+  it("桌面组合 = 红底白字 + 按下 danger-soft 翻转，只走 status-error 系令牌", () => {
+    expect(KIT).toMatch(
+      /\.ln-btn--primary\.ln-btn--danger,[^{]*\.ln-btn--primary\.ln-btn--danger:hover:not\(:disabled\) \{ background: var\(--lake-status-error\); border-color: transparent; color: var\(--lake-text-on-accent\); \}/,
+    );
+    expect(KIT).toMatch(
+      /\.ln-btn--primary\.ln-btn--danger:active:not\(:disabled\) \{ background: var\(--lake-status-error-soft\); border-color: var\(--lake-status-error\); color: var\(--lake-status-error\); \}/,
+    );
+  });
+
+  it("两端同模型（移动端 mb-btn 同组合语义；对照 src/mobile/kit.css）", () => {
+    expect(M_KIT).toContain(
+      ".mb-btn--primary.mb-btn--danger { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }",
+    );
+    expect(M_KIT).toContain(
+      ".mb-btn--primary.mb-btn--danger:active:not(:disabled) { background: var(--lake-status-error-soft); border-color: var(--lake-status-error); color: var(--lake-status-error); }",
+    );
+  });
+
+  it("组合规则不写颜色字面量（只用令牌）", () => {
+    const block = KIT.match(/\.ln-btn--primary\.ln-btn--danger[\s\S]{0,500}?\n\}/)?.[0] ?? "";
+    expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
+  });
+});
+
+/**
  * 文档状态栏的落位门禁（260926）。
  *
  * 状态栏浮在正文右下，但**表格/画板正文自带底部控件**，浮上去就压住它们（用户各报过一次）：

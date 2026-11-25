@@ -247,10 +247,10 @@
  * 本文件不再涉及大纲；壳层连续材质只作用于 .app-shell / .sidebar / 正文卡。 */
 /* 桌面壳层使用一块连续材质：不再把顶栏、知识库和正文画成三张卡片。
  * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
-/* 261112 Q1：`.sidebar.sidebar-floating` 的 border 已由 chrome 层（浮卡 0.5px + border-left:0）压死 ⇒ 从本组移除。 */
+/* 261112 Q1：`.sidebar.sidebar-floating` 的 border 已由 chrome 层（浮卡 0.5px + border-left:0）压死 ⇒ 从本组移除。
+ * 261125 S-02：`.sidebar.sidebar-docked` 的 border 同理移除（与 compat.css 平面版同值重复，那边是唯一来源）。 */
 .activity-rail,
-.sidebar,
-.sidebar.sidebar-docked {
+.sidebar {
   border: 0;
 }
 
@@ -307,17 +307,6 @@
 
 .trash-tree-children { margin-left: 18px; border-left: 0.5px solid var(--lake-border-2); padding-left: 6px; }
 
-/* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
-@media (min-width: 761px) {
-  /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变。
-     下面这些渐变一律用令牌（--lake-shell/--shell-material）：浅色下与原字面值只差 2~3 个色阶，
-     但深色下不会再留一块浅色板（.outline-sidebar 在开启「大纲增强」时才会挂载，属潜在坑）。 */
-  /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
-     再叠加纵向材质过渡。 */
-  .app-shell.quick-notes-active .workspace { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
-
-}
-
 @media (min-width: 761px) {
   /* 壳层连续材质（.app-shell/.activity-rail/.sidebar）已搬到共用作用域 */
   .sidebar.sidebar-docked {
@@ -373,17 +362,12 @@
 /* ===== 2026-08-13 floating panel surface correction =====
  * The shell itself remains continuous, but an opened/floating directory or
  * outline is a real work surface.  Do not let the shell transparency rule
- * erase the white panel that is used by the docked variants. */
+ * erase the white panel used by the floating variant.
+ * 261125 S-02（用户裁决 A 平面版）：docked 的面/边/影/圆角唯一来源 = compat.css 的 .sidebar.sidebar-docked
+ *（面板底 / border: 0 / 无影 / radius-md）；本文件原「卡片派」副本（0.5px 边 + radius-card + 双层阴影）已删。 */
 @media (min-width: 761px) {
-  .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
     background: var(--lake-bg-panel);
-  }
-
-  .sidebar.sidebar-docked {
-    border: 0.5px solid var(--lake-border-1);
-    border-radius: var(--lake-radius-card);
-    box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-2);
   }
 
   .sidebar.sidebar-floating {
