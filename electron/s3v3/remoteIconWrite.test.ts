@@ -1,7 +1,7 @@
 /**
  * 261112 G3（写守卫越界，与 F04 同类）回归：同步 apply 的新行图标不得撞用户写边界守卫。
  *
- * 背景（docs/audit-261112/13-write-guard-sweep.md §0.1/§2 G3）：
+ * 背景（docs/SYNC-PROTOCOL.md §9.6 附注 G3，261112 搬存）：
  * `noteMetadataRepository.setNodeIcon` 是**用户入口**，带 `assertNodeWritable`（回收站/purged 拒写）；
  * 而同步 apply 在首次见到远端行时会调端口 `setNodeIcon`（deviceStore 新行分支）⇒
  * 新设备首拉「回收站 + 图标」条目时整轮 syncNow 抛错（设备永久卡死）。

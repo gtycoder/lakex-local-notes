@@ -143,7 +143,7 @@ checklist 与结论 = `docs/RESILIENCE.md` §3.7。⚠️ 小记 text_cache 搜�
 node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/device-debt-smoke.mjs <tag>
 ```
 
-A. 更新中心：原生清单获取（`Update.check`）+ sha256/证书校验通道（`Update.verify` 正/反例；包必须放 `cache/updates/`，路径门禁会拒别处）；B. 键盘冒烟：写作卡聚焦弹键盘（innerHeight 收缩 > 200px，before 必须无键盘态取样）+ 输入落字 + 取消不残留；C. 便携包导出到「下载」+ 产物核对。**不跑**：便携包导入（整库覆盖）、系统安装器（真机）。证据 → `.css-audit/device-debt-<tag>/`，欠账总表 = `design-plans/device-debt-261117.md`。
+A. 更新中心：原生清单获取（`Update.check`）+ sha256/证书校验通道（`Update.verify` 正/反例；包必须放 `cache/updates/`，路径门禁会拒别处）；B. 键盘冒烟：写作卡聚焦弹键盘（innerHeight 收缩 > 200px，before 必须无键盘态取样）+ 输入落字 + 取消不残留；C. 便携包导出到「下载」+ 产物核对。**不跑**：便携包导入（整库覆盖）、系统安装器（真机）。证据 → `.css-audit/device-debt-<tag>/`，欠账总表 = `docs/DEVICE-DEBT.md`。
 
 ## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
 

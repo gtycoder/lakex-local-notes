@@ -8,7 +8,7 @@ import { QuickNotePreview } from "../quickNotes/QuickNotePreview";
  * ⇒ 原先的 doc / 非 doc（`NoteDocPreview` / `HistorySnapshotPreview`）分支**不可达**，已删除。
  * 若将来要恢复内嵌文档预览，请直接复用 `components/app/NoteDocPreview` 与
  * `components/app/HistorySnapshotPreview`（回收站/历史面板/文档属性同一实现），**不要**在这里
- * 另写一套——重复实现的根因见 `docs/audit-261112/02-preview-unification.md`。
+ * 另写一套——重复实现的根因见 261112 预览统一审计（已删，git 可查）。
  *
  * 小记自身走「快路径 + 内核只读兜底」：`QuickNotePreview` 内部按 `unsupported` 节点自动落到
  * `QuickNoteKernelPreview`（懒加载），判据单一来源在解析器里。

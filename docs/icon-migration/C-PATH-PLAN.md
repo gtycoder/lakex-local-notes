@@ -1,6 +1,6 @@
 # C 路径落地计划：自绘图标纳管与补齐（不引图标库）
 
-> 输入：`docs/icon-migration/DECISION.md`（不换 IconPark，走 C：只抄单个 SVG）、`B-inventory.md`（替换面与自绘清单）、`C-poc.md`（几何换算/工程接入实测）。
+> 输入（调研三份已删，git 可查）：DECISION.md（不换 IconPark，走 C：只抄单个 SVG）、B-inventory.md（替换面与自绘清单）、C-poc.md（几何换算/工程接入实测）。
 > 本文只读仓库、只写这一个文件；所有数字均为本仓实测，复现命令见 §11。
 > 基线：分支 `modernize/web-platform-261115`；工作区另有 Lead 正在进行中的设置页改动（`src/styles/kit.css` 开关与 `.ln-select--native`），叠加口径见 §9。
 
@@ -426,14 +426,14 @@ B 卷的 4 个"无对应"图标 = `CheckCheck`（`SyncConflictsPanel`「全部�
 
 - IconPark `@icon-park/react@1.4.2` 是 **Apache-2.0**（实测 `package.json.license`），**包内无 NOTICE 文件**（`ls | grep -i notice` 为空）⇒ Apache-2.0 §4(d) 的 NOTICE 传递义务**不触发**。
 - 仍需履行：**§4(a)** 保留版权/许可声明、**§4(b)** 修改过的文件要注明改动、**§4(c)** 保留 LICENSE 副本。实操：
-  1. 把 IconPark 的 `LICENSE` 拷到 `docs/icon-migration/LICENSE-IconPark.txt`（约 11KB，随仓入库）；
+  1. 把 IconPark 的 `LICENSE` 随仓入库（现行落点 `LICENSES/IconPark-APACHE-2.0.txt`）；
   2. 抄来的文件头写 3 行 provenance（来源文件 / 原 viewBox / 是否改动几何）；
   3. 在仓库根 `NOTICE` 的「二、其它第三方」追加一行：
 
 ```text
 - IconPark（@icon-park/react 1.4.2，Apache-2.0，bytedance）：src/components/ui/icons/<Name>Icon.tsx 的图形几何
   取自其 es/icons/<Name>.js（原 viewBox 0 0 48 48），本项目仅重写渲染包装、未改图形；不依赖其运行时。
-  上游仓库已归档（2023-02-24），故不引为依赖。完整许可见 docs/icon-migration/LICENSE-IconPark.txt。
+  上游仓库已归档（2023-02-24），故不引为依赖。完整许可见 LICENSES/IconPark-APACHE-2.0.txt。
 ```
 
 - **本项目自有代码是 AGPL-3.0-only**（`NOTICE` 首行）：Apache-2.0 与 AGPL-3.0 **兼容**（可单向并入），无冲突。
@@ -656,6 +656,6 @@ git status --short
 ### 13.5 遗留与登记
 
 1. **唯一残留 hex**：`LakeColorBoard.tsx` 的 `NATIVE_COLOR_FALLBACK = "#000000"`（`<input type="color">` 的 `value` 属性不能吃 `var()`）。不是绘制色，是全文件唯一残留；`audit-icons.mjs` 会持续列出（预期）。清零方案 = 运行时 `getComputedStyle` 读令牌，但会引入首帧 DOM 读取，不建议。
-2. **Apache-2.0 §4(c) 的 LICENSE 副本**：本次只按任务范围改了 `NOTICE` 一行（记来源/改动/未引运行时）；若要把上游 LICENSE 全文随仓入库（`docs/icon-migration/LICENSE-IconPark.txt`），需 Lead 决定（不在本任务可写范围）。
+2. **Apache-2.0 §4(c) 的 LICENSE 副本**：本次只按任务范围改了 `NOTICE` 一行（记来源/改动/未引运行时）；上游 LICENSE 全文随仓入库已落 `LICENSES/IconPark-APACHE-2.0.txt`。
 3. **计划 §0.1 处置表状态**：⑤ 已 NORMALIZE、⑨ 已 REDRAW+TOKEN、⑥ 已 useId、③ 已按裁决换图；④⑦⑧⑩⑪⑫⑬ 按计划**保持/冻结不变**。
 4. **未做**：没跑设备装置（不涉 `src/mobile/**`，按 §3#21④ 不需要装机验收）；没跑 `check:bitablesnap`（其 3 态是移动端，与本改动无交集，见 §13.4）。

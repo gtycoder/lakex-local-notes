@@ -29,3 +29,6 @@ prototype/
 
 # 走查现场（截图/页面快照，不入库）
 .ai-writing-recon/
+
+# 会话级工作树/临时检出（本机）
+.agents/

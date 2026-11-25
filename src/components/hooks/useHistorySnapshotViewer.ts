@@ -2,7 +2,7 @@
  * 历史快照的**只读 Lake viewer**（doc 快照）—— 同一实例复用，切快照只 setDocument。
  *
  * 261112 R1：实现已收口到 src/features/preview/useReadOnlyKernelViewer（全仓 3 处
- * createLakeDocument("viewer") 包装的唯一来源，见 docs/audit-261112/02-preview-unification.md §3.4）。
+ * createLakeDocument("viewer") 包装的唯一来源，见 261112 预览统一审计 §3.4（已删、git 可查））。
  * 本文件只保留「历史快照」这一侧的对外契约，签名/默认语义与收口前**完全一致**：
  * - 同一 noteId 复用实例（切快照只换正文，不重建内核 —— 历史面板就是一条条点着看的）；
  * - 换文档 / 宿主消失 / 卸载才销毁；

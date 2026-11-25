@@ -4,7 +4,7 @@
 一条命令完成「自检 → 唯一前缀 → 启动 N 个隔离桌面 → 配置 S3 → 按场景断言 → 清理前缀并复核 0 残留」，
 断言失败退出码非 0，全程只写 /tmp 与本前缀云对象。
 
-移动端/真机的历史手工方法见 `docs/audit-261112/21-s3-multi-end-mobile.md`（A–K 场景矩阵与方法）。
+移动端/真机的手工方法见下文「移动端/真机手工方法（A–K）」（261112 审计 21 号搬存）。
 **本入口本轮只固化桌面多实例**；`--with-mobile` 明确报未实现（见下「移动端」）。
 
 ## 前置条件
@@ -69,7 +69,7 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
 
 ## 场景矩阵（桌面多实例口径）
 
-| 场景 | 实例 | 断言要点 | 与 21 号文档的关系 |
+| 场景 | 实例 | 断言要点 | 与 21 号手工场景（下文搬存）的关系 |
 | --- | --- | --- | --- |
 | A | 2 | D1 建文档 + 上传图片资产 → 同步 → D2 正文逐字节一致、附件落盘、云端索引/资产对象/声明齐全 | 对应 21 的 A（21 用手机构造，本入口用桌面等价路径） |
 | B | 2 | D1 编辑 + 移动 → D2 拉取后正文更新且位置不被回滚；反方向 D2 编辑也不回滚位置 | 对应 21 的 B |
@@ -88,9 +88,58 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
 
 **261114 真实桶手机↔桌面手工冒烟 PASS**（未固化进本入口）：模拟器 `pm clear` → 移动端 `saveS3Settings/saveSyncSettings(manual, deferAssets=false)` 配真实桶唯一前缀 → 建文档 + 上传 1×1 PNG（66B）并 `syncNow`；隔离桌面同前缀 `syncNow` 拉到正文 + 资产（落盘/预览可读）；桌面改正文同步 → 移动端同步拉回；前缀 9 对象收尾 residual=0，移动端凭据用后 `pm clear`。
 
-- 移动端/真机步骤（AVD、`adb forward`、APK 安装、`pm clear` 备份还原）仍按 `docs/audit-261112/21-s3-multi-end-mobile.md` 手工执行；
+- 移动端/真机步骤（AVD、`adb forward`、APK 安装、`pm clear` 备份还原）仍按上文「移动端/真机手工方法（A–K）」手工执行；
 - `--with-mobile` 目前会**明确报「未实现」并退出 2**（不会静默降级），避免误以为跑过移动端；
 - 桌面 A–K 场景已覆盖同一批同步一致性断言；「移动端特有」的部分（WebView 桥、deferAssets 按需资产、UI 只读横幅）仍需设备级验收。
+
+## 移动端/真机手工方法（A–K；261112 审计 21 号搬存，原 `docs/audit-261112/21-s3-multi-end-mobile.md` 已删、git 可查）
+
+> `regression.mjs` 只固化桌面多实例；移动端/真机按下文本节手工执行（`--with-mobile` 明确报未实现）。
+> 261112 曾按本方法跑完 A–K（3 端 = 2 模拟器 + 1 隔离桌面 + 真实七牛桶）：A–C/E/F/G–K PASS；D 发现真缺陷「桌面 purge → 移动端不留回收站副本」，task-74 修复后同装置复跑 9/9 PASS。一次性证据（结果表/FAIL 明细/截图）在 git 历史 21 号报告。
+
+### 装置
+
+- 三端：M1 = emulator-5556（AVD `lake_gate`，CDP 9336）/ M2 = emulator-5558（AVD `lake_tab`，CDP 9337）/ D1 = 隔离桌面（`LAKE_USER_DATA=<tmp>/m72`、`LAKE_ASSET_PORT=19884`、CDP 9237、dev server 1421）。
+- 真实桶**唯一前缀**（三端逐字相同，如 `audit-<stamp>`）；凭据只从 `S3_ENV_FILE`（chmod 600、仓库外）读取，不落仓库、不打印。
+- 移动端装包 `bash scripts/android-build.sh --sync --install` 后 `pm clear` 干净起步；配置 = `saveS3Settings` + `saveSyncSettings(manual)` + `testS3Connection`（移动端只暴露 {}，以同步实测为准）。
+- 驱动：`scripts/multi-end-sync/cdpclient.mjs` 连三端 + `@aws-sdk/client-s3` 直读本前缀 pointer/索引。断言原则 = **三端最终一致 + 云端索引状态 + 无整轮失败**；**真缺陷只登记不改语义**。
+
+### 三端 API 差异（driver 需适配）
+
+| 动作 | 移动端 | 桌面 |
+| --- | --- | --- |
+| 新建文档 / 移入回收站 / 彻底删除 / 回收站列表 | `createNote(title)` / `trashNote` / `purgeTreeItem` / `listTrashed` | `createNoteIn` / `deleteNote` / `purgeTrash` / `listTrash` |
+| 读取（锁定判定） | `readNote().editLocked` | `readNote().isEditLocked` |
+| 新建小记 | `createQuickNote(text)` | `createQuickNote({text, draftId, stagedImageIds})` |
+
+### A–K 场景矩阵（移动端口径；断言 = 每条「额外必须钉死」项）
+
+| 场景 | 断言要点 |
+| --- | --- |
+| A | M1 新建文档+图片卡 → 同步 → 云端索引含该文档与资产对象；D1/M2 拉到正文+图片卡 |
+| B | D1 编辑正文 + 移动到另一笔记本 → M1 同步后正文更新且**位置不回滚** |
+| C | M1 移入回收站（未同步）+ D1 编辑并同步 → M1 同步不抛错、正文应用、**仍在回收站**；D1/M2 跟随进回收站；云端 `trashedAt` 非空 |
+| D | D1 purge → 云端索引不含该 id；M1/M2 回收站保留「云端已删除（仅本地）」只读副本（可恢复、不回传） |
+| E | M1 恢复历史版本 → 只改正文、**不把文档移出回收站** |
+| F | D1 加编辑锁 → M1/M2 同步后只读（`editLocked`/`editLockedAt` 三端一致）+ 保存被拒且正文零改动 |
+| G | M1 建分组+子分组+子文档 → D1 父子关系正确；D1 移动分组到新笔记本 → M1 跟随 |
+| H | M1 小记快路径（`syncQuickNote` → pushed）→ D1 拉到；M1 删除 → D1 活跃列表不含；陈旧保存被拒且首页不复活 |
+| I | 资产双向：M1 上传图像卡 → D1 落盘；D1 追加 → 同步 + `ensureNoteAssets([id])` 后 M1 两个文件齐全 |
+| J | M1 断网改 3 篇 → 开网同步不失败（warnings=0）→ 多轮后三端正文逐字节一致 |
+| K | D1 建 → M1 改 → M2 删 → 三端各两轮：三端都在回收站、云端 `trashedAt` 非空、M1 回收站副本保留最后一次本地编辑正文 |
+
+### 教训与语义备注（验收必读）
+
+- **移动端「资产已传输」的验收必须在 `ensureNoteAssets([id])` 之后断言**（或先关 `deferAssets`）：移动端按需下载附件、普通轮不预拉；驱动传单字符串会 `e.filter is not a function`（签名是 `ensureNoteAssets(ids: string[])`）。
+- 跨端删除/复活类场景用 **M1 建**避开两端 `createQuickNote` 签名差异（结论不受影响）。
+- D 的最小复现与修复口径：D1 create→sync；M1/M2 副本到位；D1 trash→sync；D1 purge→sync；M1/M2 sync ×2 应见回收站只读副本。task-74 修复 = 移动端 `purgeLocalNote` 的**远端驱动收敛**改软删保副本（`trashed_at` + `deleted_from_parent_id` + `cloud_deleted=1`，不写墓碑、不删行/正文）；本机显式 purge 仍走 `trashRepository.purgeTreeItem`（物理删 + 墓碑）。
+- d（同步 warning 逐项可见）的手工取证 = 接收端 SQLite 触发器故障注入（261112 task-67；方法在 git 历史 21 号 §6）。
+
+### 收尾清理（强制）
+
+- `DELPREFIX=<前缀> node scripts/multi-end-sync/delprefix.mjs` → ListObjectsV2 复核 **0 残留**；
+- 桌面实例按 CDP 端口 PID 关（`lsof -nP -iTCP:<port> -sTCP:LISTEN -t` → kill；禁 `pkill -f Electron`）；两台模拟器 `pm clear com.lakexlocalnotes.android`；删除临时 `LAKE_USER_DATA`；
+- 全程不 stub `input[type=file]`、不在画布作画（无桩/笔迹需还原）；真机测试前备份、测试后还原。
 
 ## 清理与失败排查
 
@@ -106,15 +155,15 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
   - `实例 D1 提前退出` / `CDP 超时` → 看报告目录下 `D1-electron.log`、`D2-electron.log` 末尾。
   - `RESULT: FAIL` 但断言都 PASS → 看「前缀清理 residual」；残留通常意味着清理期间还有进程在写（确认实例已退出/`--keep` 未开）。
   - 偶发 `lock-busy` 由脚本自动重试（最多 3 次，仅锁竞争类错误），日志里不会静默吞错。
-- 本脚本**不改产品语义**：断言口径来自 `docs/SYNC-PROTOCOL.md`、`AGENTS.md` 与 21 号文档；发现真缺陷只登记 FAIL，不放宽断言。
+- 本脚本**不改产品语义**：断言口径来自 `docs/SYNC-PROTOCOL.md`、`AGENTS.md` 与本文移动端手工方法（261112 审计 21 号搬存）；发现真缺陷只登记 FAIL，不放宽断言。
   真实桶 FAIL 的场景要连同日志/报告一起交接，再决定改产品还是改场景。
 
-## 与 21 号文档的关系
+## 与 21 号手工验收的关系
 
-- `docs/audit-261112/21-s3-multi-end-mobile.md` = 261112 一次性**手工证据**（3 端含 2 台模拟器 + 真实七牛桶，
-  A–K 结果、FAIL 明细、task-74 修复复跑）。它仍是移动端与真实桶的**事实来源**。
+- 261112 的一次性**手工证据**（3 端含 2 台模拟器 + 真实七牛桶，A–K 结果、FAIL 明细、task-74 修复复跑）
+  在 git 历史 `docs/audit-261112/21-s3-multi-end-mobile.md`（已删）；**方法已搬存到本文「移动端/真机手工方法（A–K）」**。
 - 本目录 `regression.mjs` = 同一批场景的**可重复入口**（桌面多实例、自动清理、退出码/日志/报告固定），
-  便于后续每次改动后复跑；两者不是替代关系：移动端特有面仍以 21 号文档方法为准。
+  便于后续每次改动后复跑；两者不是替代关系：移动端特有面仍按本文手工方法执行。
 
 ## 文件
 
@@ -151,5 +200,5 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
 - 测试前**不要**动两个数据目录：正式 `~/Library/Application Support/lakex-local-notes`、开发 `...-dev`；
   本入口只用 `--userdata-root`（默认 /tmp）下新建的隔离目录。
 - kill Electron **只 kill 本脚本 spawn 的 PID**；禁 `pkill -f Electron` / `killall`（会误伤其它应用与 DSH 宿主）。
-- 真实桶只操作本脚本唯一前缀（可加 `--base-prefix` 限定对象根，如 `lakex-notes-dev3`）；结束必须 0 残留。真机测试前备份/测试后还原（见 21 号文档 §0）。
+- 真实桶只操作本脚本唯一前缀（可加 `--base-prefix` 限定对象根，如 `lakex-notes-dev3`）；结束必须 0 残留。真机测试前备份/测试后还原（见「移动端/真机手工方法」收尾清理）。
 - 本目录脚本不写仓库文件、不提交；凭据永不入库。

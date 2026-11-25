@@ -15,7 +15,7 @@
  * ~/Library/Application Support/lakex-local-notes；只 kill 本脚本 spawn 的子进程。
  * 凭据：只从环境变量 / S3_ENV_FILE 读，不打印、不写入仓库/报告。
  *
- * 事实来源：docs/audit-261112/21-s3-multi-end-mobile.md（A–K 场景与方法）；
+ * 事实来源：本目录 README.md「移动端/真机手工方法（A–K）」节（261112 审计 21 号搬存）；
  * 移动端/真机步骤不在本入口内（见 README「移动端」），--with-mobile 明确报未实现。
  */
 import fs from "node:fs";
@@ -1049,7 +1049,7 @@ function printList() {
     console.log("  " + row.id.padEnd(2) + "  实例=" + row.ends + (row.default ? "  默认参与" : "        ") + "  " + row.title);
   }
   console.log("\n默认场景 = A,B；--scenarios all = A,B,C,D,E,F,I,J（K 需 --instances 3）。");
-  console.log("移动端 A–K 手工方法见 docs/audit-261112/21-s3-multi-end-mobile.md；--with-mobile 明确报未实现。");
+  console.log("移动端 A–K 手工方法见 scripts/multi-end-sync/README.md「移动端/真机手工方法（A–K）」节；--with-mobile 明确报未实现。");
 }
 
 async function dryRun(opts) {
@@ -1085,7 +1085,7 @@ async function dryRun(opts) {
   let prefix = null;
   try { prefix = validatePrefix(opts); record(true, "ok", "唯一前缀", prefix + "（实跑开始前会复核该前缀为空）"); }
   catch (error) { record(false, "error", "唯一前缀", shortError(error)); }
-  if (opts.withMobile) record(false, "error", "--with-mobile", "未实现：本入口只固化桌面多实例；移动端步骤见 docs/audit-261112/21-s3-multi-end-mobile.md");
+  if (opts.withMobile) record(false, "error", "--with-mobile", "未实现：本入口只固化桌面多实例；移动端步骤见 scripts/multi-end-sync/README.md「移动端/真机手工方法（A–K）」节");
   if (opts.loopback) {
     record(true, "ok", "S3 来源", "内存 loopback（127.0.0.1 随机端口，无外部网络）");
   } else {
@@ -1215,7 +1215,7 @@ async function main() {
   }
   if (opts.help) { printHelp(); return 0; }
   if (opts.withMobile) {
-    console.error("--with-mobile 未实现：本入口只固化桌面多实例回归。移动端/真机 A–K 步骤见 docs/audit-261112/21-s3-multi-end-mobile.md。");
+    console.error("--with-mobile 未实现：本入口只固化桌面多实例回归。移动端/真机 A–K 步骤见 scripts/multi-end-sync/README.md「移动端/真机手工方法（A–K）」节。");
     console.error("默认桌面 A/B 已通过 --scenarios A,B 覆盖同类同步断言；去掉该参数重跑。");
     return 2;
   }

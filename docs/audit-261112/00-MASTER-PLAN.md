@@ -1,22 +1,22 @@
 # 00 · 发布前最终全仓审计：总方案（261112）
 
-> **性质**：只读审计 + 方案设计。**本文件与 `docs/audit-261112/` 下的分册都是方案文档，不改任何产品代码**；是否执行、按什么顺序执行，等本方案逐项讨论后再决定。
+> **性质**：只读审计 + 方案设计。**本文件（保留件：附录 E 用户裁决）与 `docs/audit-261112/` 下的分册（已删，git 可查）都是方案文档，不改任何产品代码**；是否执行、按什么顺序执行，等本方案逐项讨论后再决定。
 > **审计基线**：`master @ 8cc65e06`（工作树 clean，单 worktree，双远端已同步）；日期 2026-11-12。
 > **产出**：6 份分领域审计报告（见 §0.1）+ 本总方案。分册只读审计，未改代码、未跑设备、未触碰真实数据。
 > **阅读方式**：先读 §1（一页结论）→ §6（裁决清单，逐项讨论用）→ 再按需读 §4 的分项方案与分册。
 
 ## 0. 分册索引与口径
 
-### 0.1 分册（每份自包含、含 file:line 证据与复现命令）
+### 0.1 分册（每份自包含、含 file:line 证据与复现命令；**分册均已删、git 可查**，本表只留索引）
 
 | # | 报告 | 覆盖 | 结论规模 |
 | --- | --- | --- | --- |
-| 02 | [02-preview-unification.md](02-preview-unification.md) | 全仓预览能力：30 个入口、12 类渲染器、内核只读 4 包装、策略对象设计 | P1×4 / P2×8 / 裁决 8 |
-| 03 | [03-desktop-ui-css.md](03-desktop-ui-css.md) | 桌面 UI 与样式系统（75 CSS / 11,424 行、kit 101 原语、层序） | P1×1 / P2×8 / 裁决 5 |
-| 04 | [04-mobile.md](04-mobile.md) | 移动端 52,269 行源码 + 25 CSS + 18 Kotlin 插件 | P1×2 / P2×7 / 裁决 3 |
-| 05 | [05-core-electron.md](05-core-electron.md) | `src/core` 22,433 行 + `electron` 24,054 行 + preload | P1×2 / P2×6 / 裁决 5 |
-| 06 | [06-features.md](06-features.md) | 14 个特性域（editor/bitable/ink/usheet/board/AI/日记/小记/标签/搜索/导入/附件…） | P1×2 / P2×8 / 裁决 4 |
-| 07 | [07-docs-cleanup.md](07-docs-cleanup.md) | 164 docs + 47 guide + 148 scripts + 仓库卫生 + 使用技巧 | P0×2 / P1×4 / P2 若干 / 裁决 8 |
+| 02 | 02-preview-unification.md | 全仓预览能力：30 个入口、12 类渲染器、内核只读 4 包装、策略对象设计 | P1×4 / P2×8 / 裁决 8 |
+| 03 | 03-desktop-ui-css.md | 桌面 UI 与样式系统（75 CSS / 11,424 行、kit 101 原语、层序） | P1×1 / P2×8 / 裁决 5 |
+| 04 | 04-mobile.md | 移动端 52,269 行源码 + 25 CSS + 18 Kotlin 插件 | P1×2 / P2×7 / 裁决 3 |
+| 05 | 05-core-electron.md | `src/core` 22,433 行 + `electron` 24,054 行 + preload | P1×2 / P2×6 / 裁决 5 |
+| 06 | 06-features.md | 14 个特性域（editor/bitable/ink/usheet/board/AI/日记/小记/标签/搜索/导入/附件…） | P1×2 / P2×8 / 裁决 4 |
+| 07 | 07-docs-cleanup.md | 164 docs + 47 guide + 148 scripts + 仓库卫生 + 使用技巧 | P0×2 / P1×4 / P2 若干 / 裁决 8 |
 
 ### 0.2 判定口径
 
@@ -657,7 +657,7 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 | Q25 | **A 新增 CONTRIBUTING + SECURITY** | R1 文档批 |
 | Q26 | **A AGENTS lazy 边界改"既有边界（以测试为准）"** | R1 文档批 |
 | Q27 | **A ARCHITECTURE 重写** | R0 已执行 |
-| 追加（261112） | **不做「取消日记标记」**（用户原话大意：不做取消日记标记这个需求；日记本就是日记本，仅允许部分文档移动） | 撤销 261110 收尾项；代码移除 task-84（移动）/task-85（桌面+core）；[DIARY](../DIARY.md) / [guide 16](../guide/16-diary.md) / 本文件 §4.I / [HANDOFF §3](../HANDOFF.md) 同步删 |
+| 追加（261112） | **不做「取消日记标记」**（用户原话大意：不做取消日记标记这个需求；日记本就是日记本，仅允许部分文档移动） | 撤销 261110 收尾项；代码移除 task-84（移动）/task-85（桌面+core）；[DIARY](../DIARY.md) / [guide 16](../../guide/16-diary.md) / 本文件 §4.I / [HANDOFF §3](../HANDOFF.md) 同步删 |
 
 **执行窗口**：Q19=C2 ⇒ 发布前完成拆分 1–5（bitableDoc / 下一波 BitableEditor / quickNotes / webApiServer / QuickNotesWorkspace）；6–10 留发布后。
 
@@ -675,7 +675,7 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 
 **拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件）；SettingsPanel 1447→89（11 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths + boot/ipcWiring 281 行）；lakeRuntime 1699→538（6 kernel 模块）；InkPad 仅阶段 ①（inkPadModel + 11 例行为测试，结构拆分留发布后）。
 
-**设备验收**：真机 Xiaomi 2109119BC（Android 14）+ 5554 模拟器已装 R1 APK；Q04 回收站只读预览通过（CDP DOM 断言 + 截图）；Q22 SecureStore→SecretBox 跨 force-stop 重启读回通过；记录 docs/audit-261112/12-device-check.md。
+**设备验收**：真机 Xiaomi 2109119BC（Android 14）+ 5554 模拟器已装 R1 APK；Q04 回收站只读预览通过（CDP DOM 断言 + 截图）；Q22 SecureStore→SecretBox 跨 force-stop 重启读回通过；记录 docs/audit-261112/12-device-check.md（已删 git 可查）。
 
 **门禁（R2 实测）**：tsc 0；全量 vitest 883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS（desktop 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440）；diff-check 0。
 
@@ -713,13 +713,13 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 
 **B. 覆盖矩阵结论（261112 第三轮）**
 
-- **A 档（内存远程穷举，双端同一批场景）**：74 场景 → **已有 45 / 部分 28 / 真空 1 / 失败 0**（[14 分册](14-s3-scenario-matrix.md)：收口 45/28/1、新增 S08）。**S19 登记为「不计划」**：显式 id 重建不是用户流程（[HANDOFF §3](../HANDOFF.md) 同步登记）。
-- **B 档（真实七牛桶 13 条子集）**：**57/57 断言 PASS**、唯一前缀、只 DELPREFIX、**0 残留**（脚本 `scripts/multi-end-sync/run58.sh` + `scenario58.mjs`；[19 分册](19-s3-real-bucket-subset.md)）。
-- **移动多端混合（移动↔桌面，A–K）**：**全 PASS**；D 场景（远端 purge 后移动端保副本）修复后 **9/9**（[21 分册](21-s3-multi-end-mobile.md)；G–K 见 [HANDOFF §3](../HANDOFF.md)）。
+- **A 档（内存远程穷举，双端同一批场景）**：74 场景 → **已有 45 / 部分 28 / 真空 1 / 失败 0**（14 分册，已删；结论已并入 SYNC-PROTOCOL §9.6 附注：收口 45/28/1、新增 S08）。**S19 登记为「不计划」**：显式 id 重建不是用户流程（[HANDOFF §3](../HANDOFF.md) 同步登记）。
+- **B 档（真实七牛桶 13 条子集）**：**57/57 断言 PASS**、唯一前缀、只 DELPREFIX、**0 残留**（脚本 `scripts/multi-end-sync/run58.sh` + `scenario58.mjs`；19 分册，已删 git 可查）。
+- **移动多端混合（移动↔桌面，A–K）**：**全 PASS**；D 场景（远端 purge 后移动端保副本）修复后 **9/9**（21 分册，已删、方法已搬 `scripts/multi-end-sync/README.md`；G–K 见 [HANDOFF §3](../HANDOFF.md)）。
 
-**C. 引用分册（同目录）**
+**C. 引用分册（同目录；均已删，git 可查）**
 
-[13 写路径生命周期守卫越界扫查](13-write-guard-sweep.md) · [14 S3 全场景矩阵](14-s3-scenario-matrix.md) · [15 只读门禁与同步 warning 通路](15-readonly-gates-warning.md) · [16 移动端生命周期语义等价性](16-mobile-lifecycle.md) · [17 只读/回收站/云端已删除/保存被拒 UI 一致性](17-lock-trash-ui.md) · [18 生命周期实测证据](18-evidence-lifecycle.md) · [19 真实桶 B 档 13 条](19-s3-real-bucket-subset.md) · [20 独立复核 batch2](20-independent-review-batch2.md) · [21 S3 多端混合 A–F](21-s3-multi-end-mobile.md)。
+13 写路径生命周期守卫越界扫查（结论已并入 SYNC-PROTOCOL §9.6 附注） · 14 S3 全场景矩阵（结论同附注） · 15 只读门禁与同步 warning 通路 · 16 移动端生命周期语义等价性 · 17 只读/回收站/云端已删除/保存被拒 UI 一致性 · 18 生命周期实测证据 · 19 真实桶 B 档 13 条 · 20 独立复核 batch2 · 21 S3 多端混合 A–F（手工方法已搬 `scripts/multi-end-sync/README.md`）。
 
 **D. 状态**
 

@@ -341,7 +341,43 @@ retryPendingAssets（上轮失败附件先补）
 
 - **选择逻辑**：`deviceStore.saveState` 只在「新行导入（`importRemoteNote`）」与「回收站行接收正文（`cur.trashedAt !== null` → `saveSyncedNote`）」分叉；其余仍 `saveNote`。端口 `setNodeIcon` 只被同步 apply 使用 ⇒ 实现走镜像写（桌面 `noteMetadataRepository.applyRemoteNodeIcon`；移动端 `setNodeIcon` 端口只写 `notes.icon`，purged 行已物理删除 ⇒ UPDATE 0 行不抛错）。
 - **红线**：面向用户的策略守卫**不得下沉到两端共用的底层写函数**（被 U/S/I/R/M 多方调用的 `save` / `move` / `setNodeIcon` / `saveNote` 一类）。守卫只放在**入口层**或**专用路径**。
-- **新增写守卫必须声明调用方分类**：**用户（U）/ 同步（S）/ 导入（I）/ 恢复（R）/ 维护（M）**；在守卫注释与契约里写清哪类允许、哪类拒绝、哪类必须走专用路径。逐条越界审计与 G1–G18 判定见 `docs/audit-261112/13-write-guard-sweep.md` §2（真越界 G1 正文、G3 图标已修；其余 15 处为必要守卫）。
+- **新增写守卫必须声明调用方分类**：**用户（U）/ 同步（S）/ 导入（I）/ 恢复（R）/ 维护（M）**；在守卫注释与契约里写清哪类允许、哪类拒绝、哪类必须走专用路径。逐条越界审计与 G1–G18 判定见本节附注「261112 写守卫越界清单」（真越界 G1 正文、G3 图标已修；其余 15 处为必要守卫）。
+
+#### 附注 · 261112 写守卫越界清单（G1–G18）与场景矩阵结论（搬存自 261112 审计 13/14 号，原文已删、git 可查）
+
+> 行号 = 审计基线 `6c5e52b1`，随修复漂移，按语义对位；判定口径见 §9.6 红线（U/S/I/R/M 分类）。
+
+**判定分布**：扫描到的「因生命周期/状态而拒写」守卫共 **18 处** = 真越界 **2**（G1 正文写 / G3 图标写，均已按本节修复）+ 层次不当但已被调用方补偿 **1**（G2）+ **必要 15**（G4–G18）。
+
+| # | 守卫（审计基线位置） | 调用方 | 同步可达 | 判定 / 处置 |
+| --- | --- | --- | --- | --- |
+| G1 | 正文写「回收站/purged 拒写」`noteContentRepository.save` | U + S | 是（整轮卡死） | **越界（已修）**：同步走 `saveSynced`（allowTrashed，不改 trashed/parent）；purged 仍拒且不得逃出 apply（按 G14 同款「跳过」） |
+| G2 | 正文文件不存在（NotFound） | U + S | 是 | 层次不当但已补偿：同步检测不到正文文件时走 `importRemoteNote` 重建；保留 |
+| G3 | 元数据写边界 `assertNodeWritable`（renameTreeNode / setNodeIcon / setNoteEditLocked） | U + S（新行 icon） | 是（整轮卡死） | **越界（已修）**：同步图标走 `applyRemoteNodeIcon` 镜像写（允许回收站行、purged 仍拒、不标 dirty）；用户入口守卫保留 |
+| G4 | 删除回收站笔记本（trashLifecycle） | U | 否 | 必要，保留 |
+| G5 | 恢复回收站条目 | U / R | 否（sync 走 `applyRemoteRestore`） | 必要（恢复 = 唯一显式例外，写路径本身绕开 G1） |
+| G6 | 彻底删除（purge） | U / M | 否 | 必要，保留 |
+| G7 | 移动端自动过期 purge 竞态守卫（事务内 `expiredBefore` 重判） | M | 否 | 必要（不满足即静默跳过），保留 |
+| G8 | 移动端用户保存守卫（桥层 bridge/notes） | U + R | 否 | U 必要；**R 分支撞守卫 = 功能缺口**：恢复目标已 trashed 时应走显式恢复（restoreTreeItem）再恢复历史 |
+| G9 | 移动端用户保存守卫（底层 noteRepository，含二次 WHERE 竞态守卫） | U | 否 | 必要（比桌面多二次守卫），保留 |
+| G10 | 移动端 sync 端口直写（saveNote / importRemoteNote / applyRemoteNoteMeta / setNodeIcon / deleteNote / restoreTrashItem） | S | — | 必要（**正面范本**：镜像路径必须直写、不得复用用户写函数） |
+| G11 | 桌面 sync 端口（无策略转发 ⇒ 曾继承 G1/G3 越界） | S | 是 | 问题在底层而非端口；端口已加 `saveSyncedNote` / `applyRemoteIcon` 分身 |
+| G12 | 同步镜像元数据直写（applyRemoteNoteMeta / applyRemoteEditLock） | S | — | 必要（正确分层）；镜像写不得复用 U 入口 |
+| G13 | 远端新行导入（含回收站行，remoteImportRepository.importNote） | S | — | 必要，保留 |
+| G14 | 同步轮内被 purge 的行（deviceStore 跳过不抛） | S | — | 必要 + **正面范本**：同步侧兜底守卫必须「跳过」而非「抛错」 |
+| G15 | 恢复正文（资源页 writeRestoredBody 直写） | R | 否 | 必要（显式恢复），保留 |
+| G16 | 历史版本恢复 | R | 否 | 必要（当前入口只在活跃文档）；**若将来给回收站加「恢复历史」入口会绕过 G1 语义**，须补显式恢复前置或明确定义 |
+| G17 | 新建副本（源已 trashed → `already-trashed` 结构化失败） | U | 否 | 必要，保留 |
+| G18 | 渲染层保存前置拦截（useSavePipeline） | U | 否 | 必要（与底层 G1 双保险，不能替代底层） |
+
+**必要守卫结论（明确不动，避免误删）**：
+- 全部 **U 入口**守卫（G1 用户保存 / G3 重命名、图标、锁定 / G4 / G5 / G6 / G17 / G18）——删掉会重新引入「用户保存、改名、图标、锁定静默写进回收站行」的旧缺陷（F04 事故原意）。
+- 全部 **S/M 直写**（G10 / G12 / G13 / G15 与 trashLifecycle 直写 SQL）——删掉或加守卫都会重新造成整轮卡死或静默丢弃。
+- **「跳过而非抛错」型同步守卫**（G14、G7）——新增同类守卫一律按这个姿势。
+- G16 不可达回收站行是当前正确行为，**不要**为「统一」给它加 F04 守卫；只在加新入口时复核。
+- 补充（非守卫、仅记录）：`isGoneNote` 是读/只读态判据不是写守卫；`moveTreeNode` 无 `assertNodeWritable`（拖拽入口只对活跃树可见；若将来给回收站加「移动」入口需补判定）；quickNotes 写路径不在同类范围（小记无回收站行→正文写入的镜像路径）。
+
+**场景矩阵结论（同批搬存，原 14 号）**：S3 全场景矩阵 74 条（A 档 58 / B 档 1 / A+B 15），收口覆盖 = **已有 45 / 部分 28 / 真空 1 / 失败 0**；唯一真空 = S19 目录重建同 id（显式 id 重建不是用户流程，**不计划**，矩阵登记即可）。每条场景通用判定 = 两端最终一致 + 云端索引状态符合预期 + 无人卡死（无整轮抛错/永久失败）。阶段②发现并已修：F-01（S17 purge group 子文档未被彻底删除、云端索引残留，P0）、F-01b（云端 folders[] 残留已 purge 目录）。真缺陷只登记不改语义；B 档（真实桶子集）261114 已按多端回归 README 跑 A–K 全 PASS。
 
 ### 9.7 单篇 apply 失败 = warning + continue（261112）
 
