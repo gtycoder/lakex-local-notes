@@ -34,8 +34,3 @@ export interface DuplicateNotesNotice {
 export function duplicateNotesResultNotice(result: DuplicateNotesResultShape): DuplicateNotesNotice {
   return duplicateNotesNotice(result);
 }
-
-/** 失败原因摘要（兼容旧导出；实现已收口到 core）。 */
-export function duplicateReasonSummary(failed: ReadonlyArray<{ reason?: DuplicateNotesReasonShape }>): string {
-  return duplicateNotesNotice({ ok: false, results: failed.map((item) => ({ id: "", ok: false, reason: item.reason })) }).text;
-}

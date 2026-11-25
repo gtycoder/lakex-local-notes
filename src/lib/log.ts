@@ -13,8 +13,6 @@
  */
 import { errorFields, formatLogFields, perfMessage, type LogFields } from "../core/logFormat";
 
-export type RendererLogLevel = "error" | "warn" | "info" | "debug";
-
 export interface RendererLogSink {
   debug(message: string): void;
   info(message: string): void;

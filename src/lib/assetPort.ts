@@ -1,4 +1,4 @@
-import { assetThumbWidthFor, withAssetWidth } from "../core/assetUrl.js";
+import { assetThumbWidthFor, localAssetHttpUrl, withAssetWidth } from "../core/assetUrl.js";
 
 /**
  * 本地资源服务器端口（可由主进程 LAKE_ASSET_PORT 覆盖，多端同机双开用）。
@@ -97,6 +97,22 @@ export function withLocalImageThumb(src: string, width: number): string {
     return src;
   }
   return withAssetWidth(src, width);
+}
+
+
+/**
+ * 本地资产**显示** URL 的单一组合（D-08 收口：历史上 4 处私有拼接、组合顺序还各不相同，
+ * 见 docs/audit-261125/02-desktop-ui.md D-08）：
+ *   canonical URL（localAssetHttpUrl）→ `?w=` 缩略档位（withAssetWidth）→ 运行期访问令牌（withAssetAccessToken）。
+ *
+ * `width` = **离散缩略档位**（`?w=` 值；null = 原图）。CSS 像素 → 档位的换算走 [assetThumbWidthForCss]，
+ * 在调用点做（如 bitableAssetUrl 的 cssPx 入口语义就留在那里）。
+ * 顺序不能反：token 是运行期注入的临时凭据，必须在最外层（保存/前端缓存前好剥）。
+ * 只用于**显示**，不写回正文/模型。
+ */
+export function localAssetDisplaySrc(noteId: string, filename: string, width: number | null): string {
+  const base = localAssetHttpUrl(noteId, filename, { port: ASSET_PORT });
+  return withAssetAccessToken(withAssetWidth(base, width));
 }
 
 /** Removes the transient token before a document is saved or cached. */

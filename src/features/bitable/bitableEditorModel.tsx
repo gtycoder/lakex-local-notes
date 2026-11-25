@@ -5,7 +5,7 @@
  * hook 反向 import 容器（循环依赖）。本文件只放纯函数/常量 + 供 hook 参数使用的共享类型。
  */
 import type { MutableRefObject } from "react";
-import { BITABLE_DOC_KIND, BITABLE_DOC_VERSION, createDefaultBitableTable, type BitableDoc, type BitableField, type BitableTable, type BitableView } from "../../core/bitableDoc.js";
+import { BITABLE_DOC_KIND, BITABLE_DOC_VERSION, createDefaultBitableTable, type BitableDoc, type BitableField, type BitableTable } from "../../core/bitableDoc.js";
 export const DEFAULT_COL_WIDTH = 180;
 /**
  * 列的**硬宽度**（用户 260930：「所有的列都是根据内容长度算的左右宽度，我需要能自由设置」）。
@@ -92,6 +92,5 @@ export type UpdateDoc = (update: (prev: BitableDoc) => BitableDoc) => void;
 /** 导航变化只落设备本地（不进正文）：与 UpdateDoc 同形，语义不同。 */
 export type NavigateDoc = UpdateDoc;
 export type PatchActiveTable = (updater: (table: BitableTable) => BitableTable) => void;
-export type PatchView = (viewId: string, patch: Partial<BitableView>) => void;
 export type DocRef = MutableRefObject<BitableDoc>;
 export type ReadOnlyRef = MutableRefObject<boolean>;

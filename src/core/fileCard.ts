@@ -51,10 +51,29 @@ export interface ScannedFileCard {
 /** card 元素 value="data:{uri-encoded-json}"（name="file"，block/inline 均可） */
 const FILE_CARD_RE = /<card\b[^>]*\bname="file"[^>]*\bvalue="data:([^"]+)"[^>]*>/g;
 
-/** 解码 card value（URI 编码 JSON，容忍 data: 前缀）。失败返回 null。 */
-export function decodeCardValue(encoded: string): Record<string, unknown> | null {
+/**
+ * 解码 card value —— **单一实现**（D-07 收口：features 两份私有副本已删，均 import 这里；护栏见 fileCard.test）。
+ * 容忍度 = 三套历史实现的 superset，坏值一律回 null、绝不抛错：
+ * · `data:` 前缀在 URI 解码前/后出现都剥（内核各版本写出的形态不一）；
+ * · 裸 JSON（未经 URI 编码）原样解析，值里的 %xx 不被 decodeURIComponent 二次解码改坏；
+ * · 数组/字面量一律回 null（三套 fixture 对拍后的统一口径：card value 只有对象形态；
+ *   旧副本曾把数组当对象放行，但所有调用方只读对象字段，放行数组 ≡ 空对象 ⇒ 统一拒绝不改任何调用方行为）。
+ */
+export function decodeCardValue(encoded: string | null | undefined): Record<string, unknown> | null {
+  if (typeof encoded !== "string" || !encoded) return null;
+  const raw = encoded.startsWith("data:") ? encoded.slice("data:".length) : encoded;
+  let json: string;
+  if (raw.startsWith("{") || raw.startsWith("[")) {
+    json = raw;
+  } else {
+    try {
+      json = decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (json.startsWith("data:")) json = json.slice("data:".length);
   try {
-    const json = decodeURIComponent(encoded).replace(/^data:/, "");
     const obj = JSON.parse(json) as unknown;
     return obj && typeof obj === "object" && !Array.isArray(obj) ? (obj as Record<string, unknown>) : null;
   } catch {

@@ -11,7 +11,7 @@ import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { trashDaysUntilPurge, type TrashItem } from "../../core/trashPolicy";
-import { formatDateTime } from "../../lib/formatTime";
+import { formatDateTime } from "../../core/dateFormat";
 import { cloudStateHint } from "../../core/cloudState";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import { NoteDocPreview } from "./NoteDocPreview";
@@ -29,6 +29,12 @@ function trashItemKindLabel(item: TrashItem): string {
   return item.nodeType === "note" ? "文档" : "目录";
 }
 
+/** 时间显示直连 core/dateFormat（D-12 删 lib/formatTime 转发壳）：不可解析时间回空串（见 trashItemMeta）。 */
+function formatTrashTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : formatDateTime(date);
+}
+
 /** 标题兜底（task-89）：无标题文档/目录显示类型名，不留空白行。 */
 function trashItemTitle(item: TrashItem): string {
   return item.title.trim() || trashItemKindLabel(item);
@@ -39,7 +45,7 @@ function trashItemMeta(item: TrashItem): string {
   const titled = item.title.trim().length > 0;
   const kind = trashItemKindLabel(item);
   // 时间不可解析时 formatDateTime 回空串：别拼出悬空的「文档，」。
-  const when = item.deletedAt ? formatDateTime(item.deletedAt) : "";
+  const when = item.deletedAt ? formatTrashTime(item.deletedAt) : "";
   if (!when) return titled ? kind : "";
   return titled ? `${kind}，${when}` : when;
 }
@@ -458,7 +464,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
             // 小记行 = 文档行同一套结构与类（包 .trash-tree-node ⇒ 文本保底宽 / 徽标让位 / 按钮复位 /
             // 整行可点 / 动作浮层这些 task-89 与 task-105 的规则原样复用，不写第二份行样式）。
             quickItems.map((item) => {
-              const meta = formatDateTime(item.deletedAt);
+              const meta = formatTrashTime(item.deletedAt);
               return (
                 <div className="trash-tree-node" key={item.id}>
                   <div

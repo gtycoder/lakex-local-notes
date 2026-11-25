@@ -63,7 +63,6 @@ export function reduceHover(phase: HoverPhase, event: HoverEvent): { phase: Hove
 
 /** floating 态下"还算在目录里"的走廊并集（顺序无关，任一命中即算在内）。 */
 export const SIDEBAR_CORRIDOR_SELECTORS = [".activity-rail", ".sidebar", ".edge-hotzone"] as const;
-export type SidebarCorridorSelector = (typeof SIDEBAR_CORRIDOR_SELECTORS)[number];
 export function isInSidebarCorridor(hits: readonly boolean[]): boolean {
   return hits.some(Boolean);
 }

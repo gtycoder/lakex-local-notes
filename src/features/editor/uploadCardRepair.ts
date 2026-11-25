@@ -9,7 +9,8 @@
  * 这是**纯函数**（不碰 DOM/IO），EditorTab 在 createLakeDocument/setDocument 之前调用：
  * 正文里已是 done 的卡不会重复改；只处理空 src 的未完成卡，幂等。
  */
-import { getUploadEntry, uploadsForNote, type UploadJournalEntry } from "./uploadJournal";
+import { decodeCardValue, encodeCardValue } from "../../core/fileCard";
+import { uploadsForNote, type UploadJournalEntry } from "./uploadJournal";
 
 export interface UploadCardRepairResult {
   content: string;
@@ -44,21 +45,6 @@ export function findImageCardValues(content: string): ImageCardMatch[] {
     results.push({ raw: tag, valueStart, valueEnd: valueStart + value.length, value });
   }
   return results;
-}
-
-function decodeCardValue(value: string): Record<string, unknown> | null {
-  try {
-    const encoded = value.startsWith("data:") ? value.slice("data:".length) : value;
-    const decoded = decodeURIComponent(encoded);
-    const parsed: unknown = JSON.parse(decoded);
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
-function encodeCardValue(value: Record<string, unknown>): string {
-  return "data:" + encodeURIComponent(JSON.stringify(value));
 }
 
 /** 把一条日志结果应用到卡片 value 上；返回新 value（未改动返回 null）。 */
@@ -132,11 +118,3 @@ export function hasUnresolvedImageTask(content: string, taskId: string): boolean
   }
   return false;
 }
-
-/** 日志里该 note 是否还有可恢复任务（供 EditorTab 决定是否发起恢复）。 */
-export function hasJournalUploads(noteId: string): boolean {
-  return uploadsForNote(noteId).some((entry) => entry.status === "pending" || (entry.status === "done" && entry.output));
-}
-
-/** 单条日志读取（测试/诊断）。 */
-export { getUploadEntry };

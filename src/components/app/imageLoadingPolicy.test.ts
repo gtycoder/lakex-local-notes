@@ -17,8 +17,8 @@ describe("图片加载口径（正文=原图，其余=缩略图）", () => {
   it("属性、资源页、回收站孤儿预览走缩略档 + token", () => {
     const noteInfo = read("./NoteInfoDialog.tsx");
     expect(noteInfo).toContain("assetThumbWidthForCss");
-    expect(noteInfo).toContain("withAssetWidth");
-    expect(noteInfo).toContain("withAssetAccessToken");
+    // D-08：显示 URL 组合收口到 lib/assetPort.localAssetDisplaySrc（?w= 档位 + token 都由它拼），组件不再自拼。
+    expect(noteInfo).toContain("localAssetDisplaySrc");
     expect(noteInfo).toContain("const [assetsOpen, setAssetsOpen] = useState(false)");
     const history = read("./HistoryPanel.tsx");
     expect(history).toContain("withAssetWidth(base, width1024)");

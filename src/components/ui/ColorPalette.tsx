@@ -72,14 +72,6 @@ function readRecentColors(key: string): string[] {
   }
 }
 
-/**
- * 该入口**最近一次用过的颜色**（= 最近使用桶的第一条）；没有则 null。
- * 261008：表格颜色按钮「点图标 = 用上次的颜色」靠它 —— 记忆复用最近使用桶，不另存一份。
- */
-export function lastUsedColor(key: string): string | null {
-  return readRecentColors(key)[0] ?? null;
-}
-
 function rememberColor(key: string, color: string) {
   const normalized = color.toLowerCase();
   const next = [normalized, ...readRecentColors(key).filter((item) => item !== normalized)].slice(0, 5);

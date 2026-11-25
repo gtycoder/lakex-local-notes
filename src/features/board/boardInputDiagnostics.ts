@@ -38,8 +38,6 @@ export interface PointerStrokeDiag {
   mouseAfterPen: boolean;
 }
 
-/** 兼容旧名（画板侧读的是同一个结构）。 */
-export type BoardStrokeDiag = PointerStrokeDiag;
 
 const MAX_STROKES = 60;
 const BOARD_KEY = "lakex-local-notes-v3.board-input-debug";

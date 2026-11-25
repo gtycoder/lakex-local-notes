@@ -7,14 +7,14 @@ import {
   convertMarkdownToLake,
   createMarkdownImportContainer,
   dirnameOf,
-  markdownConvertInFlight,
-  resetMarkdownConvertQueueForTest,
   resolveLocalImagePath,
   rewriteMarkdownImages,
   stripFrontmatter,
   type MarkdownKernelHandle,
   type MarkdownKernelLike,
 } from "./markdownImportPipeline";
+// 队列已收口到 conversionQueue（D-09）：与 Word/HTML 管线共用一条串行队列。
+import { conversionInFlight, resetConversionQueueForTest } from "./conversionQueue";
 
 /**
  * 261106 Markdown 导入共享管线（md → lake）。
@@ -55,7 +55,7 @@ function factory(kernelRef: { kernel: MarkdownKernelLike; container?: HTMLElemen
 }
 
 afterEach(() => {
-  resetMarkdownConvertQueueForTest();
+  resetConversionQueueForTest();
   document.body.innerHTML = "";
 });
 
@@ -192,6 +192,6 @@ describe("串行队列", () => {
     const results = await Promise.all(jobs);
     expect(results.map((result) => result.body)).toEqual([LAKE, LAKE, LAKE]);
     expect(maxActive).toBe(1);
-    expect(markdownConvertInFlight()).toBe(0);
+    expect(conversionInFlight()).toBe(0);
   });
 });

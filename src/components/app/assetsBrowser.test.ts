@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { assetDisplayUrl, assetKindBucket, assetPreviewKind } from "./AssetsBrowser";
+import { assetKindBucket, assetPreviewKind } from "./AssetsBrowser";
+import { localAssetDisplaySrc } from "../../lib/assetPort";
 
 const SRC = readFileSync(new URL("./AssetsBrowser.tsx", import.meta.url), "utf8");
 const PANEL = readFileSync(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
@@ -48,11 +49,10 @@ describe("未引用资源浏览器", () => {
     expect(assetPreviewKind({ filename: "a.zip", mimeType: "" })).toBe("none");
   });
 
-  it("预览直链走本地资产服务器：图片带 ?w= 档位、1:1 用原图", () => {
-    const item = { noteId: "n1", filename: "a.png" };
-    expect(assetDisplayUrl(item, 1024)).toContain("/n1/a.png");
-    expect(assetDisplayUrl(item, 1024)).toContain("w=1024");
-    const original = assetDisplayUrl(item, null);
+  it("预览直链走本地资产服务器：图片带 ?w= 档位、1:1 用原图（组合单一来源 localAssetDisplaySrc，D-08）", () => {
+    expect(localAssetDisplaySrc("n1", "a.png", 1024)).toContain("/n1/a.png");
+    expect(localAssetDisplaySrc("n1", "a.png", 1024)).toContain("w=1024");
+    const original = localAssetDisplaySrc("n1", "a.png", null);
     expect(original).toContain("/n1/a.png");
     expect(original).not.toContain("w=");
   });

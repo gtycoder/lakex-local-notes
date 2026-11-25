@@ -1,6 +1,6 @@
 import { native } from "./native";
 import { loadAiEnabled } from "./aiEnabled";
-import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiTestResult } from "../core/aiProviders";
+import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiTestResult } from "../core/aiProviders";
 
 /**
  * 渲染层 AI 服务：唯一入口是主进程（Key 不出主进程、CSP 也挡死渲染层外发）。
@@ -22,10 +22,6 @@ export function testAiConnection(draft?: AiProviderPatch): Promise<AiTestResult>
   return native.aiTestConnection(draft);
 }
 
-/** 拉取模型列表（草稿同上）：端点不实现时 ok:false，调用方回落手填。 */
-export function listAiModels(draft?: AiProviderPatch): Promise<AiListModelsResult> {
-  return native.aiListModels(draft);
-}
 
 export function cancelAiChat(requestId: string): Promise<void> {
   return native.aiCancel(requestId);

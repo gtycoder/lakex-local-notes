@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildDoneFileCardValue,
@@ -49,6 +50,31 @@ describe("fileCard", () => {
     expect(parseFileCardValue(encodeURIComponent('{"size": 1}'))).toBeNull(); // 无 src
   });
 
+  it("data: 前缀在 URI 解码前/后出现都能容忍（D-07 superset）", () => {
+    const obj = { src: "http://127.0.0.1:19876/n/a.png", name: "a.png" };
+    // 内核标准形态：前缀在编码串之前
+    expect(decodeCardValue("data:" + encodeURIComponent(JSON.stringify(obj)))).toEqual(obj);
+    // 前缀本身也被 URI 编码（解码后才出现）
+    expect(decodeCardValue(encodeURIComponent("data:" + JSON.stringify(obj)))).toEqual(obj);
+    // 无前缀
+    expect(decodeCardValue(encodeURIComponent(JSON.stringify(obj)))).toEqual(obj);
+  });
+
+  it("裸 JSON（未经 URI 编码）原样解析：值里的 %xx 不被二次解码改坏", () => {
+    expect(decodeCardValue('{"src":"a%20b.png"}')).toEqual({ src: "a%20b.png" });
+    expect(decodeCardValue('data:{"src":"a%20b.png"}')).toEqual({ src: "a%20b.png" });
+  });
+
+  it("数组/字面量/坏值一律回 null（三套 fixture 对拍后的统一口径：card value 只收对象）", () => {
+    expect(decodeCardValue("data:" + encodeURIComponent("[1,2]"))).toBeNull();
+    expect(decodeCardValue("[1,2]")).toBeNull();
+    expect(decodeCardValue("data:" + encodeURIComponent("true"))).toBeNull();
+    expect(decodeCardValue("data:x")).toBeNull();
+    expect(decodeCardValue("")).toBeNull();
+    expect(decodeCardValue(null)).toBeNull();
+    expect(decodeCardValue(undefined)).toBeNull();
+  });
+
   it("scans file cards in lake content with local refs", () => {
     const content = [
       "<p>before</p>",
@@ -88,6 +114,19 @@ describe("fileCard", () => {
     expect(formatFileSize(2048)).toBe("2 KB");
     expect(formatFileSize(25 * 1024 * 1024)).toBe("25 MB");
     expect(formatFileSize(3.5 * 1024 * 1024)).toBe("3.5 MB");
+  });
+});
+
+describe("D-07 卡片 value 编解码单一来源（core/fileCard）", () => {
+  const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
+
+  it("两份私有副本已删，改 import core/fileCard（防再长回来）", () => {
+    for (const rel of ["../features/editor/uploadCardRepair.ts", "../features/quickNotes/quickNotePreviewParser.ts"]) {
+      const src = read(rel);
+      expect(src, rel).not.toContain("function decodeCardValue");
+      expect(src, rel).not.toContain("function encodeCardValue");
+      expect(src, rel).toContain('from "../../core/fileCard');
+    }
   });
 });
 

@@ -7,11 +7,11 @@
  * · 多个端各自独立（各机 localStorage 各一份；移动端有自己的「置顶」= 原「常用」实现，完全独立）；
  * · 分组/含子文档的父节点置顶 = 渲染时连同子级一起显示（渲染层递归，不复制数据）。
  *
- * 本模块只做纯数据读写 + 事件通知；渲染与拖拽在 SidebarPinnedSection。
+ * 本模块只做纯数据读写；渲染与拖拽在 SidebarPinnedSection。
+ * （曾有一套 window 事件 pub/sub，但全仓无人订阅 ⇒ D-12 连 EVENT/emit 一起删；变更后视图刷新走调用方既有流程。）
  */
 const KEY = "lakex-local-notes-v3.sidebar-pinned";
 const OPEN_KEY = "lakex-local-notes-v3.sidebar-pinned-open";
-const EVENT = "lakex-local-notes-v3.sidebar-pinned-change";
 
 function isNodeId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -33,7 +33,6 @@ export function readPinnedTreeIds(): string[] {
 /** 写回（调用方保证已去重；坏 storage 静默忽略）。 */
 export function writePinnedTreeIds(ids: readonly string[]): void {
   try { localStorage.setItem(KEY, JSON.stringify([...new Set(ids.filter(isNodeId))])); } catch { /* 忽略 */ }
-  emit();
 }
 
 export function isPinnedTreeId(id: string): boolean {
@@ -86,18 +85,4 @@ export function readPinnedOpen(): boolean {
 
 export function writePinnedOpen(open: boolean): void {
   try { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); } catch { /* 忽略 */ }
-}
-
-/** 订阅置顶变化（同一窗口内多处视图同步；不触网）。 */
-export function subscribePinnedTree(cb: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return () => {};
-  const handler = (): void => cb();
-  window.addEventListener(EVENT, handler);
-  return () => window.removeEventListener(EVENT, handler);
-}
-
-function emit(): void {
-  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
-    window.dispatchEvent(new Event(EVENT));
-  }
 }

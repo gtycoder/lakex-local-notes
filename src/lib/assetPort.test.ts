@@ -78,6 +78,29 @@ describe("withLocalImageThumb（task-26 显示缩略）", () => {
   });
 });
 
+describe("localAssetDisplaySrc（D-08 本地资产显示 URL 单一组合）", () => {
+  it("canonical URL → ?w= 档位 → token（顺序钉死；null = 原图）", async () => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { lakeNative: { assetPort: 19876, assetToken: "runtime-secret" } },
+    });
+    vi.resetModules();
+    const runtime = await import("./assetPort");
+
+    const src = runtime.localAssetDisplaySrc("n1", "a.png", 1024);
+    expect(src).toContain("/n1/a.png");
+    expect(src).toContain("w=1024");
+    expect(src).toContain("token=runtime-secret");
+    // 历史上 4 处私有组合顺序还各不相同（bitableAssetUrl 注释自认）⇒ 这里钉死「先档位、后 token」。
+    expect(src.indexOf("w=1024")).toBeLessThan(src.indexOf("token=runtime-secret"));
+
+    const original = runtime.localAssetDisplaySrc("n1", "a.png", null);
+    expect(original).toContain("/n1/a.png");
+    expect(original).not.toContain("w=");
+    expect(original).toContain("token=runtime-secret");
+  });
+});
+
 describe("缩略图档位（CSS 宽度 × DPR，封顶 3×）", () => {
   /** 这个函数读 devicePixelRatio ⇒ 必须在 src/lib（core 层禁 DOM，check:core 会卡）。 */
   const withDpr = (dpr: number, fn: () => void) => {

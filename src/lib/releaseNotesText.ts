@@ -22,6 +22,3 @@ export function loadReleaseNotesText(): Promise<string> {
   }
   return cached;
 }
-
-/** 仅供测试/热重载重置（生产路径不会调用）。 */
-export function resetReleaseNotesTextCache(): void { cached = null; }

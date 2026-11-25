@@ -16,32 +16,6 @@ import type { NoteKind } from "../../core/noteKind.js";
 export type PreviewContentKind = NoteKind | "quickNote" | "markdown";
 
 /**
- * 预览的内容描述：只回答「是什么 + 正文/引用」，**不管内容怎么取**（取数仍归各空间既有 IPC/bridge）。
- * 能力层不 import native/bridge —— 由调用方把数据准备好再传进来（保证可单测、无平台耦合）。
- */
-export type PreviewSource =
-  | { type: "note"; noteId: string; kind: PreviewContentKind; body: string; title?: string }
-  | { type: "historySnapshot"; noteId: string; snapshotId: number; kind: PreviewContentKind; body: string }
-  | {
-      type: "quickNote";
-      noteId: string;
-      body: string;
-      assets: PreviewAsset[];
-      /** 已在封面上展示过的图片（磁盘名）→ 卡内预览跳过，避免同一张图出现两次（261112）。 */
-      hiddenMediaNames?: ReadonlySet<string>;
-    }
-  | { type: "markdown"; text: string };
-
-/** 预览用资产（正文里的 canonical URL + 可选元数据）。 */
-export interface PreviewAsset {
-  filename: string;
-  url?: string;
-  mimeType?: string;
-  width?: number | null;
-  height?: number | null;
-}
-
-/**
  * 预览资产的**引用**：不含具体 URL 档位。
  * 档位由 intent 决定（previewAsset.resolvePreviewAssetUrl），调用方不再各拼 URL。
  */

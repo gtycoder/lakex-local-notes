@@ -20,9 +20,8 @@ import { escapeId } from "../../lib/cssEscape";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { formatBytes } from "../../lib/formatBytes";
-import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../../core/missingBody";
-import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
+import { localAssetDisplaySrc } from "../../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
 import { formatYmd } from "../../core/dateFormat";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
@@ -70,12 +69,6 @@ export function assetPreviewKind(item: Pick<RemovedAsset, "filename" | "mimeType
   return "none";
 }
 
-/** 预览直链：本地资源服务器 + 运行期 token；`width=null` 表示原图。 */
-export function assetDisplayUrl(item: Pick<RemovedAsset, "noteId" | "filename">, width: number | null): string {
-  const base = withAssetAccessToken(localAssetHttpUrl(item.noteId, item.filename, { port: ASSET_PORT }));
-  return withAssetWidth(base, width);
-}
-
 const KIND_OPTIONS = [
   { value: "all", label: "全部类型" },
   { value: "image", label: "图片" },
@@ -93,7 +86,8 @@ function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; bro
   if (!item) return <div className="asset-browser__placeholder" aria-hidden="true"><ImageIcon size={26} /></div>;
   const preview = broken ? "none" : assetPreviewKind(item);
   if (preview === "none") return <div className="asset-browser__placeholder" aria-hidden="true"><FileKindIcon name={item.filename} size={40} /></div>;
-  const src = assetDisplayUrl(item, preview === "image" ? 1024 : null);
+  // 预览直链 = localAssetDisplaySrc 单一组合（D-08）：图片带 ?w=1024 档位、其余原图（null）。
+  const src = localAssetDisplaySrc(item.noteId, item.filename, preview === "image" ? 1024 : null);
   return (
     <>
       {preview === "image" && <img src={src} alt="" decoding="async" onError={onBroken} />}

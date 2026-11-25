@@ -11,8 +11,7 @@ import { Dialog } from "../ui/Overlay";
 import { Box, ChevronDown, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, Tag as TagIcon, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
-import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
-import { ASSET_PORT, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort";
+import { assetThumbWidthForCss, localAssetDisplaySrc } from "../../lib/assetPort";
 import type { NoteInfo } from "../../lib/types";
 import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
@@ -87,12 +86,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  /** 附件显示 URL：走既有资源服务缩略档位（56px 格按 DPR 选档），并带运行期 token。 */
-  const assetDisplaySrc = (filename: string, width: number | null): string => {
-    if (!note.noteFileId) return "";
-    const base = localAssetHttpUrl(note.noteFileId, filename, { port: ASSET_PORT });
-    return withAssetAccessToken(withAssetWidth(base, width));
-  };
+  /** 附件显示 URL 走 localAssetDisplaySrc 单一组合（D-08）；56px 格按 DPR 选档在本组件换算。 */
   const thumbWidth = assetThumbWidthForCss(THUMB_CSS_PX);
 
   const openAsset = (filename: string): void => {
@@ -215,7 +209,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                         {isImage && !failed
                           ? <img
                             className="ln-imgfill"
-                            src={assetDisplaySrc(a.filename, fallback === "original" ? null : thumbWidth)}
+                            src={note.noteFileId ? localAssetDisplaySrc(note.noteFileId, a.filename, fallback === "original" ? null : thumbWidth) : ""}
                             alt={a.filename}
                             width={THUMB_CSS_PX}
                             height={THUMB_CSS_PX}

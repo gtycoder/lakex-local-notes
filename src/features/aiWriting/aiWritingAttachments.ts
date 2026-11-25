@@ -4,20 +4,18 @@
  * 只做「引用 → 展示」的渲染层换算：文档资产图片走资源服务器直链；本机文件只有名称/大小/类型
  * （**绝对路径与字节只在主进程**，渲染层没有缩略图数据）。不读字节、不转 base64、不过 IPC。
  */
-import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
 import { aiWritingAttachmentLabel, isAiWritingLocalAttachment, type AiWritingAttachment } from "../../core/aiWriting";
 import type { AiAssetRef } from "../../core/aiProviders";
-import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
+import { ASSET_PORT, localAssetDisplaySrc } from "../../lib/assetPort";
 
 /** 缩略图档位（与资源服务器的离散档位对齐；128 是 ASSET_THUMB_WIDTHS 的最小档）。 */
 export const AIW_ATTACH_THUMB_WIDTH = 128;
 /** 与主进程 AI_MAX_TOTAL_IMAGE_BYTES 同口径（core/aiChatMessages 侧 10MB/张、20MB/次）。 */
 export const AIW_ATTACH_TOTAL_BYTES = 20 * 1024 * 1024;
 
-/** 文档资产图片的缩略图 URL（本机文件没有 URL，用 FileKindIcon 文件名 chip）。 */
+/** 文档资产图片的缩略图 URL（本机文件没有 URL，用 FileKindIcon 文件名 chip）；组合走 localAssetDisplaySrc（D-08）。 */
 export function aiWritingAttachmentUrl(asset: AiAssetRef, width: number | null = AIW_ATTACH_THUMB_WIDTH): string {
-  const raw = localAssetHttpUrl(asset.noteId, asset.filename, { port: ASSET_PORT });
-  return withAssetAccessToken(withAssetWidth(raw, width));
+  return localAssetDisplaySrc(asset.noteId, asset.filename, width);
 }
 
 /** 附件 → 缩略图 URL（仅资产图片）；本机文件返回 null。 */

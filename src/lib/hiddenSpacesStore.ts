@@ -71,8 +71,3 @@ export function subscribeHiddenSpaces(key: string, listener: Listener): () => vo
     if (set.size === 0) listeners.delete(key);
   };
 }
-
-/** 仅供测试：清掉内存缓存（不断言 localStorage）。 */
-export function resetHiddenSpacesCacheForTest(): void {
-  cache.clear();
-}

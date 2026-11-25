@@ -17,7 +17,6 @@
 import type { ResourceUploadOutput } from "../../lib/types";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import {
-  getUploadEntry,
   recordUploadDone,
   recordUploadError,
   recordUploadPending,
@@ -295,9 +294,4 @@ export function __resetImageUploadTasksForTests(): void {
   for (const task of activeTasks.values()) task.destroy();
   activeTasks.clear();
   inflightByKey.clear();
-}
-
-/** 仅日志读取入口，供 EditorTab 决定是否恢复。 */
-export function journalEntryForTask(taskId: string) {
-  return getUploadEntry(taskId);
 }

@@ -13,6 +13,10 @@
  * 缺省用 `await import("../editor/lakeRuntime")` 懒加载，测试/移动端可注入 `createKernel`。
  */
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
+import { MarkdownImportError, enqueueConversion, withTimeout, type MarkdownImportErrorCode } from "./conversionQueue";
+
+// 错误类/错误码定义已随 D-09 收口到 conversionQueue（队列/超时同一模块）；此处转发保住既有 import 路径。
+export { MarkdownImportError, type MarkdownImportErrorCode };
 
 /** 单文件正文上限（与主进程 electron/markdownImportScan.ts 同口径；调用方也可先判）。 */
 export const MAX_MARKDOWN_IMPORT_BYTES = 20 * 1024 * 1024;
@@ -24,23 +28,6 @@ export const MARKDOWN_RENDER_TIMEOUT_MS = 8_000;
 const RENDER_POLL_MS = 100;
 /** 离屏容器宽度：内核按容器宽度写表格列宽，固定 800（750–800 区间内）。 */
 export const MARKDOWN_IMPORT_CONTAINER_WIDTH = 800;
-
-export type MarkdownImportErrorCode =
-  | "too-large"
-  | "render-timeout"
-  | "no-lake-id"
-  | "convert-failed"
-  | "aborted"
-  | "busy";
-
-export class MarkdownImportError extends Error {
-  readonly code: MarkdownImportErrorCode;
-  constructor(code: MarkdownImportErrorCode, message: string) {
-    super(message);
-    this.name = "MarkdownImportError";
-    this.code = code;
-  }
-}
 
 /** 本模块要用到的内核面（结构化类型 ⇒ 测试可传 stub，不需要真内核）。 */
 export interface MarkdownKernelLike {
@@ -323,45 +310,7 @@ export async function waitForLakeDocument(
   throw new MarkdownImportError("render-timeout", "Markdown 渲染超时（" + timeoutMs + "ms 内未产出可保存正文）");
 }
 
-// ---------------------------------------------------------------------------
-// 串行队列（同一时刻只跑一个转换：避免多内核并存的内存峰值）
-// ---------------------------------------------------------------------------
-
-let queueTail: Promise<unknown> = Promise.resolve();
-/** 当前在途转换数（测试断言串行用）。 */
-let inFlight = 0;
-
-export function markdownConvertInFlight(): number {
-  return inFlight;
-}
-
-/** 测试用：清空队列状态（不中断在途转换）。 */
-export function resetMarkdownConvertQueueForTest(): void {
-  queueTail = Promise.resolve();
-  inFlight = 0;
-}
-
-function enqueueConversion<T>(task: () => Promise<T>): Promise<T> {
-  const run = queueTail.then(async () => {
-    inFlight += 1;
-    try { return await task(); } finally { inFlight -= 1; }
-  }, async () => {
-    inFlight += 1;
-    try { return await task(); } finally { inFlight -= 1; }
-  });
-  queueTail = run.then(() => undefined, () => undefined);
-  return run;
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new MarkdownImportError("render-timeout", "Markdown 转换超时（超过 " + timeoutMs + "ms）"));
-    }, timeoutMs);
-    promise.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
-  });
-}
-
+// 串行队列 + 转换总超时已收口到 conversionQueue（D-09）：与 Word/HTML 管线共用同一条队列。
 /**
  * 把 Markdown 转成可落盘的 lake 正文（串行）。
  * 抛错 = MarkdownImportError（调用方据此给失败原因），绝不以"半成品正文"返回。
@@ -374,7 +323,7 @@ export function convertMarkdownToLake(options: MarkdownConvertOptions): Promise<
     return Promise.reject(new MarkdownImportError("too-large", "Markdown 超过 " + Math.round(MAX_MARKDOWN_IMPORT_BYTES / 1024 / 1024) + "MB 上限"));
   }
   const timeoutMs = options.convertTimeoutMs ?? MARKDOWN_CONVERT_TIMEOUT_MS;
-  return enqueueConversion(() => withTimeout(convertMarkdownNow(options), timeoutMs));
+  return enqueueConversion(() => withTimeout(convertMarkdownNow(options), timeoutMs, "Markdown"));
 }
 
 async function convertMarkdownNow(options: MarkdownConvertOptions): Promise<MarkdownConvertResult> {

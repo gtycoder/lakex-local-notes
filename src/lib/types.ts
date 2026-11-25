@@ -592,13 +592,6 @@ export interface SyncStatusInfo {
   v3Reports?: S3v3DiagnosticReport[];
 }
 
-export interface ImportedResource {
-  resourceRef: string;
-  name: string;
-  mimeType: string;
-  size: number;
-}
-
 export interface ResourceUploadInput {
   /** 文件字节（Uint8Array 跨 IPC 结构化克隆传输，避免 number[] 的高内存/慢序列化） */
   bytes: Uint8Array;

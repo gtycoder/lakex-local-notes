@@ -14,7 +14,7 @@ import { fileKindOf } from "../../core/assetNaming";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import { NoteDocPreview } from "./NoteDocPreview";
 import type { NoteKind } from "../../core/noteKind";
-import { formatDateTime } from "../../lib/formatTime";
+import { formatDateTime } from "../../core/dateFormat";
 import { pickCurrentHistorySnapshotId } from "../../core/historyCurrent";
 
 export interface HistoryItem {
@@ -222,12 +222,18 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     }
   };
 
+  /** 快照时间直连 core/dateFormat（D-12 删 lib/formatTime 转发壳）：不可解析时间回空串（与旧转发壳同口径）。 */
+  const historyTime = (value: string): string => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : formatDateTime(date, true);
+  };
+
   const previewHistoryInline = async (h: HistoryItem) => {
     const version = previewVersionRef.current.next();
     try {
       const r = await native.previewHistorySnapshot(h.id);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) setInline({ id: h.id, title: formatDateTime(h.createdAt, true), kind: r.kind, html: r.html, size: h.size });
+      if (r) setInline({ id: h.id, title: historyTime(h.createdAt), kind: r.kind, html: r.html, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
       if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
@@ -345,7 +351,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有未引用文件</div>}
             {!loading && tab === "history" && history.map((h) => {
               const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
-              const label = formatDateTime(h.createdAt, true);
+              const label = historyTime(h.createdAt);
               return (
                 <div key={h.id} data-history-id={h.id} className={`ln-list-item ln-list-item--hide-action ln-row2${inline?.title === label ? " ln-list-item--focus" : ""}`}>
                   <span className="ln-list-item__graphic"><Clock size={14} /></span>

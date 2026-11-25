@@ -20,6 +20,7 @@
  *   <card type="block" name="hr" value="data:%7B%22id%22%3A%22…%22%7D"></card>
  *   <card type="inline" name="image" value="data:%7B%22src%22%3A%22…%2F1789…png%22…%7D"></card>
  */
+import { decodeCardValue } from "../../core/fileCard";
 
 export interface PreviewRun {
   text: string;
@@ -136,20 +137,6 @@ function decodeEntities(value: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&");
-}
-
-/** 卡片 value → 结构化字段（`data:` + encodeURIComponent(JSON)，也可能直接是 JSON）。 */
-function decodeCardValue(value: string | null): Record<string, unknown> | null {
-  if (!value) return null;
-  let raw = value;
-  if (raw.startsWith("data:")) raw = raw.slice("data:".length);
-  try {
-    const json = raw.startsWith("{") ? raw : decodeURIComponent(raw);
-    const parsed = JSON.parse(json) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 function basename(url: unknown): string | null {

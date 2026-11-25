@@ -15,6 +15,7 @@ import {
   type MarkdownKernelHandle,
   type MarkdownKernelLike,
 } from "./markdownImportPipeline";
+import { enqueueConversion, withTimeout } from "./conversionQueue";
 
 export interface HtmlImportImage {
   bytes: Uint8Array;
@@ -31,21 +32,6 @@ export interface HtmlConvertOptions {
   convertTimeoutMs?: number;
   renderTimeoutMs?: number;
   signal?: AbortSignal;
-}
-
-let queueTail: Promise<unknown> = Promise.resolve();
-
-function enqueueConversion<T>(task: () => Promise<T>): Promise<T> {
-  const run = queueTail.then(async () => task(), async () => task());
-  queueTail = run.then(() => undefined, () => undefined);
-  return run;
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new MarkdownImportError("render-timeout", "Word 转换超时（超过 " + timeoutMs + "ms）")), timeoutMs);
-    promise.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
-  });
 }
 
 const DATA_IMAGE_TAG_RE = /<img\b[^>]*>/gi;
@@ -146,5 +132,5 @@ export function convertHtmlToLake(options: HtmlConvertOptions): Promise<Markdown
     return Promise.reject(new MarkdownImportError("convert-failed", "Word 内容无效"));
   }
   const timeoutMs = options.convertTimeoutMs ?? MARKDOWN_CONVERT_TIMEOUT_MS;
-  return enqueueConversion(() => withTimeout(convertHtmlNow(options), timeoutMs));
+  return enqueueConversion(() => withTimeout(convertHtmlNow(options), timeoutMs, "Word"));
 }

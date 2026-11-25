@@ -43,10 +43,3 @@ export function writeInkNavPage(noteId: string | null | undefined, pageId: strin
     storage()?.setItem(inkNavKey(noteId), pageId);
   } catch { /* 隐私模式/配额：导航丢了不影响正文 */ }
 }
-
-export function clearInkNavPage(noteId: string | null | undefined): void {
-  if (!noteId) return;
-  try {
-    storage()?.removeItem(inkNavKey(noteId));
-  } catch { /* 同上 */ }
-}
