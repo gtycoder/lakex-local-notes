@@ -191,7 +191,7 @@ const BASELINE = {
   // 261103：统计口径修正（逗号选择器按**单个选择器**拆分后比较，见 splitSelectorList）——
   // 旧口径下「a, b { x }」与「a { x }」不算重复，pad.css ↔ mobile.css 的 9 组双归属全部漏检。
   // 修正后实测 116 组；同日把平板通用几何整体迁进 pad.css（A4 单一归属）后 **105**；此后只许降。
-  crossFileDupGroups: 33,      // 261125 样式批：删被压死声明（S-01 misc↔chrome 6 组、S-03 settings↔components 1 组）+ 等宽映射单源化（T-03 feature↔font-overrides 5 组）后实测 45 → 33，按实测收紧。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  crossFileDupGroups: 2,       // 261125 M-05（只降，按实测收紧）：33 → 2 = ①契约对（a11y reduced-motion / reduced-transparency）加标注豁免出棘轮（16 组，历史兼容 #16 不许删的必然形态）；②S-07 栅格三态单源、M-01 残影清理后再降 6 组。剩 2 组欠账·同层：.settings-panel||border-color（shell 共享规则只被部分压——共享选择器还有活的，261112 那类）、.workspace||grid-column（宽 col3 / 窄 col2 互补 @media，S-07 同型待收）。旧口径注：45 → 33 = S-01/S-03/T-03 清理；口径 = 同一端内同一 (选择器,属性) 出现在 ≥2 文件；跨端重复不计（C4-5 要求两端都写）
   // 261112 Q1：被更高层压掉的 legacy 声明数（同 at-rule 上下文 + 同选择器 + 同属性）。
   // 261112 删 35 条后实测 21（原 58）：feature.css 3（未分层的 bitableEditor/boardEditor 压 feature 层）
   //        + misc.css 4（a11y 已接管 reduced-motion，legacy 副本可下批删）
@@ -303,11 +303,42 @@ for (const p of cssAll) {
     }
   }
 }
+const LAYER_RANK = { vendor: 0, legacy: 1, tokens: 2, kit: 3, shell: 4, feature: 5, overlay: 6, a11y: 7, unlayered: 9 };
+const layerRanks = layerRankMap();   // 文件 → { rank, order }（M-05 同层/跨层分组与 M-01 判死共用）
+// ── M-05（261125）：重复组报告面 —— 全清单 + 分类（纯报告改动）────────────────
+// 45→N 组里混着两类：真欠账 vs **契约形态**（a11y reduced-motion 的同名覆盖对、tokens.css 的
+// prefers-reduced-transparency 对）——后者是「层序即优先级」契约的必然形态（历史兼容清单 #16：不许删），
+// 不是叠层债 ⇒ 加标注**豁免出棘轮**（否则数字永远压不动、真欠账被淹）；其余按「同层/跨层」分组显示。
+const dupCtx = new Map();   // `${sel}||${prop}` → [{ file, ctx }]（分类用：契约对看 at-rule 上下文）
+for (const p of cssAll) {
+  const rel = relative(ROOT, p).replace(/^src\//, '');
+  const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const decl of declsWithContext(src)) {
+    for (const sel of splitSelectorList(decl.sel)) {
+      const key = sel + ' || ' + decl.prop;
+      if (!dupCtx.has(key)) dupCtx.set(key, []);
+      dupCtx.get(key).push({ file: rel, ctx: decl.ctx });
+    }
+  }
+}
+function classifyDupGroup(key) {
+  const members = dupCtx.get(key) || [];
+  const rt = members.some((m) => /prefers-reduced-transparency/.test(m.ctx));
+  const rm = members.some((m) => /prefers-reduced-motion/.test(m.ctx) || m.file === 'styles/a11y.css');
+  if (rt) return '契约·reduced-transparency';
+  if (rm) return '契约·a11y/reduced-motion';
+  return null;
+}
 const sameEndDups = [...dupOwners.entries()].filter(([, e]) => e.desktop.size > 1 || e.mobile.size > 1);
 const crossEndDups = [...dupOwners.entries()].filter(([, e]) => e.desktop.size > 0 && e.mobile.size > 0);
 const crossFileDupTop = sameEndDups
-  .map(([key, e]) => [key, e.desktop.size + e.mobile.size, [...e.desktop, ...e.mobile]])
+  .map(([key, e]) => {
+    const files = [...e.desktop, ...e.mobile];
+    const cls = classifyDupGroup(key) || (files.every((f) => (layerRanks.get(resolve(join(ROOT, 'src', f))) ?? { rank: 9 }).rank === (layerRanks.get(resolve(join(ROOT, 'src', files[0]))) ?? { rank: 9 }).rank) ? '欠账·同层' : '欠账·跨层');
+    return [key, files.length, files, cls];
+  })
   .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+const crossFileDupContract = crossFileDupTop.filter((x) => x[3].startsWith('契约')).length;
 
 // ── ⑤ 被上层压掉的 legacy 声明（Q1，261112）──────────────────────────────────
 // 判据：同一 (at-rule 上下文, 单个选择器, 属性) 被**更高层**文件再声明过 ⇒ 低层那份永远不生效
@@ -315,15 +346,16 @@ const crossFileDupTop = sameEndDups
 // 层序取自 src/styles/index.css 的 @import ... layer(X)；组件内 JS import 的 CSS 未分层 = 最高。
 // 排除：低层声明带 !important（会赢）；只看桌面 CSS（跨端重复是设计允许）。
 // 这条护栏把「改错文件」——本轮 03 报告 P1-1 的根因——变成机器可拦，而不是靠 review。
-const LAYER_RANK = { vendor: 0, legacy: 1, tokens: 2, kit: 3, shell: 4, feature: 5, overlay: 6, a11y: 7, unlayered: 9 };
 function layerRankMap() {
   const map = new Map();
+  let order = 0;
   const entrySrc = readFileSync(join(ROOT, 'src/styles/index.css'), 'utf8');
-  for (const m of entrySrc.matchAll(/@import\s+"([^"]+)"\s+layer\(([a-z]+)\)/g)) {
-    if (m[1].startsWith('.')) map.set(resolve(join(ROOT, 'src/styles', m[1])), LAYER_RANK[m[2]] ?? 9);
-  }
-  for (const m of entrySrc.matchAll(/@import\s+"([^"]+)"\s*;/g)) {
-    if (m[1].startsWith('.')) map.set(resolve(join(ROOT, 'src/styles', m[1])), 9);   // 未分层入口（kernel-theme / 字体）
+  for (const m of entrySrc.matchAll(/@import\s+"([^"]+)"(?:\s+layer\(([a-z]+)\))?\s*;/g)) {
+    if (!m[1].startsWith('.')) continue;
+    const path = resolve(join(ROOT, 'src/styles', m[1]));
+    if (map.has(path)) continue;
+    // rank 缺省 9 = 未分层入口（kernel-theme / 字体）；order = 入口 @import 顺序（同层后者胜的判据，M-01 形态②）
+    map.set(path, { rank: m[2] ? (LAYER_RANK[m[2]] ?? 9) : 9, order: order++ });
   }
   return map;
 }
@@ -350,7 +382,9 @@ function declsWithContext(css) {
     if (top && top.sel !== undefined) top.body += ch; else buf += ch;
   }
   const out = [];
+  let ruleId = 0;
   for (const rule of rules) {
+    ruleId += 1;
     const sels = splitSelectorList(rule.sel);
     const body = [];
     let depth = 0;
@@ -368,32 +402,71 @@ function declsWithContext(css) {
       if (!prop || prop.startsWith('--')) continue;
       const value = decl.slice(idx + 1).trim();
       const important = value.includes('!important');
-      for (const sel of sels) out.push({ ctx: rule.ctx, sel, prop, value, important });
+      for (const sel of sels) out.push({ ctx: rule.ctx, ruleId, sel, prop, value, important });
     }
   }
   return out;
 }
-const layerRanks = layerRankMap();
-const declIndex = new Map();
+// M-01（261125 口径放宽一档）：按**整条声明**建模（一条规则里的 (属性) × 其逗号选择器全集），再判「被无条件胜者压死」。
+// 与旧口径（ctx+sel+prop 逐选择器逐条）相比新增两种形态，正好补上 S-01 那类「@media 里的残影」盲区：
+//   ① 跨层：rank(胜者) > rank(败者)，且胜者在**顶层上下文**或与败者同 at-rule 上下文（层序即优先级，AGENTS §3#14）；
+//   ② 同层：rank 相同、胜者在**更晚的文件**（按 index.css @import 顺序）且在顶层上下文（同层同特异性后加载者胜）。
+// 保守边界（「先只对高层在顶层上下文的形态判死」）：胜者必须顶层 —— 否则 a11y reduced-motion 这类
+// **条件覆盖**会把常驻声明误判为死（a11y 层序反转误判）；宽/窄互补 @media（上下文不同、双方都非顶层）互不判。
+// !important 不判死（压得过层序）；共享规则里还有生效兄弟选择器的**整条不算死**（261112 那 14 条教训）；
+// 组件 JS import 的 CSS（未入 index.css 入口图）加载顺序未知 ⇒ 形态②对它们不判（形态①照判）。
+const declIndex = new Map();   // `${sel}||${prop}` → 声明实例数组
+let declSeq = 0;
 for (const p of fontScope) {
-  const rank = layerRanks.has(resolve(p)) ? layerRanks.get(resolve(p)) : 9;
+  const meta = layerRanks.get(resolve(p));
+  const rank = meta ? meta.rank : 9;
+  const fileOrder = meta ? meta.order : -1;   // -1 = 入口图外（组件 CSS），顺序未知
   const file = relative(ROOT, p).replace(/^src\//, '');
   const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const perRule = new Map();   // `${ruleId}||${prop}` → 实例（同规则同名属性后者覆盖前者）
   for (const decl of declsWithContext(src)) {
-    const key = decl.ctx + ' || ' + decl.sel + ' || ' + decl.prop;
-    if (!declIndex.has(key)) declIndex.set(key, []);
-    declIndex.get(key).push({ file, rank, value: decl.value, important: decl.important, sel: decl.sel, prop: decl.prop });
+    const key = decl.ruleId + ' || ' + decl.prop;
+    if (!perRule.has(key)) perRule.set(key, []);
+    perRule.get(key).push(decl);
+  }
+  for (const [key, group] of perRule) {
+    const last = group[group.length - 1];
+    const inst = {
+      id: declSeq++, file, fileOrder, rank, ctx: last.ctx,
+      sels: [...new Set(group.flatMap((d) => splitSelectorList(d.sel)))],
+      prop: last.prop, value: last.value, important: last.important,
+    };
+    for (const sel of inst.sels) {
+      const gk = sel + ' || ' + inst.prop;
+      if (!declIndex.has(gk)) declIndex.set(gk, []);
+      declIndex.get(gk).push(inst);
+    }
   }
 }
+/** 胜者判定：W 在败者 X 会生效的**所有**场合都赢（见上方两条形态；W 顶层是保守边界的关键）。 */
+function winnerOver(W, X) {
+  if (W.id === X.id) return false;
+  if (X.important) return false;                       // !important 压得过层序，判不了死
+  if (W.ctx !== X.ctx && W.ctx !== '') return false;  // 胜者非顶层且上下文不同：条件互补（如宽/窄 @media），不判
+  if (W.rank > X.rank) return true;                   // ① 跨层（层序即优先级；同上下文或胜者顶层）
+  if (W.rank === X.rank && W.ctx === '' && W.fileOrder >= 0 && X.fileOrder >= 0 && W.fileOrder > X.fileOrder) return true;   // ② 同层更晚文件（顶层）
+  return false;
+}
 const shadowedSites = [];
-for (const [, list] of declIndex) {
-  const ranks = [...new Set(list.map((x) => x.rank))];
-  if (ranks.length < 2) continue;
-  const maxRank = Math.max(...ranks);
-  const winner = list.find((x) => x.rank === maxRank);
-  for (const x of list) {
-    if (x.rank >= maxRank || x.important) continue;
-    shadowedSites.push({ file: x.file, rank: x.rank, sel: x.sel, prop: x.prop, layerValue: x.value, winnerFile: winner.file, winnerValue: winner.value });
+for (const [, group] of declIndex) {
+  for (const X of group) {
+    if (X.important || X._done) continue;
+    X._done = true;
+    let winner = null;
+    let allDead = true;
+    for (const sel of X.sels) {
+      const w = (declIndex.get(sel + ' || ' + X.prop) || []).filter((W) => winnerOver(W, X))
+        .sort((a, b) => (b.rank - a.rank) || (b.fileOrder - a.fileOrder))[0];
+      if (!w) { allDead = false; break; }
+      winner = winner || w;
+    }
+    if (!allDead) continue;
+    shadowedSites.push({ file: X.file, rank: X.rank, sel: X.sels.join(', '), prop: X.prop, layerValue: X.value, winnerFile: winner.file, winnerValue: winner.value });
   }
 }
 const shadowedDecls = shadowedSites.length;
@@ -408,6 +481,75 @@ const importantUnknown = desktopImportantSites.filter((s) => !allowKeys.has(key(
 const importantStale = IMPORTANT_ALLOWLIST.filter((s) => !foundKeys.has(key(s)));
 const mobileImportant = collectImportantAll(mobileCss);
 
+// ── 动效用法护栏（M-03，261125）：DESIGN Motion 的机器判据（桌面 + 移动端同一口径）──
+// ① transition/animation 声明值里出现 ms 字面量 ⇒ 报（时长/延迟一律走 --lake-motion-* / --mobile-* 令牌档）；
+// ② transition 的属性列表含 background/color/border/box-shadow ⇒ 报（装饰性过渡：hover/颜色/边框瞬时切换）。
+// 白名单：a11y.css 与 prefers-reduced-motion 契约（1ms 惯用法；「保留透明度与颜色过渡」是契约本身，历史兼容 #16）。
+// 基线只许降。261125 上闸前已清存量：editor.css 搜索命中 900ms 背景脉冲按 R-03①「直接删脉冲」、
+// outline.css 拖柄 ::after 背景过渡按 R-02「状态切换瞬时」删除（静态命中环/拖柄本体不动）。
+const MOTION_BASELINE = 2;   // 261125 M-03 上闸实测：剩 2 处均在本批 scope 外 —— mobile.css 的 0ms 延迟字面量、
+//  features/bitable/bitableEditor.css 的 .bt-input border-color/box-shadow 过渡（bitable 密集面另有 R-04 登记口径）；报 lead 后续批次清。
+const motionWhitelist = (rel, ctx) => rel.endsWith('styles/a11y.css') || /prefers-reduced-motion/.test(ctx);
+const motionHits = [];
+for (const p of cssAll) {
+  const rel = relative(ROOT, p).replace(/^src\//, '');
+  const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const decl of declsWithContext(src)) {
+    if (!/^(-webkit-)?(transition|animation)/.test(decl.prop)) continue;
+    if (motionWhitelist(rel, decl.ctx)) continue;
+    if (/\d(\.\d+)?ms\b/.test(decl.value)) {
+      motionHits.push({ file: rel, sel: decl.sel, prop: decl.prop, why: 'ms 字面量', value: decl.value.slice(0, 60) });
+    } else if (decl.prop.startsWith('transition')) {
+      const items = decl.value.split(',').map((s) => s.trim().split(/\s+/)[0]);
+      if (items.some((x) => /^(background|background-color|background-image|color|border|border-color|border-width|border-radius|box-shadow|fill|stroke)$/.test(x))) {
+        motionHits.push({ file: rel, sel: decl.sel, prop: decl.prop, why: '装饰性过渡', value: decl.value.slice(0, 60) });
+      }
+    }
+  }
+}
+
+// ── 内联 style 棘轮（M-04，261125）────────────────────────────────────────────
+// ① style={{}} 计数棘轮（只许降）：组件里不写 style={{}}（AGENTS §3#14 改落点），存量只减不增；
+// ② **静态**视觉属性（字面量值的 color/background/font-size/border/radius 族）出现在 style={{}} ⇒ 即报：
+//    视觉样式属于 CSS/令牌；动态值是 DESIGN 登记例外（实测坐标、数据驱动颜色），不算。
+//    动态几何按属性名白名单（left/top/width/height/--* 变量）；几何脚手架存量只进计数棘轮。
+// 261125 上闸前已顺清两处存量：MultiTabEditor 隐藏占位改 .a11y-visually-hidden、EditorTab 静态 width 进 .lake-editor-tab 规则。
+const INLINE_STYLE_BASELINE = 86;   // 261125 M-04 上闸实测（清完 2 处存量后只许降；历史 81/87 口径差异来自拆分批并发改动，以本脚本实测为准）
+const STATIC_VISUAL = /^(color|background(-color|-image)?|font-size|font-family|border(-[a-z]+)*|box-shadow)$/;
+const STATIC_LIT = /^("[^"]*"|'[^']*'|-?[0-9.]+|true|false|null)$/;
+let inlineStyleSites = 0;
+const inlineStyleStaticVisual = [];
+for (const p of files.filter((x) => /\.(tsx|ts)$/.test(x))) {
+  const rel = relative(ROOT, p).replace(/^src\//, '');
+  const src = readFileSync(p, 'utf8');
+  let i = 0;
+  while ((i = src.indexOf('style={{', i)) >= 0) {
+    inlineStyleSites += 1;
+    let depth = 2, k = i + 8;
+    while (k < src.length && depth > 0) { const c = src[k]; if (c === '{') depth += 1; if (c === '}') depth -= 1; k += 1; }
+    const body = src.slice(i + 8, k - 1).replace(/\}\s*$/, '');
+    const parts = []; let d2 = 0, cur = '', q = null;
+    for (const c of body) {
+      if (q) { cur += c; if (c === q) q = null; continue; }
+      if (c === '"' || c === "'" || c === '`') { q = c; cur += c; continue; }
+      if (c === '(' || c === '{' || c === '[') d2 += 1;
+      if (c === ')' || c === '}' || c === ']') d2 = Math.max(0, d2 - 1);
+      if (c === ',' && d2 === 0) { parts.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    if (cur.trim()) parts.push(cur);
+    for (const part of parts) {
+      const m2 = part.match(/^\s*([\w"'-]+)\s*:\s*([\s\S]+)$/);
+      if (!m2) continue;
+      const key = m2[1].replace(/["']/g, '');
+      if (!STATIC_VISUAL.test(key)) continue;          // left/top/width/height/--* 等几何名不进视觉检查（白名单按属性名）
+      if (!STATIC_LIT.test(m2[2].trim())) continue;    // 动态值 = DESIGN 登记例外（数据驱动颜色/实测值）
+      inlineStyleStaticVisual.push(rel + ':' + src.slice(0, i).split('\n').length + ' ' + key + ' = ' + m2[2].trim().slice(0, 24));
+    }
+    i = k;
+  }
+}
+
 r.complianceGuard = {
   desktopColorLiterals,
   desktopImportant: d.imp,
@@ -420,12 +562,15 @@ r.complianceGuard = {
   mobileColorTop: mobileColorTop.sort((a, b) => b[1] - a[1]),
   accentTextMisuse,
   accentTextTop,
-  crossFileDupGroups: sameEndDups.length,
+  crossFileDupGroups: sameEndDups.length - crossFileDupContract,   // M-05：契约对豁免出棘轮，只剩欠账组
+  crossFileDupContract,
   crossEndDupGroups: crossEndDups.length,
   crossFilePairTotal: dupOwners.size,
-  crossFileDupTop: crossFileDupTop.slice(0, 10),
+  crossFileDupTop,   // M-05：全清单（不再 slice）；每项 = [key, 文件数, 文件列表, 分类]
   shadowedDecls,
   shadowedSites,
+  motionGuard: { hits: motionHits.length, sites: motionHits, baseline: MOTION_BASELINE },
+  inlineStyleGuard: { sites: inlineStyleSites, baseline: INLINE_STYLE_BASELINE, staticVisual: inlineStyleStaticVisual.length, staticVisualSites: inlineStyleStaticVisual },
   baseline: BASELINE,
 };
 
@@ -435,7 +580,10 @@ if (importantUnknown.length) process.exitCode = 1;          // 清单外的 !imp
 if (mobileImportant > BASELINE.mobileImportant) process.exitCode = 1;
 if (mobileColorLiterals > BASELINE.mobileColorLiterals) process.exitCode = 1;
 if (accentTextMisuse > BASELINE.accentTextMisuse) process.exitCode = 1;
-if (sameEndDups.length > BASELINE.crossFileDupGroups) process.exitCode = 1;
+if (sameEndDups.length - crossFileDupContract > BASELINE.crossFileDupGroups) process.exitCode = 1;   // M-05：契约对不进棘轮
+if (motionHits.length > MOTION_BASELINE) process.exitCode = 1;   // M-03：动效用法（基线只许降）
+if (inlineStyleStaticVisual.length) process.exitCode = 1;         // M-04：静态视觉属性进 style={{}} 即报
+if (inlineStyleSites > INLINE_STYLE_BASELINE) process.exitCode = 1;   // M-04：style={{}} 计数棘轮
 if (shadowedDecls > BASELINE.shadowedDecls) process.exitCode = 1;   // Q1：往 legacy 写会被上层压掉的声明：直接失败
 if (aliasHits || undefHits) process.exitCode = 1;
 if (fontSizeLiterals) process.exitCode = 1;
@@ -473,8 +621,12 @@ else {
   console.log('     top:', g.mobileColorTop.map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  文字色误用裸 accent    ', g.accentTextMisuse, ' / 基线', g.baseline.accentTextMisuse, '（应改 --lake-accent-text）');
   console.log('     top:', g.accentTextTop.slice(0, 6).map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
-  console.log('  跨文件重复(选择器,属性)', g.crossFileDupGroups, ' / 基线', g.baseline.crossFileDupGroups, '（全部对', g.crossFilePairTotal + '）');
-  console.log('     top:', g.crossFileDupTop.slice(0, 4).map(([k, n]) => k + ' ×' + n).join('  ') || '（无）');
+  console.log('  跨文件重复(选择器,属性)', g.crossFileDupGroups, ' / 基线', g.baseline.crossFileDupGroups, '（欠账组；契约对', g.crossFileDupContract, '组已豁免；全部对', g.crossFilePairTotal + '）');
+  for (const [k, n, files, cls] of g.crossFileDupTop) console.log('     [' + cls + '] ' + k + ' ×' + n + '  ' + files.join(','));
   console.log('  被上层压掉的声明  ', g.shadowedDecls, ' / 基线', g.baseline.shadowedDecls, '（只许降；新增直接失败）');
+  console.log('  动效用法（M-03）  ', g.motionGuard.hits, ' / 基线', g.motionGuard.baseline, '（ms 字面量 / 装饰性过渡；只许降）');
+  for (const s of g.motionGuard.sites) console.log('     ✗ ' + s.file + ' ' + s.sel + ' {' + s.prop + '} ' + s.why + '：' + s.value);
+  console.log('  内联 style（M-04）', g.inlineStyleGuard.sites, ' / 基线', g.inlineStyleGuard.baseline, '（计数棘轮）；静态视觉属性', g.inlineStyleGuard.staticVisual, '（即报）');
+  for (const s of g.inlineStyleGuard.staticVisualSites.slice(0, 6)) console.log('     ✗ ' + s);
   if (g.shadowedDecls > g.baseline.shadowedDecls) console.log('     ✗ 超基线的被压声明:', g.shadowedSites.slice(0, 8).map((x) => x.file + ' ' + x.sel + ' {' + x.prop + '} ← ' + x.winnerFile).join('  '));
 }

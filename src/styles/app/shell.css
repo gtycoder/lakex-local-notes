@@ -157,6 +157,44 @@
  * 顶栏退回 sticky、工作区让位消失 —— 宽→窄拖动时顶栏与文档区同时跳变。
  * 按 HANDOFF §2.39 的成对清单搬到共用作用域（块内顺序一字未改，只是去掉守卫），
  * 窄窗块里对应的手抄副本同步删除。**改这里必须两组一起看，缺一就会把面包屑压到顶栏下。 */
+
+/* ══ app-shell 栅格多态 · 单一来源（261125 审计 S-07）══
+ * 五组 grid-template-columns 全部收拢在此：原先分散在本文件、app/misc.css、features/outline/outline.css
+ * 三处（同 legacy 层靠 import 顺序定胜负 ⇒ 改外壳几何要猜加载顺序）。取值 = 合并前现生效值，零视觉变化。
+ * ⚠️ **块内顺序即优先级**（同特异性后者胜，AGENTS §3#14）：quick/ai/focus（0,2,0）必须排在
+ * 窄窗两列与宽窗三列之前 —— 否则窄窗下小记/AI 写作/专注模式会被塞进 0 宽侧栏列（用户 260915 现场）。
+ * 宽窄两条 @media 互补（761 分界）不相交。chrome.css 的空间态栅格（trash/resources/tags/diary）
+ * 在 shell 层，层序压过本块全部规则，归属不变。护栏：geometrySources.test.ts「app-shell 栅格多态」。 */
+/* ① 小记空间：隐藏目录栏（.sidebar display:none 在下方小记工作台区），中间列收 0；
+ *    宽窄共用——原先只在 min-width:761px 里 ⇒ 窄窗小记面掉回 block 布局（跨断点 display/内边距跳一次）。 */
+.app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
+/* ② AI 写作空间（261109）：与小记同构 —— 隐藏目录栏，页面自己排两栏。 */
+.app-shell.ai-writing-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
+/* ③ 专注模式（⌘⇧Enter）：宽窄共用——前两列都是 0，正文仍落在第 3 列。 */
+.app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }
+/* ④ 窄窗（原 app/misc.css）：**只有两列**——左轨 + 正文（正文保底 148px，对齐思源 .layout__center）；
+ *    对**所有**侧栏模式统一（用户 260915 定稿：窄窗下目录栏/大纲一律悬浮，不允许固定列）。
+ *    本条对 ①②③ 的同特异性胜出是**有意的**：小记/AI/专注在窄窗同样走「轨 + 正文」两列。 */
+@media (max-width: 760px) {
+  .app-shell,
+  .app-shell.sidebar-docked,
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed,
+  .app-shell.quick-notes-active {
+    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
+  }
+}
+/* ⑤ 宽窗（原 features/outline/outline.css）：「轨 | 目录 | 正文」三列——大纲 260922 起搬进
+ *    .document-pane 内部、不占列（固定态用 pane 的 padding-right 推正文，收起/悬停态悬浮）。 */
+@media (min-width: 761px) {
+  .app-shell,
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns:
+      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr);
+  }
+}
+
 .workspace {
   grid-column: 3;
   grid-row: 1;
@@ -273,13 +311,10 @@
 .app-shell.quick-notes-active .sidebar { display: none; }
 
 /* ===== 小记工作台：独立于 Lake 编辑器，不覆盖任何 .ne-* / .lake-editor-* 选择器 ===== */
-/* 小记页的栅格与工作台骨架宽窄共用（原先只在 `@media (min-width: 761px)` 里 ⇒
- * 窄窗的小记面会掉回 block 布局 + 没有内边距，跨断点时 display/内边距整体跳一次）。 */
-.app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
+/* 栅格列定义已收拢至上方「壳层几何」app-shell 栅格多态块（261125 S-07）。 */
 
-/* AI 写作空间（261109）：与小记同构 —— 隐藏目录栏，页面自己排两栏。 */
+/* AI 写作空间（261109）：与小记同构 —— 隐藏目录栏，页面自己排两栏（栅格见壳层几何块 ②）。 */
 .app-shell.ai-writing-active .sidebar { display: none; }
-.app-shell.ai-writing-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
 .app-shell.ai-writing-active .workspace { grid-template-rows: minmax(0, 1fr); }
 /* 提示条抬到 AI 写作的 composer dock 之上（261112 task-105）：dock 底距 12 + composer 最小高
  * （输入 52 + 操作行 ≈ 39）≈ 103，单行文档 chip 再加 ≈ 30 ⇒ 取 136 = 40×2 + 32 + 24（全令牌）。
@@ -364,23 +399,9 @@
  * outline is a real work surface.  Do not let the shell transparency rule
  * erase the white panel used by the floating variant.
  * 261125 S-02（用户裁决 A 平面版）：docked 的面/边/影/圆角唯一来源 = compat.css 的 .sidebar.sidebar-docked
- *（面板底 / border: 0 / 无影 / radius-md）；本文件原「卡片派」副本（0.5px 边 + radius-card + 双层阴影）已删。 */
-@media (min-width: 761px) {
-  .sidebar.sidebar-floating {
-    background: var(--lake-bg-panel);
-  }
-
-  .sidebar.sidebar-floating {
-    border-top: 0.5px solid var(--lake-border-strong);
-    border-right: 0.5px solid var(--lake-border-strong);
-    border-bottom: 0.5px solid var(--lake-border-strong);
-    border-left: 0;
-    border-radius: 0 var(--lake-radius-lg) var(--lake-radius-lg) 0;
-    box-shadow: 18px 0 50px var(--lake-shadow-color-4), 2px 0 8px var(--lake-shadow-color-3);
-  }
-
-  /* （大纲面板白卡这两条已与材质层一起搬到共用作用域） */
-}
+ *（面板底 / border: 0 / 无影 / radius-md）；本文件原「卡片派」副本（0.5px 边 + radius-card + 双层阴影）已删。
+ * 261125 M-01：floating 的面/边/影/圆角 legacy 声明也已被 shell 层 chrome.css 的同名声明压死（shadowedDecls 实测；
+ * 取值还各写各的：radius-lg/双层影 vs chrome 的 radius-md/--lake-shadow-card）⇒ 整块删除，唯一来源 = chrome.css。 */
 
 /* ===== 2026-08-13 fixed library panel bottom alignment =====
  * A docked directory occupies the full shell height, just like its activity
@@ -503,9 +524,8 @@
 }
 
 /* 专注模式：宽窄共用。原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗按 ⌘⇧Enter 只加了类名、
- * 界面毫无变化（实测 590px 下 rail/抽屉/正文全都没动）。窄窗下三列定义里的前两列都是 0，
- * 正文仍落在第 3 列，所以同一套规则直接可用，不需要窄窗副本。 */
-.app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }
+ * 界面毫无变化（实测 590px 下 rail/抽屉/正文全都没动）。栅格列定义已收拢至上方
+ * 「壳层几何」app-shell 栅格多态块 ③（261125 S-07）；下面只留可见性与让位。 */
 .app-shell.focus-mode .activity-rail,
 .app-shell.focus-mode .sidebar,
 .app-shell.focus-mode .outline-sidebar,

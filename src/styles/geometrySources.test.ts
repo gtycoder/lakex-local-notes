@@ -85,6 +85,45 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
     expect(shell).not.toMatch(/\.app-shell\.quick-notes-active \.workspace \{[^}]*border-radius/);
   });
 
+  it("app-shell 栅格多态单一来源 = shell.css 壳层几何（261125 审计 S-07，防同层 import 顺序回流）", () => {
+    // 合并前 .app-shell/.sidebar-collapsed/.sidebar-floating/.quick-notes-active 的 grid-template-columns
+    // 分散在 outline.css / misc.css / shell.css 三处，同层靠 import 顺序定胜负（改外壳几何要猜加载顺序）。
+    // 现全部收拢到 shell.css「壳层几何」分区；chrome.css 的空间态（trash/resources/tags/diary）在 shell 层，
+    // 层序压过 legacy 全部规则（AGENTS §3#14 层序即优先级），归属不变。
+    const OWNERS = new Set(["styles/app/shell.css", "styles/chrome.css"]);
+    const offenders: string[] = [];
+    for (const f of SCANNED) {
+      const css = read(f);
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = m[1].trim().replace(/\s+/g, " ");
+        if (!selector || selector.startsWith("@")) continue;
+        if (!/(^|[\s,])\.app-shell\b/.test(selector)) continue;
+        if (!/grid-template-columns\s*:/.test(m[2])) continue;
+        if (!OWNERS.has(f)) offenders.push(f + " :: " + selector.slice(0, 80));
+      }
+    }
+    expect(offenders, "app-shell 栅格列定义越界（单一来源 = shell.css 壳层几何 + chrome.css 空间态）：\n  " + offenders.join("\n  ")).toEqual([]);
+  });
+
+  it("壳层几何块内顺序即优先级：quick → ai → focus → 窄窗两列 → 宽窗三列（同特异性后者胜）", () => {
+    // 块内顺序是行为的一部分：0,2,0 的 quick/ai/focus 必须排在窄窗两列（misc 原规则）之前、
+    // 宽窗三列（outline 原规则）之前，否则窄窗下小记/AI 写作/专注模式会掉进 0 宽侧栏列（用户 260915 现场）。
+    const css = read("styles/app/shell.css");
+    const markers = [
+      ".app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }",
+      ".app-shell.ai-writing-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }",
+      ".app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }",
+      "var(--activity-rail-width, 38px) minmax(148px, 1fr)",
+      "var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)",
+    ];
+    let prev = -1;
+    for (const marker of markers) {
+      const at = css.indexOf(marker);
+      expect(at, "壳层几何块缺这条（取值=合并前现生效值，零视觉变化）：" + marker).toBeGreaterThan(prev);
+      prev = at;
+    }
+  });
+
   it("固定目录高度 = 网格区 − margin，不溢出窗口（261017 修）", () => {
     const css = read("styles/app/shell.css");
     // height:100% + 上下 margin ⇒ 比可用高度高 38px，窗口变矮时目录最后几行滚到底也看不到。

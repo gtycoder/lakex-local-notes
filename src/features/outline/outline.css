@@ -13,17 +13,10 @@
   flex: 1 1 auto;
 }
 
-/* app-shell 网格：左 activity rail | 左目录 | 主区 | 右大纲（固定时 = 面板 + activity rail） */
+/* app-shell 网格：左 activity rail | 左目录 | 主区（右大纲 260922 起不占列）。
+ * 261125 S-07：栅格列定义已收拢至 styles/app/shell.css「壳层几何」app-shell 栅格多态块 ⑤（单一来源）。 */
 
 @media (min-width: 761px) {
-  /* 260922：大纲**不再是第 4 列** —— 它搬进 .document-pane 内部（见下方「编辑区内部的一块」）。
-     固定态用 pane 的 padding-right 把正文推开，收起/悬停态悬浮；所以这里只剩「轨 | 目录 | 正文」三列。 */
-  .app-shell,
-  .app-shell.sidebar-floating,
-  .app-shell.sidebar-collapsed {
-    grid-template-columns:
-      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr);
-  }
   .app-shell.outline-resizing,
   .app-shell.outline-resizing .outline-sidebar,
   .app-shell.outline-resizing .outline-sidebar__content {
@@ -227,7 +220,7 @@
   border-radius: 999px;
   background: transparent;
   transform: translateY(-50%);
-  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
+  /* 按 DESIGN Motion 规则 6 删背景色过渡（状态切换瞬时；261125 审计 R-02 同口径、M-03 动效护栏存量清理）。 */
 }
 .outline-sidebar__resize-handle:hover::after,
 .outline-sidebar__resize-handle:focus-visible::after { background: var(--lake-accent); }

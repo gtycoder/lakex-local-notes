@@ -180,15 +180,9 @@
    * 所以这里对**所有**侧栏模式都只声明 rail + 正文；目录栏/大纲由浮层承担（见下）。
    * 这一条同时修掉一个真 bug：原先 `sidebar-collapsed` 时工作区被钉在第 2 列，
    * 而窄窗三列栅格的第 2 列是**0 宽的侧栏列** ⇒ 小记页在"窄窗 + 侧栏收起"下整块工作区被塞进 0 宽列，
-   * 整个窗口只剩一层灰底（用户 260915 截图 #2）。 */
-  .app-shell,
-  .app-shell.sidebar-docked,
-  .app-shell.sidebar-floating,
-  .app-shell.sidebar-collapsed,
-  .app-shell.quick-notes-active {
-    /* 260922：大纲已搬进编辑区（不占列）⇒ 窄窗同样只剩「轨 + 正文」两列。 */
-    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
-  }
+   * 整个窗口只剩一层灰底（用户 260915 截图 #2）。
+   * 261125 S-07：栅格列定义已收拢至 app/shell.css「壳层几何」app-shell 栅格多态块 ④（单一来源）；
+   * 本块只留窄窗的落位与材质增量。 */
   .workspace { grid-column: 2; }
   /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
      （.document-pane / 小记面板）而**不是** .workspace——顶栏（.tab-bar）是 workspace 的子元素，

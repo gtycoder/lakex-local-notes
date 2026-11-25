@@ -128,6 +128,25 @@
 }
 .ln-label__text { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
+/* ── ln-* 上下文变体（261125 审计 M-02 收编）───────────────────────────────────
+ * 各域对 ln-list-item / ln-label 家族的**上下文几何**：值域不同、不并入基座；收进本文件后
+ * 原语家族版式单一来源 = 本文件（primitives.test 主语位口径下，域文件不再从外面改原语几何）。
+ * 历史来源：app/panels.css（回收站/历史行）、app/quick-notes.css（小记索引行）、feature.css（设置标签）。 */
+/* 回收站 / 历史版本的行：把 .ln-list-item 的 8px 统一间距收到 4px（一行 6 个间隙 ⇒ 省 24px），
+ * 让「文档 · 时间」和「N 天后清除」徽标在默认宽度下都放得下（用户 261006：默认要能看到时间）。 */
+.history-list .ln-list-item { gap: 4px; }
+/* 回收站行整行可点（261112 task-89）：标题被「云端已删除（仅本地）」等徽标挤窄时，点行内任意位置都能预览。 */
+.trash-tree-node > .ln-list-item { cursor: pointer; }
+/* 回收站窄行文本保底（261112 task-89 真根因，活实例 9237 实测 rowW=287.5 / textW=0）：
+ * 不能用 min-width —— 文本带着 kit 的 .ln-ellipsis（kit 层 min-width:0），legacy 层的 min-width 永远被压掉；
+ * 改锁 flex-shrink:0 + basis 96px（与上方 .ln-list-item__text 的 flex:1 1 auto 同文件后声明胜出，宽栏仍会增长）。 */
+.trash-tree-node .ln-list-item__text { flex: 1 0 96px; }
+/* 小记索引行：meta（时间/字数）恒单行不折行；行渲染成 <button> 时吃满列宽（button 复位由上方 :where(button) 给）。 */
+.quick-note-index-main .ln-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
+.quick-notes-index .ln-list-item { width: 100%; text-align: left; }
+/* 设置表单标签：说明文字比基座 micro 小一档（tiny）+ 紧行高（261007 表单行版式）。 */
+.settings-panel .ln-label__text { margin-top: var(--lake-space-xs); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-snug); }
+
 /* 侧栏面板几何 = 平面版（261125 用户裁决 S-02 / A，用户看图选定；原 b3/layout.css 的材质部分）。
  * **面 / 边 / 影 / 圆角的唯一来源 = 本规则**（面板底 / border: 0 / 无影 / radius-md）：
  * legacy 层内本文件后加载 ⇒ 同名压过 app/shell.css 的历史副本，那边的「卡片派」规则已随本裁决删除。

@@ -82,7 +82,7 @@
 /* 名称行可带状态徽章（如 API Key 的「已保存」）：行内对齐，不要让图标/徽章把标题顶歪 */
 .settings-panel .config-name { display: flex; align-items: center; gap: var(--lake-space-sm); flex-wrap: wrap; }
 /* 说明紧跟名称，稍大一档便于阅读；增加组间距而非整行留白。 */
-.settings-panel .ln-label__text { margin-top: var(--lake-space-xs); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-snug); }
+/* 261125 M-02：设置表单标签的文字档上下文几何已收编进 compat.css「ln-* 上下文变体」块（原语家族单一来源）。 */
 .settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
 /* 表单行（Field）：标题/说明在左、控件在右的单行版式（用户 261007：短配置不再堆叠）。

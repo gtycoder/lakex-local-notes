@@ -365,13 +365,11 @@
   align-items: center;
   justify-content: center;
 }
-.mb-usheet-dock__btn:active { background: var(--lake-bg-hover); }
+/* :not(.is-open)：开态三件套在 kit.css「开态原语」（261125 审计 D-03 收编），而 kit 先于本文件加载 ⇒
+ * 按下开态钮时 :active 的 hover 底会赢同特异性三件套；排除开态后按下仍保持开态视觉（与收编前一致）。 */
+.mb-usheet-dock__btn:active:not(.is-open) { background: var(--lake-bg-hover); }
 .mb-usheet-dock__btn:disabled { opacity: var(--lake-disabled-opacity, .45); }
-.mb-usheet-dock__btn.is-open {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
-}
+/* .mb-usheet-dock__btn.is-open = 开态原语调用点（三件套见 kit.css）。 */
 .mb-usheet-dock__glyph { font-size: var(--lake-font-size-body); font-weight: 700; line-height: 1; }
 .mb-usheet-dock__kb { margin: 0 4px; border-left: .5px solid var(--lake-border-1); border-radius: 0; width: 48px; }
 
@@ -529,13 +527,10 @@
   color: var(--lake-text-1);
   white-space: nowrap;
 }
-.mb-usheet-fbtn:active { background: var(--lake-bg-hover); }
+/* :not(.is-on) 同上（kit 开态原语先加载；按下开态钮保持开态视觉）。 */
+.mb-usheet-fbtn:active:not(.is-on) { background: var(--lake-bg-hover); }
 .mb-usheet-fbtn:disabled { opacity: var(--lake-disabled-opacity, .45); }
-.mb-usheet-fbtn.is-on {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
-}
+/* .mb-usheet-fbtn.is-on = 开态原语调用点（三件套见 kit.css）。 */
 .mb-usheet-fglyph { font-size: var(--lake-font-size-small); font-weight: 600; line-height: 1; }
 .mb-usheet-fglyph[data-style="italic"] { font-style: italic; }
 .mb-usheet-fglyph[data-style="underline"] { text-decoration: underline; }

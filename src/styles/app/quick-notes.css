@@ -117,7 +117,7 @@
 .quick-note-index-row.is-checked .quick-note-index-check { opacity: 1; }
 .quick-note-index-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 /* （行文本省略五件套已收进 compat.css 的 .ln-list-item__text 原语，261125 审计 S-06；此处勿再 scoped 重写。） */
-.quick-note-index-main .ln-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
+/* 261125 M-02：.ln-list-item__meta 的小记上下文几何（恒单行）已收编进 compat.css「ln-* 上下文变体」块。 */
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,
 .quick-note-index-row:focus-within .quick-note-index-actions { opacity: 1; }
@@ -133,7 +133,7 @@
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
 .quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: var(--lake-font-size-tiny); }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
-.quick-notes-index .ln-list-item { width: 100%; text-align: left; }
+/* 261125 M-02：小记索引行的整宽可点几何已收编进 compat.css「ln-* 上下文变体」块。 */
 .quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 列表视图右侧：去掉卡片边框/圆角，编辑器直接铺开（对齐文档页观感，用户 260919 要求试试） */
 .quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }

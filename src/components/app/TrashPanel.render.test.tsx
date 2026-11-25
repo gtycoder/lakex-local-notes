@@ -265,7 +265,10 @@ describe("小记页签预览（261124）：与文档同一条预览链", () => {
  */
 describe("panels.css：回收站行可读性（task-89）", () => {
   // jsdom 环境下 import.meta.url 不是 file: ⇒ 用仓库根相对路径（与 NoteDocPreview.render.test.tsx 同口径）
-  const CSS = readFileSync(path.resolve("src/styles/app/panels.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  // 26125 M-02 收编后：回收站行几何规则在 compat.css「ln-* 上下文变体」块，按钮复位/徽标仍在 panels.css ⇒ 合并读两文件，钉力不降。
+  const CSS = ["src/styles/app/panels.css", "src/styles/compat.css"]
+    .map((f) => readFileSync(path.resolve(f), "utf8").replace(/\/\*[\s\S]*?\*\//g, ""))
+    .join("\n");
 
   it("文本保底宽度：flex: 1 0 96px（不能写 min-width：kit 的 .ln-ellipsis 在更高层，会把 legacy 层的 min-width 压掉）", () => {
     expect(CSS).toMatch(/\.trash-tree-node \.ln-list-item__text \{ flex: 1 0 96px; \}/);

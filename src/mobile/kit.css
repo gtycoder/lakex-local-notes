@@ -88,6 +88,24 @@
 .mb-iconbtn:disabled { opacity: var(--lake-disabled-opacity); }
 .mb-iconbtn > svg { display: block; }
 
+/* ── 开态原语（261125 审计 D-03）：dock/工具钮「命令生效 / 面板展开」三件套，唯一来源 ──
+ * 语义 = 按钮处于开/生效态：主色字 + 主色浅底 + 同色 1px 内描边。原散在 editor-dock.css 与
+ * usheet-chrome.css 五处逐字同构（audit-primitives 4 重复族 + med-toggle.med-open 同语义变体），
+ * 现收进本规则；调用点只留状态类与自己的差异几何（如 med-open 的胶囊圆角）：
+ *   .med-btn.med-active / .med-f-btn.med-f-on / .med-btn.med-toggle.med-open（editor-dock.css）、
+ *   .mb-usheet-dock__btn.is-open / .mb-usheet-fbtn.is-on（usheet-chrome.css）。
+ * ⚠️ usheet 两个 :active 静息底色规则带 :not(.is-open)/:not(.is-on)：本文件比 usheet-chrome.css
+ * 先加载，不带 :not() 时「按下开态钮」会被 :active 的 hover 底压掉（同特异性后加载者胜，AGENTS §3#14）。 */
+.med-btn.med-active,
+.med-f-btn.med-f-on,
+.med-btn.med-toggle.med-open,
+.mb-usheet-dock__btn.is-open,
+.mb-usheet-fbtn.is-on {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--lake-accent-tint);
+}
+
 /* ── 行（.mb-row；列表行/设置行，两行版带 __meta）───────────────────── */
 /* v2 架构收敛（261107）：行原语只有一套 —— .mb-list-item 并入 .mb-row（历史类名保留，gap 用覆盖保持 10px）。 */
 .mb-row, .mb-list-item {
