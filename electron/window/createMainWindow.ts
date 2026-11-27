@@ -34,6 +34,14 @@ export interface MainWindowDeps {
 }
 
 export async function createWindow(deps: MainWindowDeps): Promise<void> {
+  // 单主窗口（261127「偶发多窗口只能重启」）：macOS 点 Dock / 第二次启动会触发 activate / second-instance，
+  // 二者都按「有没有主窗口」判定；已有主窗口时绝不重建（隐藏中的主窗口 = 渲染崩溃恢复，也算存在）。
+  const existing = deps.getMainWindow();
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+    return;
+  }
   const splashDeps: BootSplashDeps = {
     buildDir: deps.buildDir,
     getBootWindow: deps.getBootWindow,
@@ -133,6 +141,9 @@ export async function createWindow(deps: MainWindowDeps): Promise<void> {
     });
   }
   win.on("close", persistWindowState);
+  // 窗口状态恢复：maximize 是普通 zoom（workArea），可以安全地在隐藏窗口上做；
+  // 原生全屏恢复**只允许留在主窗口**（有真实 contentView、会一直存活到用户关闭）——
+  // splash 绝不能进全屏，否则会留下空白过渡窗（261127，见 window/bootSplash.ts 头注释）。
   if (restored.maximized) win.maximize();
   if (restored.fullscreen) win.setFullScreen(true);
 

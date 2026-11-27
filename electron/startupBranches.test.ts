@@ -158,7 +158,9 @@ describe("接线完整：main.ts 消费了全部启动判据，且顺序不变�
     // C-04：恢复页装配 = enterStartupRecovery（boot/recoveryWiring 内部最终调 showRecoveryWindow）。
     const recoveryBranch = entrySource.indexOf('startupDecision.mode === "recovery"');
     const recoveryWindow = entrySource.indexOf("enterStartupRecovery(");
-    const createWindow = entrySource.indexOf("createWindow(mainWindowDeps())");
+    // 261127：同名字面量还有一处 = focusOrCreateMainWindow（activate/second-instance 的补建入口，定义在
+    // 启动路径之前）⇒ 取**最后一次**出现 = 普通启动路径上的那次建窗。
+    const createWindow = entrySource.lastIndexOf("createWindow(mainWindowDeps())");
     expect(recoveryBranch).toBeGreaterThan(-1);
     expect(recoveryWindow).toBeGreaterThan(recoveryBranch);
     expect(createWindow, "createWindow(mainWindowDeps()) 必须在普通启动路径上").toBeGreaterThan(-1);

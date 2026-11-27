@@ -236,6 +236,22 @@ function mainWindowDeps(): MainWindowDeps {
   };
 }
 
+/** macOS 激活（点 Dock 图标）/ 第二次启动的统一出口：有主窗口就唤到前台，没有才补建一个。
+ *
+ *  判据必须是 **mainWindow 单例**，不能按 `BrowserWindow.getAllWindows()` 的条数判定：
+ *  boot splash、macOS 全屏过渡 backing window 也会出现在 getAllWindows 里 ⇒ 旧写法会在启动/过渡窗口
+ *  存在时判错（261127「偶发多窗口只能重启」；空白过渡窗根因见 window/bootSplash.ts 头注释）。
+ *  启动未跑通（恢复模式 / 装配中）不补建：store 等服务还没就绪，交给正常启动路径。 */
+function focusOrCreateMainWindow(): void {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    return;
+  }
+  if (normalStartupCompleted) void createWindow(mainWindowDeps());
+}
+
 /** 启动计时基准（main.js 加载即开始）：[perf] boot.ready 用它算到主窗口首帧的耗时。 */
 const BOOT_STARTED_AT = Date.now();
 
@@ -298,13 +314,8 @@ app.on("child-process-gone", (_event, details) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
-  });
+  // 第二次启动（双击图标 / 命令行再开一个）：只唤前台已有主窗口，没有才补建一个（同 activate 判据）。
+  app.on("second-instance", () => focusOrCreateMainWindow());
 
   app.whenReady().then(async () => {
     // 身份与 macOS 菜单（用户 261029：参考思源裁剪版——只 darwin 装自定义菜单，role+中文 label）：
@@ -434,9 +445,8 @@ if (!app.requestSingleInstanceLock()) {
       autoSyncAllowed,
     });
 
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) void createWindow(mainWindowDeps());
-    });
+    // 点 Dock 图标（含「关窗后重开」）：有主窗口只唤前台，没有才补建；绝不按窗口计数判。
+    app.on("activate", focusOrCreateMainWindow);
   });
 }
 
