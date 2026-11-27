@@ -334,5 +334,6 @@ node scripts/check-bundle-budget.mjs
 - 移动端装包：表格编辑、排序/筛选抽屉、查找替换、图片粘贴、新建工作表、只读预览、dock/键盘切换；
 - 颜色快照：45 预设 compliance 单测已过；再人工对照一次 Univer theme 的 70 色阶；
 - 体积：表格懒加载 chunk 7.07MB → 7.21MB raw（+139KB，约 +2%）、CSS +7.7KB；首屏预算未受影响（entry 203.2/307KB、mobile entry 44.9/46KB）。
+- 设备：261127 已用 `android-build.sh --sync --install` 装到 lake_mobile 并启动（首页/列表正常、`window.lakeNative` 在位）；表格逐项走查仍待人工做（本清单）。
 
 **未跟进**：1.6.2（缺 sort-ui，等官方补齐）；Pro 能力（图表/透视/打印/Bases/Boards/Slides/PDFs）仍要商业授权，另立项。
