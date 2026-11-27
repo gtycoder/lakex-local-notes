@@ -1,12 +1,12 @@
 import { useCallback, useEffect, type MutableRefObject } from "react";
 import { bridge } from "../bridge";
 import { pushBackHandler } from "../ui/backStack";
-import { showToast } from "../ui/toastBus";
 import { SELF_REGISTERED_OVERLAY_KINDS, type WorkspaceOverlayKind } from "./useWorkspaceOverlays";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
-import { toastActionError } from "../lib/actionError";
-import { syncWarningSummary, syncWarningSummaryText } from "../../core/syncWarningText";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { beginSyncBubble, settleSyncBubble } from "../sync/syncBubble";
 
 /**
  * 工作区「返回栈 + 同步」逻辑（261103 P11-②，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -44,17 +44,21 @@ export function useWorkspaceSync(options: UseWorkspaceSyncOptions) {
   }, [overlayKind, closeOverlay]);
 
   // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
+  // 261127：与首页同一套气泡（进行中/收尾同一个 id，成功后自动关）——不得再另起一条结果 toast，
+  // 否则首页进度 effect 的收尾气泡 + 这里的 toast 会叠成两条。
   const runSync = useCallback(async () => {
+    beginSyncBubble();
     try {
       const r = await bridge.syncNow();
       // 同步可能改了远端标题/正文：刷新目录，并在阅读态强制重读当前文档（编辑态不打断）。
       await loadTree();
       const activeTab = tabsRef.current.find((t) => t.id === activeId);
       if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
-      // task-67：跳过项计数/分组单一来源 = core/syncWarningText（不再手写「N 项被跳过」）。
-      const summaryText = syncWarningSummaryText(syncWarningSummary(r.warnings ?? []));
-      showToast((r.message || "已同步") + (summaryText ? `，${summaryText}` : ""));
-    } catch (e) { toastActionError("同步", e); }
+      settleSyncBubble(r.message || "已同步");
+    } catch (e) {
+      reportMobileActionError("同步", e);
+      settleSyncBubble("同步失败：" + getNativeErrorMessage(e));
+    }
   }, [loadTree, openTab, activeId]);
 
   // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）

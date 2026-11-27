@@ -19,6 +19,7 @@ const WORKSPACE_SYNC = code(read("src/mobile/notebook/useWorkspaceSync.ts"));
 const SETTINGS = code(read("src/mobile/settings/SettingsDrawer.tsx") + read("src/mobile/settings/S3SettingsSection.tsx"));
 const SYNC_HOOK = code(read("src/mobile/settings/useSyncSettingsForm.ts"));
 const STATUS_STORE = code(read("src/mobile/sync/syncStatusStore.ts"));
+const SYNC_BUBBLE = code(read("src/mobile/sync/syncBubble.ts"));
 
 describe("task-67 同步 warning 摘要单一来源", () => {
   it("v3 同步：单篇 apply 失败用 apply_skipped（不是 remote_incomplete）", () => {
@@ -26,12 +27,14 @@ describe("task-67 同步 warning 摘要单一来源", () => {
     expect(V3_SYNC).not.toContain('kind: "remote_incomplete", noteId: w.id');
   });
 
-  it("两处 toast 的跳过计数改用 core/syncWarningText 摘要", () => {
+  it("同步收尾的跳过计数改用 core/syncWarningText 摘要（气泡单一来源 = syncBubble）", () => {
     for (const src of [HOME, WORKSPACE_SYNC]) {
-      expect(src).toContain("syncWarningSummaryText(");
-      expect(src).toContain("syncWarningSummary(");
+      expect(src).toContain("settleSyncBubble(");
       expect(src).not.toContain("项被跳过");
     }
+    expect(SYNC_BUBBLE).toContain("syncWarningSummaryText(");
+    expect(SYNC_BUBBLE).toContain("syncWarningSummary(");
+    expect(SYNC_BUBBLE).not.toContain("项被跳过");
   });
 
   it("状态行不再拼手写跳过计数（摘要由调用方/toast 统一生成）", () => {

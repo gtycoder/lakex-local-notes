@@ -103,10 +103,13 @@ describe("首页新建流（261014）", () => {
     expect(CSS).toMatch(/\.mb-home-fab\s*\{[^}]*border-radius:\s*50%/);
   });
 
-  it("同步反馈走气泡（261124 用户点单）：点云立刻弹『正在同步』、进度实时进气泡、不再顶栏弹进度条", () => {
-    expect(HOME).toContain('showToast("正在同步…", { id: SYNC_BUBBLE_ID, timeout: 0 })'); // 点击立刻给反馈
-    expect(HOME).toContain('showToast("正在同步：" + describeSyncProgress(syncProgress)'); // 进度进气泡（同 id 覆盖）
-    expect(HOME).toContain("hideToast(SYNC_BUBBLE_ID)"); // 收尾收气泡
+  it("同步反馈走一个气泡（261124 点单 + 261127 报障收口）：点云立刻反馈、进度/收尾同 id、收尾自动关", () => {
+    expect(HOME).toContain("beginSyncBubble()"); // 点击立刻给反馈（零进度轮也看得到）
+    expect(HOME).toContain("updateSyncBubbleProgress(syncProgress)"); // 进度实时进同一气泡
+    expect(HOME).toContain("settleSyncBubble("); // 收尾写同一 id（内部自动关，不再常驻）
+    // 气泡写入/关闭单一来源 = sync/syncBubble.ts（禁止在页面里另起一条同步 toast ⇒ 同屏两条）
+    expect(HOME).not.toContain('showToast("正在同步');
+    expect(HOME).not.toContain("hideToast(SYNC_BUBBLE_ID)");
     expect(HOME).not.toContain("mobile-sync-strip"); // 顶栏进度条已拆
     expect(HOME).toContain("describeSyncProgress(syncProgress)"); // 云按钮 aria/tooltip 仍报进度
     expect(HOME).not.toContain("alert(");

@@ -39,23 +39,20 @@ import { longPressFeedback } from "../ui/haptics";
 // 懒加载，不进首屏静态图（Suspense 兜底 null：只有长按打开面板那一刻会拉分包，基本无感）。
 const MobileNodeIconPicker = lazy(() => import("../ui/NodeIconPicker").then((m) => ({ default: m.MobileNodeIconPicker })));
 import { confirmMobile } from "../ui/ConfirmDialog";
-import { showToast, hideToast } from "../ui/toastBus";
-
-/** 同步气泡（261124 用户点单）：点云立刻弹「正在同步」（否则以为没触发）；进度与收尾都进气泡，不再顶栏弹进度条。 */
-const SYNC_BUBBLE_ID = "sync-bubble";
+import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 // 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { bridge } from "../bridge";
 import { dismissNoteTabs } from "../notebook/tabDismissal";
 import { clearPersistedNotebookTabsFor } from "../notebook/tabSessionCleanup";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
-import { describeSyncBreakdown, describeSyncResultSummary, readSyncStatus } from "../sync/syncStatusStore";
+import { beginSyncBubble, settleSyncBubble, updateSyncBubbleProgress } from "../sync/syncBubble";
 import { escapeId } from "../../lib/cssEscape";
 import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
-import { syncWarningSummary, syncWarningSummaryText } from "../../core/syncWarningText";
 import { formatDiaryDateKey } from "../../core/diary";
 import { formatRelativeTime } from "../lib/listTime";
 import { pushBackHandler } from "../ui/backStack";
@@ -200,21 +197,13 @@ export function HomePage(props: HomePageProps) {
   useEffect(() => {
     if (syncProgress) {
       syncActiveRef.current = true;
-      showToast("正在同步：" + describeSyncProgress(syncProgress), { id: SYNC_BUBBLE_ID, timeout: 0 });
+      updateSyncBubbleProgress(syncProgress);
       return;
     }
     if (!syncActiveRef.current) return;
     syncActiveRef.current = false;
-    const status = readSyncStatus();
-    // 只认「刚出炉」的结果（30s 内）：progress 清空但状态陈旧（启动清场等）就静默收掉，不冒充本轮结果。
-    const fresh = status && Date.now() - new Date(status.at).getTime() < 30_000;
-    if (!fresh) { hideToast(SYNC_BUBBLE_ID); return; }
-    showToast(describeSyncResultSummary(status), {
-      id: SYNC_BUBBLE_ID,
-      type: status.ok ? "info" : "error",
-      timeout: status.ok ? 6000 : 10000,
-      detail: status.ok ? describeSyncBreakdown(status) ?? undefined : undefined,
-    });
+    // 收尾（同 id 覆盖 + 成功 6s / 失败 10s 自动关）：判据/文案单一来源 = sync/syncBubble.ts。
+    settleSyncBubble();
   }, [syncProgress]);
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
   const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail, cacheDetail: cacheQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
@@ -559,16 +548,18 @@ export function HomePage(props: HomePageProps) {
   }, [composer]);
   const switchTab = (next: HomeTab): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
-    // 261124：点击立刻给反馈（气泡）；进度由 syncProgress 效果实时刷新进同一气泡。
-    showToast("正在同步…", { id: SYNC_BUBBLE_ID, timeout: 0 });
+    // 261124：点击立刻给反馈；261127：进行中/收尾**共用同一个气泡**（不再另起结果 toast ⇒ 同屏两条）。
+    beginSyncBubble();
     try {
       const r = await bridge.syncNow();
       // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
       await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
-      // task-67：跳过项计数/分组单一来源 = core/syncWarningText（不再手写「N 项被跳过」）。
-      const summaryText = syncWarningSummaryText(syncWarningSummary(r.warnings ?? []));
-      showToast((r.message || "已同步") + (summaryText ? `，${summaryText}` : ""));
-    } catch (e) { toastActionError("同步", e); }
+      // 收尾自动关（成功 6s / 失败 10s）；本轮真跑过引擎时用状态摘要（含跳过项），零进度轮用 bridge 短句。
+      settleSyncBubble(r.message || "已同步");
+    } catch (e) {
+      reportMobileActionError("同步", e);
+      settleSyncBubble("同步失败：" + getNativeErrorMessage(e));
+    }
   };
   const toggleView = (): void => {
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
