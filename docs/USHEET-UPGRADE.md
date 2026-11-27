@@ -14,23 +14,26 @@
 
 | 包 | 版本 | 说明 |
 | --- | --- | --- |
-| `@univerjs/presets` | 1.0.3（**精确锁**） | `createUniver` / facade 基座 |
-| `@univerjs/preset-sheets-core` | 1.0.3（**精确锁**） | 表格核心 preset（含 footer/工具栏/公式栏配置） |
-| `@univerjs/preset-sheets-drawing` | 1.0.3（**精确锁**） | 图片（单元格图 + 浮动图） |
-| `@univerjs/engine-render` | 1.0.3（**精确锁**，**必须显式声明**） | 只为一个用途：收起/展开工具栏后调**渲染单元**的 `engine.resize()` |
-| `@univerjs/sheets-sort` | 1.0.3（**精确锁**） | 排序**数据层**（`sheet.command.sort-range`；只重排 cellData，不写任何快照字段） |
-| `@univerjs/sheets-sort-ui` | 1.0.3（**精确锁**） | 排序 **UI**：桌面 = `UniverSheetsSortUIPlugin`（ribbon「数据」页签）/ 移动 = `UniverSheetsSortMobileUIPlugin` |
-| `@univerjs/sheets-filter` | 1.0.3（**精确锁**） | 筛选**数据层**（`sheet.command.set-filter-range` / `set-filter-criteria` / `remove-sheet-filter`） |
-| `@univerjs/sheets-filter-ui` | 1.0.3（**精确锁**） | 筛选 **UI**：桌面 = `UniverSheetsFilterUIPlugin`（ribbon + 列头下拉）/ 移动 = `UniverSheetsFilterMobileUIPlugin`（筛选抽屉） |
-| `@univerjs/find-replace` | 1.0.3（**精确锁**） | 查找替换**基础层**（服务 + 桌面 dialog / 移动 bar）；移动端直接 import `UniverFindReplaceMobileUIPlugin` ⇒ 必须显式声明（别只靠 preset 传递依赖） |
-| `@univerjs/sheets-find-replace` | 1.0.3（**精确锁**） | 查找替换**表格适配器**（`SheetsFindReplaceController` / `sheet.command.replace` / 快捷键 provider）。**缺它插件能启动、菜单也在，但搜不到任何单元格**；移动端用 `UniverSheetsFindReplaceMobileUIPlugin`（依赖 `UniverFindReplaceMobileUIPlugin` + `UniverSheetsMobileUIPlugin`） |
-| `@univerjs/preset-sheets-find-replace` | 1.0.3（**精确锁**） | 把上面两者组合的 preset（**桌面**直接用 `UniverSheetsFindReplacePreset()`，含桌面 dialog + Ctrl/Cmd+F）；移动端不用 preset、只装两个 Mobile 变体插件 |
+| `@univerjs/presets` | 1.6.1（**精确锁**） | `createUniver` / facade 基座 |
+| `@univerjs/preset-sheets-core` | 1.6.1（**精确锁**） | 表格核心 preset（含 footer/工具栏/公式栏配置） |
+| `@univerjs/preset-sheets-drawing` | 1.6.1（**精确锁**） | 图片（单元格图 + 浮动图） |
+| `@univerjs/engine-render` | 1.6.1（**精确锁**，**必须显式声明**） | 只为一个用途：收起/展开工具栏后调**渲染单元**的 `engine.resize()` |
+| `@univerjs/sheets-sort` | 1.6.1（**精确锁**） | 排序**数据层**（`sheet.command.sort-range`；只重排 cellData，不写任何快照字段） |
+| `@univerjs/sheets-sort-ui` | 1.6.1（**精确锁**） | 排序 **UI**：桌面 = `UniverSheetsSortUIPlugin`（ribbon「数据」页签）/ 移动 = `UniverSheetsSortMobileUIPlugin` |
+| `@univerjs/sheets-filter` | 1.6.1（**精确锁**） | 筛选**数据层**（`sheet.command.set-filter-range` / `set-filter-criteria` / `remove-sheet-filter`） |
+| `@univerjs/sheets-filter-ui` | 1.6.1（**精确锁**） | 筛选 **UI**：桌面 = `UniverSheetsFilterUIPlugin`（ribbon + 列头下拉）/ 移动 = `UniverSheetsFilterMobileUIPlugin`（筛选抽屉） |
+| `@univerjs/find-replace` | 1.6.1（**精确锁**） | 查找替换**基础层**（服务 + 桌面 dialog / 移动 bar）；移动端直接 import `UniverFindReplaceMobileUIPlugin` ⇒ 必须显式声明（别只靠 preset 传递依赖） |
+| `@univerjs/sheets-find-replace` | 1.6.1（**精确锁**） | 查找替换**表格适配器**（`SheetsFindReplaceController` / `sheet.command.replace` / 快捷键 provider）。**缺它插件能启动、菜单也在，但搜不到任何单元格**；移动端用 `UniverSheetsFindReplaceMobileUIPlugin`（依赖 `UniverFindReplaceMobileUIPlugin` + `UniverSheetsMobileUIPlugin`） |
+| `@univerjs/preset-sheets-find-replace` | 1.6.1（**精确锁**） | 把上面两者组合的 preset（**桌面**直接用 `UniverSheetsFindReplacePreset()`，含桌面 dialog + Ctrl/Cmd+F）；移动端不用 preset、只装两个 Mobile 变体插件 |
 
 - **engine-render 为什么要显式声明**：它被 presets 传递依赖；如果解析出**两份副本**，
   `injector.get(IRenderManagerService)` 会拿到另一个 token 的实例 ⇒ 重排**静默失效**（画布不跟手）。
 - 间接依赖约 25 个 `@univerjs/*`（`sheets` / `sheets-ui` / `sheets-drawing-ui` / `core` / `ui` …）必须与上面同版本；
-  **例外**：`@univerjs/icons` 是独立发版线（当前 1.43.x），不参与同版本约束。
-- **有一个 Univer 补丁**：`patches/@univerjs+ui+1.0.3.patch`（261009 起，唯一一个；改的是内核 floating 层的挂载点，
+  **例外**：`@univerjs/icons` / `@univerjs/icons-svg` 是独立发版线（261127 实测 1.50.x），不参与同版本约束。
+- **当前锁定版本 = 1.6.1**（261127 从 1.0.3 升上来）：选 1.6.1 而不是 latest 1.6.2，是因为
+  `@univerjs/sheets-sort-ui` 当时只发到 1.6.1（1.6.2 缺包）；**混版会出现两份 @univerjs/core ⇒ DI token 对不上**。
+  等官方补齐 1.6.2 的 sort-ui 再跟下一档。
+- **有一个 Univer 补丁**：`patches/@univerjs+ui+1.6.1.patch`（261009 起，唯一一个；改的是内核 floating 层的挂载点，
   理由与升级动作见 **§4.7**）。除这一处外**不要再给 Univer 打 patch**：`patch-package` 的其余用途仍是
   `@plait/draw`（`patches/`）与 `@xiangfa/mindmap`（`vendor/lakex-doc-react/patches/`）。
 
@@ -60,7 +63,7 @@
 
 ```bash
 # 0) 读 release notes，确认目标版本；开分支（或 worktree），不要在 master 上试
-# 1) 改 package.json 的 4 个版本号（全部同一个目标版本），重新装
+# 1) 把 package.json 里 16 个 @univerjs/* 直连包（§1 表）全部改成同一个目标版本，重新装（不要 npm update）
 npm install                     # 用 lockfile 语义安装，不要 npm update
 # 1b) 确认我们的 Univer 补丁仍应用成功（§4.7）。⚠️ 本机安装时 patch-package 失败**不会**以非零码退出，
 #     必须自己看输出；CI / NODE_ENV=production 才会让安装直接失败。
@@ -98,7 +101,7 @@ node scripts/check-bundle-budget.mjs
 
 ## 4. 触点清单（升级时逐条核对；=`usheetKernelContract.ts`）
 
-> **261022 新增的可选包**（全部 1.0.3 精确锁）：`preset-sheets-hyper-link`（超链接）、`preset-sheets-note`（备注，仅桌面）、`sheets-crosshair-highlight`（十字高亮，桌面/移动两份 UI 插件）。
+> **261022 新增的可选包**（全部 1.6.1 精确锁）：`preset-sheets-hyper-link`（超链接）、`preset-sheets-note`（备注，仅桌面）、`sheets-crosshair-highlight`（十字高亮，桌面/移动两份 UI 插件）。
 
 ### 4.1 命令
 
@@ -203,7 +206,7 @@ node scripts/check-bundle-budget.mjs
   （`""` vs `"{}"`），`ff` 字族引号也会随来源 CSS 文本变。⇒ **任何"序列化结果与上次比较"的地方都要先规范化**（见 §4.4），
   否则必然出现"打开即脏"。
 
-### 4.7 我们打的补丁（`patches/@univerjs+ui+1.0.3.patch`）
+### 4.7 我们打的补丁（`patches/@univerjs+ui+1.6.1.patch`）
 
 | 改了什么 | 为什么 | 失效表现 | 谁守它 |
 | --- | --- | --- | --- |
@@ -211,6 +214,9 @@ node scripts/check-bundle-budget.mjs
 
 - **只改 `lib/es/index.js`**（`module` / `exports.import` 入口，app / 移动端 / vitest 都走它）；`lib/cjs` 未改（当前没有 CJS 消费者）。
 - **重生成**：改完 node_modules 后执行 `npx patch-package @univerjs/ui --patch-dir patches`，然后跑探针 + 全量门禁。
+  **261127（1.0.3 → 1.6.1）实测**：@univerjs/ui 的这段上下文没变（仍是 body append + removeChild），
+  只重生成补丁（文件名随版本变成 `@univerjs+ui+1.6.1.patch`，内容两处标记 + `.remove()` 一字未改语义）；
+  探针「floating 容器挂 body 且带 owner」与契约护栏③ 均通过。
   ⚠️ 本机 `/usr/local/bin/git` 是坏的（Bad CPU type）⇒ 必须 `PATH=/usr/bin:$PATH npx patch-package …`，
   否则 patch-package 在 `git init` 处报 `spawnSync git Unknown system error -86`。
 - **升级时它会怎样**（patch-package 8.0.1 实测行为）：
@@ -240,7 +246,7 @@ node scripts/check-bundle-budget.mjs
 
 ## 7. 路线图
 
-**已完成（261009 追加，261022 修订）**：内核 floating 层收口 —— `patches/@univerjs+ui+1.0.3.patch` 给容器加 `data-lake-univer-floating` + `data-lake-owner`，容器**留在 `document.body`**，应用侧（`MultiTabEditor`）按当前可见标签收起其它实例的浮层（切文档后黄叹号 / CellAlert / 下拉等浮层不再残留；**不要挂回实例宿主**——261022 排序对话框死循环）；配套静态护栏③ + 探针两条（§4.7）。
+**已完成（261009 追加，261022 修订）**：内核 floating 层收口 —— `patches/@univerjs+ui+1.6.1.patch` 给容器加 `data-lake-univer-floating` + `data-lake-owner`，容器**留在 `document.body`**，应用侧（`MultiTabEditor`）按当前可见标签收起其它实例的浮层（切文档后黄叹号 / CellAlert / 下拉等浮层不再残留；**不要挂回实例宿主**——261022 排序对话框死循环）；配套静态护栏③ + 探针两条（§4.7）。
 
 **已完成（261010 批次；261103 行数 50 → 35）**：默认尺寸单一来源（35×16）；挂载失败可见提示；版本精确锁 + 静态护栏；
 运行时探针入库；触点集中到一个文件；粘贴图片默认单元格图；右键「插入单元格图片」；计算条 30px + 状态栏跟随。
@@ -266,9 +272,9 @@ node scripts/check-bundle-budget.mjs
 
 ## 8. 能力差距（对比 Excel，261022 实测）
 
-> 判据：`npm view @univerjs/<pkg>@1.0.3` 是否可用 + 隔离实例实测 ribbon / 右键菜单 + 移动端 chrome 置灰项。装任何新包都要过 AGENTS §3#22 依赖准入，并走本文件 §4 的 playbook（精确锁 1.0.3、静态护栏、内核探针、契约回填）。
+> 判据：`npm view @univerjs/<pkg>@1.6.1` 是否可用 + 隔离实例实测 ribbon / 右键菜单 + 移动端 chrome 置灰项。装任何新包都要过 AGENTS §3#22 依赖准入，并走本文件 §4 的 playbook（精确锁目标版本、静态护栏、内核探针、契约回填）。
 
-### A. Univer 1.0.3 有包、我们没接（可直接补，不需要自研）
+### A. Univer 1.6.1 有包、我们没接（可直接补，不需要自研）
 
 | 能力 | 包 | 现状 |
 | --- | --- | --- |
@@ -285,7 +291,7 @@ node scripts/check-bundle-budget.mjs
 - 桌面右键菜单已有：**选择性复制 / 选择性粘贴**、**保护行列**、插入/删除/清除/冻结/排序；「视图」页签已有 **冻结 / 背景图片 / 全屏 / 网格线 / 缩放 100% 下拉**。
 - 移动端 ⋯ 卡仍置灰：保护 / 垂直对齐 / 换行 / 字号 —— 其中 **保护行列、垂直对齐、换行、字号在 Univer 里都有命令**，属于「没接线」而非「没有」；接线即可，无需新依赖。
 
-### C. Univer 1.0.3 没有对应包（补不了，等升级或自研）
+### C. Univer 1.6.1 OSS 仍没有对应包（Pro 包有，需商业授权；见 §9）
 
 - 图表（无 `sheets-chart`）、数据透视表、**分组/分级显示**（无 `sheets-outline`）、**打印/页面设置**（无 `sheets-print`）、形状/文本框（无 `sheets-shape`）。
 - 这些不要按「我们漏做」立项；要做得先立项 Univer 升级/自研。
@@ -294,10 +300,39 @@ node scripts/check-bundle-budget.mjs
 
 - **导入**：目前只有导出（`core/usheetCsv.ts` 导出 CSV、`core/usheetExcel.ts` 写 .xlsx）；没有 CSV/XLSX → 表格文档的导入。建议先做 CSV（解析简单），XLSX 导入按依赖准入另议。
 - **移动端导出**：桌面走标签右键导出 CSV/Excel，移动端暂无入口。
-- **打印 / 导出 PDF 页面设置**：未做（上游 1.0.3 也无 print 包）。
+- **打印 / 导出 PDF 页面设置**：未做（上游 OSS 仍无 print 包；Pro 的 @univerjs-pro/sheets-print 需商业授权）。
 
 ### E. 建议优先级
 
 1. **P1（低成本、高频）**：超链接 + 单元格备注；移动端补「选择性粘贴 / 保护行列 / 导出」入口。
 2. **P2**：结构化表格、条件格式、数据验证（用户明确不急）、评论。
 3. **P3 / 不做**：图表、数据透视表、分组、打印（上游无包）；十字高亮（可选）。
+## 9. 升级记录
+
+### 261127 · 1.0.3 → 1.6.1（一次全升 16 个直连包）
+
+**为什么升**：用户点单「和最新版差太多」；1.0.3 是 2026 年早期的 pin，1.6.x 在公式/性能/移动端/文件兼容上持续改进（具体条目按官方 release notes 逐条过）。
+
+**结果**：
+- `tsc` 0 错；全量 vitest **1131 文件 / 7281 例 0 failed**（含 45 色板 compliance、移动端 chrome/键盘/只读）；契约护栏 5/5；运行时探针 10/12 + 2 条合成输入提示（无 OS 焦点偶发，与升级无关）。
+- **业务代码零改动**（源码 API 用法兼容）；只有护栏工具 / 补丁 / 探针基线要跟版本走。
+
+**升级动作（可复制给下一次）**：
+1. `package.json` 16 个 `@univerjs/*` 直连包统一 1.6.1（精确锁；不要 `npm update`）。
+2. 补丁：删 `patches/@univerjs+ui+1.0.3.patch` → 按 1.6.1 重新生成 `@univerjs+ui+1.6.1.patch`（§4.7）。
+3. 护栏跟着改 3 处：
+   - `univerContract.test.ts`：版本一致性放行 `@univerjs/icons` + `@univerjs/icons-svg`（独立发版线 1.50.x）；
+   - `univerContract.test.ts` 的 BUNDLE 扫描改成**递归读 `lib/es` 全部 js**（1.6 把命令拆到 `plugin-*.js` 分块，只读 index/facade 会误报 4 个命令 id 丢失）；
+   - `UNIVER_PATCH_HOOKS.patchFile` 跟版本号。
+4. 探针 `scripts/usheet-kernel-probes.mjs` 两处基线修正（**不是升级漂移，是旧探针本身过时**）：
+   - 默认表格尺寸写死 50 行 → 从 `core/usheetDoc.ts` 读 `USHEET_DEFAULT_ROWS/COLUMNS`（261121 起实际默认 35×16）；
+   - 工作表「＋」点击后固定等 4s 读盘 → 轮询最多 12s（1.6.1 实测落盘 2~4s，偶发更慢）。
+
+**升级后仍要人工确认的**（静态/探针覆盖不到）：
+- 真实表格文档打开：图片、筛选/排序、超链接、备注、冻结、公式不丢不坏；
+- xlsx/csv 导入导出（我们自研管线，不受 Univer 版本影响，但要回归）；
+- 移动端装包：表格编辑、排序/筛选抽屉、查找替换、图片粘贴、新建工作表、只读预览、dock/键盘切换；
+- 颜色快照：45 预设 compliance 单测已过；再人工对照一次 Univer theme 的 70 色阶；
+- 体积：表格懒加载 chunk 7.07MB → 7.21MB raw（+139KB，约 +2%）、CSS +7.7KB；首屏预算未受影响（entry 203.2/307KB、mobile entry 44.9/46KB）。
+
+**未跟进**：1.6.2（缺 sort-ui，等官方补齐）；Pro 能力（图表/透视/打印/Bases/Boards/Slides/PDFs）仍要商业授权，另立项。
