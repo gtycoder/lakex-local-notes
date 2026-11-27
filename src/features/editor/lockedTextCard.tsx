@@ -15,10 +15,15 @@
  * - **关标签/锁文档/退出前必须把未落盘的明文补写**（评审 B1）：会话缓存派生密钥后单次加密 <1ms，
  *   再加上 `lockedTextFlush` 注册表让生命周期入口先 await 本卡的 flush，避免"最后 250ms 明文丢失"。
  *
+ * 视觉形态（261127 用户点单，参照思源加密块）：**卡片不画外框/底色**（原来"线条太多太乱"），
+ * 解锁态 = 「加密文本」标题行 + 无框正文；设密码/解锁态 = 「插画 + 表单」两块（说明一行、密码竖排、
+ * 主操作实心、其余无框文字按钮）。两端共用同一套类（桌面 kit 与移动 mb-* 都不引，只吃语义令牌）。
+ *
  * 与语雀 App 的 `lockedtext` 卡的关系：那是**内核内置节点名**、服务端加解密；内核会把它当未知卡
  * 走 fallback（「该卡片暂时无法显示」），**不会**走到本卡的节点上，所以这里没有"语雀旧卡态"。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Lock } from "lucide-react";
 import {
   LOCKED_TEXT_CARD_NAME,
   LOCKED_TEXT_MIN_PASSWORD_CHARS,
@@ -239,54 +244,75 @@ function LockedTextCard({ mode, cardValue, updateCardValue }: LockedTextCardProp
     setError(null);
   };
 
-  const hint = phase === "setup"
-    ? mode === "view" ? "未设置密码" : "设置密码后正文才会加密保存"
-    : phase === "locked" ? "无密码不可见正文"
-    : phase === "unlocked" ? "已解锁，仅本次会话有效"
-    : "格式无法识别，已原样保留";
+  /** 设置/修改密码态（只有可编辑宿主才能设密码；查看器只给一句说明）。 */
+  const setupMode = (changing || phase === "setup") && mode === "edit";
 
-  const actions = phase === "unlocked" && mode === "edit" ? (
+  /** 右上角 = 无框文字动作（261127 视觉定稿：卡片不再画外框，动作也不再用带边框按钮）。 */
+  const actions = phase === "unlocked" && mode === "edit" && !changing ? (
     <div className="lake-locked-text__actions">
-      <button type="button" className="lake-locked-text__btn" disabled={busy}
-        onClick={() => { setChanging((value) => !value); setPasswordInput(""); setPasswordConfirm(""); setError(null); }}>
+      <button type="button" className="lake-locked-text__btn lake-locked-text__btn--ghost" disabled={busy}
+        onClick={() => { setChanging(true); setPasswordInput(""); setPasswordConfirm(""); setError(null); }}>
         修改密码
       </button>
-      <button type="button" className="lake-locked-text__btn" disabled={busy} onClick={() => { void lock(); }}>锁住</button>
-    </div>
-  ) : null;
-
-  const form = (changing || phase === "setup") && mode === "edit" ? (
-    <div className="lake-locked-text__row">
-      <input className="lake-locked-text__field" type="password" aria-label="设置密码"
-        autoComplete="new-password" placeholder={`密码（至少 ${LOCKED_TEXT_MIN_PASSWORD_CHARS} 位）`}
-        value={passwordInput} onChange={(event) => setPasswordInput(event.target.value)} disabled={busy} />
-      <input className="lake-locked-text__field" type="password" aria-label="再次输入密码"
-        autoComplete="new-password" placeholder="再次输入密码"
-        value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} disabled={busy}
-        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { void (changing ? changePassword() : setupPassword()); } }} />
-      <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy}
-        onClick={() => { void (changing ? changePassword() : setupPassword()); }}>
-        {changing ? "确认" : "设置密码"}
+      <button type="button" className="lake-locked-text__btn lake-locked-text__btn--ghost" disabled={busy} onClick={() => { void lock(); }}>
+        <Lock size={14} strokeWidth={1.75} aria-hidden="true" />锁住
       </button>
-      {changing && (
-        <button type="button" className="lake-locked-text__btn" disabled={busy} onClick={() => { setChanging(false); setPasswordInput(""); setPasswordConfirm(""); setError(null); }}>取消</button>
-      )}
     </div>
   ) : null;
 
-  const unlockRow = phase === "locked" ? (
-    <div className="lake-locked-text__row">
-      <input className="lake-locked-text__field" type="password" aria-label="请输入密码" autoComplete="current-password"
-        placeholder="请输入密码" value={passwordInput} disabled={busy}
-        onChange={(event) => setPasswordInput(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) void unlock(); }} />
-      <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy} onClick={() => { void unlock(); }}>解锁</button>
+  /**
+   * 设置密码 = 「插画 + 表单」两块（261127 用户点单，参照思源加密块）：
+   * 说明一行、密码竖排、主操作实心 + 次操作无框；不再有卡片框/双列横排/两行提示。
+   */
+  const passwordForm = setupMode ? (
+    <div className="lake-locked-text__panel">
+      <span className="lake-locked-text__mark" aria-hidden="true"><Lock size={26} strokeWidth={1.5} /></span>
+      <div className="lake-locked-text__form">
+        <p className="lake-locked-text__lead">
+          {changing ? "修改密码（丢失后无法找回）" : "设置密码（谨慎保管，丢失后无法找回）"}
+        </p>
+        <input className="lake-locked-text__field" type="password" aria-label="设置密码"
+          autoComplete="new-password" placeholder={`密码（至少 ${LOCKED_TEXT_MIN_PASSWORD_CHARS} 位）`}
+          value={passwordInput} onChange={(event) => setPasswordInput(event.target.value)} disabled={busy} />
+        <input className="lake-locked-text__field" type="password" aria-label="再次输入密码"
+          autoComplete="new-password" placeholder="再次输入密码"
+          value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} disabled={busy}
+          onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { void (changing ? changePassword() : setupPassword()); } }} />
+        <div className="lake-locked-text__buttons">
+          <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy}
+            onClick={() => { void (changing ? changePassword() : setupPassword()); }}>
+            {changing ? "确认修改" : "确认"}
+          </button>
+          {changing && (
+            <button type="button" className="lake-locked-text__btn" disabled={busy}
+              onClick={() => { setChanging(false); setPasswordInput(""); setPasswordConfirm(""); setError(null); }}>取消</button>
+          )}
+        </div>
+        <p className="lake-locked-text__note">正文只以密文保存；所有设备输入同一密码即可查看。</p>
+      </div>
     </div>
   ) : null;
 
-  const body = phase === "unlocked" ? (
+  /** 已加密未解锁 = 「插画 + 解锁行」居中，不显示标题行（参照思源加密块）。 */
+  const unlockForm = phase === "locked" ? (
+    <div className="lake-locked-text__panel lake-locked-text__panel--locked">
+      <span className="lake-locked-text__mark" aria-hidden="true"><Lock size={26} strokeWidth={1.5} /></span>
+      <div className="lake-locked-text__unlock">
+        <input className="lake-locked-text__field" type="password" aria-label="请输入密码" autoComplete="current-password"
+          placeholder="请输入密码" value={passwordInput} disabled={busy}
+          onChange={(event) => setPasswordInput(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) void unlock(); }} />
+        <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy} onClick={() => { void unlock(); }}>
+          <Lock size={14} strokeWidth={1.75} aria-hidden="true" />解锁
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  const body = phase === "unlocked" && !changing ? (
     mode === "edit" ? (
       <textarea className="lake-locked-text__body" aria-label="加密文本正文" value={draft}
+        placeholder="输入要加密的内容…"
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => { if (session && draft !== session.plain) void commit(draft, true); }}
         spellCheck={false} />
@@ -295,25 +321,22 @@ function LockedTextCard({ mode, cardValue, updateCardValue }: LockedTextCardProp
     )
   ) : phase === "broken" ? (
     <p className="lake-locked-text__note">加密文本数据格式无法识别（可能来自更新版本或其他应用）。已原样保留，不会改写。</p>
-  ) : phase === "setup" ? (
-    <p className="lake-locked-text__note">未设置密码。设置后正文只以密文保存，所有设备输入同一个密码即可查看。</p>
+  ) : phase === "setup" && mode === "view" ? (
+    <p className="lake-locked-text__note">未设置密码，无法查看正文。</p>
   ) : null;
 
   return (
     <div className="lake-locked-text" data-phase={phase} data-mode={mode}>
-      <div className="lake-locked-text__head">
-        <span className="lake-locked-text__title">加密文本</span>
-        <span className="lake-locked-text__hint">{hint}</span>
-        {actions}
-      </div>
-      {form}
-      {unlockRow}
+      {!changing && (phase === "unlocked" || phase === "broken" || (phase === "setup" && mode === "view")) && (
+        <div className="lake-locked-text__head">
+          <span className="lake-locked-text__title">加密文本</span>
+          {actions}
+        </div>
+      )}
+      {passwordForm}
+      {unlockForm}
       {body}
       {error && <p className="lake-locked-text__error" role="alert">{error}</p>}
-      {phase === "setup" && mode === "edit" && (
-        <p className="lake-locked-text__warn">密码丢失后无法恢复（没有找回，也不存在服务端托管）：请自行保管。</p>
-      )}
-      {busy && <span className="lake-locked-text__note">处理中…</span>}
     </div>
   );
 }

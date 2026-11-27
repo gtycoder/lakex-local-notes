@@ -1,12 +1,20 @@
 /* 「加密文本」卡片（lake-locked-text）：只补**本卡特有布局**；颜色/字号/圆角全部走 --lake-* 令牌。
- * 两端共用（桌面 kit 与移动端 mb-* 都不引）：卡内不引任何一端的外壳样式，靠语义令牌自适应主题。 */
+ * 两端共用（桌面 kit 与移动端 mb-* 都不引）：卡内不引任何一端的外壳样式，靠语义令牌自适应主题。
+ *
+ * 261127 视觉改版（用户点单，参照思源加密块「当前加密卡片线条太多太乱」）：
+ *   · **保留外框、清内部线条**（用户 261127 追认「外边框还是要的」）：卡框回到 0.5px + 卡片底，
+ *     内部不再画双列横排输入 + 带框按钮 + 两行提示（原来"线条太多太乱"指的就是这些）；
+ *   · 解锁态 = 「加密文本」标题行 + 无框正文；右侧动作改**无框文字按钮**（保留「修改密码 / 锁住」两个入口）；
+ *   · 设密码/解锁态 = 「插画块 + 表单」两块：说明一行（"丢失后无法找回"必须留在设置密码处）、
+ *     密码竖排、主操作实心、其余无框；已加密未解锁不显示标题行，只留插画 + 解锁行（居中）。
+ *   · 控件统一 0.5px 静息边（设计红线），移动端由 body.lake-mobile 兜到 44px 触屏档。 */
 
 .lake-locked-text {
   display: flex;
   flex-direction: column;
   gap: var(--lake-space-sm);
   padding: var(--lake-space-md) var(--lake-space-lg);
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   color: var(--lake-text-1);
@@ -23,78 +31,73 @@
 
 .lake-locked-text__title {
   font-weight: var(--lake-font-weight-semibold);
-  color: var(--lake-text-1);
-}
-
-.lake-locked-text__hint {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--lake-text-3);
-  font-size: var(--lake-font-size-tiny);
 }
 
 .lake-locked-text__actions {
   display: flex;
   align-items: center;
-  gap: var(--lake-space-xs);
+  gap: var(--lake-space-xxs);
   margin-left: auto;
 }
 
-.lake-locked-text__btn {
-  height: var(--lake-ctl-h-sm);
-  padding: 0 var(--lake-space-md);
-  border: 1px solid var(--lake-border-strong);
-  border-radius: var(--lake-radius-sm);
-  background: transparent;
-  color: var(--lake-text-1);
-  font-family: inherit;
-  font-size: var(--lake-font-size-small);
-  cursor: pointer;
-}
-
-.lake-locked-text__btn:hover {
-  background: var(--lake-bg-hover);
-}
-
-.lake-locked-text__btn:active {
-  background: var(--lake-bg-press);
-}
-
-.lake-locked-text__btn--primary {
-  border-color: var(--lake-accent-ink);
-  background: var(--lake-accent-ink);
-  color: var(--lake-text-on-accent);
-}
-
-.lake-locked-text__btn--primary:hover {
-  background: var(--lake-accent-ink-hover);
-}
-
-.lake-locked-text__btn:disabled {
-  opacity: var(--lake-disabled-opacity);
-  cursor: default;
-}
-
-.lake-locked-text__row {
+/* 「插画 + 表单」：桌面并排（表单吃余宽），窄屏由 body.lake-mobile 改竖排。 */
+.lake-locked-text__panel {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: var(--lake-space-lg);
+  padding: var(--lake-space-sm) 0;
+}
+
+.lake-locked-text__panel--locked {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lake-space-md);
+  padding: var(--lake-space-md) 0 var(--lake-space-lg);
+}
+
+/* 插画块：一块淡底方砖 + 挂锁（代替原卡框，作为唯一的大图形）。 */
+.lake-locked-text__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--lake-radius-card);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-3);
+}
+
+.lake-locked-text__form {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
   gap: var(--lake-space-sm);
+  min-width: 0;
+  max-width: 560px;
+}
+
+.lake-locked-text__lead {
+  margin: 0;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
 }
 
 .lake-locked-text__field {
-  flex: 1 1 auto;
-  min-width: 0;
-  /* 261115 A03 步2 批2：min-height（密码框会硬裁）。 */
-  min-height: var(--lake-ctl-h);
+  width: 100%;
+  height: var(--lake-ctl-h);
   padding: 0 var(--lake-space-md);
-  border: 1px solid var(--lake-ctl-border);
-  border-radius: var(--lake-radius-sm);
-  background: var(--lake-bg-panel);
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-ctl-rad);
+  background: var(--lake-bg-canvas);
   color: var(--lake-text-1);
   font-family: inherit;
   font-size: var(--lake-font-size-small);
+  box-sizing: border-box;
+}
+
+.lake-locked-text__field::placeholder {
+  color: var(--lake-text-4);
 }
 
 .lake-locked-text__field:focus-visible {
@@ -102,52 +105,135 @@
   outline-offset: var(--lake-focus-ring-offset);
 }
 
+.lake-locked-text__buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+}
+
+/* 卡内按钮：静息只有 0.5px 边；主操作实心主题色（与全站按钮梯队同模型，不另造视觉）。 */
+.lake-locked-text__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lake-space-xxs);
+  height: var(--lake-ctl-h);
+  padding: 0 var(--lake-space-lg);
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-ctl-rad);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+
+.lake-locked-text__btn:hover:not(:disabled) {
+  background: var(--lake-bg-hover);
+  color: var(--lake-text-1);
+}
+
+.lake-locked-text__btn:active:not(:disabled) {
+  background: var(--lake-bg-press);
+}
+
+.lake-locked-text__btn:disabled {
+  opacity: var(--lake-disabled-opacity);
+  cursor: default;
+}
+
+.lake-locked-text__btn--primary {
+  border-color: transparent;
+  background: var(--lake-accent-ink);
+  color: var(--lake-text-on-accent);
+}
+
+.lake-locked-text__btn--primary:hover:not(:disabled) {
+  background: var(--lake-accent-ink-hover);
+  color: var(--lake-text-on-accent);
+}
+
+.lake-locked-text__btn--primary:active:not(:disabled) {
+  background: var(--lake-accent-ink-press);
+}
+
+/* 标题行右侧的动作 = 按钮「无框」变体（只给淡底悬停，不再画边框；必须写在基类之后）。 */
+.lake-locked-text__btn--ghost {
+  height: var(--lake-ctl-h-sm);
+  padding: 0 var(--lake-space-sm);
+  border-color: transparent;
+}
+
+.lake-locked-text__btn svg {
+  flex: none;
+}
+
+/* 解锁行：一行 = 密码框 + 解锁（居中，最宽 420）。 */
+.lake-locked-text__unlock {
+  display: flex;
+  gap: var(--lake-space-sm);
+  width: 100%;
+  max-width: 420px;
+}
+
+.lake-locked-text__unlock .lake-locked-text__field {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* 正文：无框（与正文同一条基线），只留一条极淡的悬停/聚焦可辨性。 */
 .lake-locked-text__body {
   width: 100%;
-  min-height: 132px;
-  padding: var(--lake-space-sm) var(--lake-space-md);
-  border: 1px solid var(--lake-ctl-border);
-  border-radius: var(--lake-radius-sm);
-  background: var(--lake-bg-panel);
+  min-height: 120px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--lake-text-1);
   font-family: inherit;
   font-size: var(--lake-font-size-body);
   line-height: var(--lake-line-height-reading);
-  resize: vertical;
-  box-sizing: border-box;
+  resize: none;
+}
+
+.lake-locked-text__body::placeholder {
+  color: var(--lake-text-4);
 }
 
 .lake-locked-text__body:focus-visible {
   outline: var(--lake-focus-ring-width) solid var(--lake-accent);
-  outline-offset: var(--lake-focus-ring-offset);
-}
-
-/* 触屏基线：卡片内控件不得小于移动端点按下限（桌面几何不变 —— 评审 W4）。
- * 只在 body.lake-mobile 生效，避免把移动端 44px 塞回桌面。 */
-body.lake-mobile .lake-locked-text__btn,
-body.lake-mobile .lake-locked-text__field {
-  min-height: var(--mb-tap-min, 44px);
+  outline-offset: 2px;
 }
 
 .lake-locked-text__body--read {
   min-height: 0;
-  border-color: transparent;
-  padding: 0;
+  resize: none;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .lake-locked-text__note {
+  margin: 0;
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-tiny);
 }
 
 .lake-locked-text__error {
+  margin: 0;
   color: var(--lake-status-error);
   font-size: var(--lake-font-size-tiny);
 }
 
-.lake-locked-text__warn {
-  color: var(--lake-status-pending);
-  font-size: var(--lake-font-size-tiny);
+/* 移动端：插画/表单竖排、触屏控件兜到 44px（桌面几何不变）。 */
+body.lake-mobile .lake-locked-text__panel {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body.lake-mobile .lake-locked-text__mark {
+  align-self: center;
+}
+
+body.lake-mobile .lake-locked-text__btn,
+body.lake-mobile .lake-locked-text__field {
+  min-height: var(--mb-tap-min, 44px);
 }

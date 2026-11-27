@@ -160,7 +160,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableMarkdown.css": { decls: 17, dupGroups: 0 },   // 261005：Markdown 预览排版移到共用 components/ui/markdown/markdown.css（60 → 17，只余本域单元格/展开面板样式）,   // 261004 续：+1 = .bt-md-cell 右缘留出展开按钮空隙（与文本格 26px 同义，两格不再一个压字一个不压）；此前 261004-b 建 59 = 删繁写头/自写小按钮/分段几何（改用 .ln-segment + .bt-secondary），只留单元格布局 + 预览排版；字号/间距全量化令牌
   "features/bitable/bitableExpandPreview.css": { decls: 1, dupGroups: 0 },
   "features/editor/noteRefCard.css": { decls: 28, dupGroups: 0 },   // 261008 新建：文档引用卡（布局复用 kit，只补本卡排版）
-  "features/editor/lockedTextCard.css": { decls: 85, dupGroups: 0 },   // 261023 新建：加密文本卡（卡壳/头/按钮/密码输入/正文 textarea/只读态/提示与错误行；颜色字号全走令牌）
+  "features/editor/lockedTextCard.css": { decls: 122, dupGroups: 0 },   // 261127 视觉改版（用户点单「加密卡片线条太多太乱」，参照思源加密块；**外框保留**）：85 → 122（+37）= 卡壳回到 0.5px 边框 + 卡片底，删掉内部「双列横排密码框 + 带框动作按钮 + 两行提示」，换成「插画块 + 设置密码表单 + 解锁行 + 无框标题动作」四块新形态（mark/panel/form/lead/unlock/ghost 等）；同一时刻只渲染一种状态、无重复组（dupGroups 仍 0），属视觉形态替换而非多层覆盖。
   "features/editor/noteRefCardActions.css": { decls: 1, dupGroups: 0 },   // 261008 三改：动作条/编辑浮层的几何全部复用内核 .ne-card-toolbar / .ne-link-editor + kit 控件 ⇒ 只剩「链接」只读输入框的 cursor 提示（7 → 1）
   "features/bitable/bitableFilterEditor.css": { decls: 150, dupGroups: 0 },   // 260930：筛选规则/分组树/日期动态值/多选值/增删菜单 + 面板最大高度/滚动（全新文件）
   "features/bitable/bitableFillRules.css": { decls: 67, dupGroups: 0 },   // 260930：条件填色配置与表格投影（全新文件）；+4 = 「无背景色」填色块居中态（flex 三项 + 图标色），合法新增
