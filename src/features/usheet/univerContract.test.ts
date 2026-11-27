@@ -57,14 +57,24 @@ const UNIVER_PACKAGES = [
   "@univerjs/sheets-crosshair-highlight",
 ];
 
-/** 把实装内核的 ESM 产物拼起来（index.js + facade.js），供"符号还在不在"的静态核对。 */
+/** 递归收集一个目录下的 .js 文本（Univer 1.6 起一个包会把命令拆到 plugin-*.js 分块里）。 */
+function collectJsFiles(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const file = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) collectJsFiles(file, out);
+    else if (entry.name.endsWith(".js")) out.push(file);
+  }
+  return out;
+}
+
+/** 把实装内核的 ESM 产物拼起来（lib/es 下全部 js：index/facade/plugin 分块），供"符号还在不在"的静态核对。 */
 function univerBundleText(): string {
   const parts: string[] = [];
   for (const pkg of UNIVER_PACKAGES) {
-    for (const rel of ["lib/es/index.js", "lib/es/facade.js", "lib/index.css"]) {
-      const file = `${ROOT}/node_modules/${pkg}/${rel}`;
-      if (existsSync(file)) parts.push(readFileSync(file, "utf8"));
-    }
+    for (const file of collectJsFiles(`${ROOT}/node_modules/${pkg}/lib/es`)) parts.push(readFileSync(file, "utf8"));
+    const css = `${ROOT}/node_modules/${pkg}/lib/index.css`;
+    if (existsSync(css)) parts.push(readFileSync(css, "utf8"));
   }
   return parts.join("\n");
 }
@@ -101,8 +111,8 @@ describe("Univer 依赖版本（升级护栏①）", () => {
       if (meta.version) installed.push([meta.name ?? name, meta.version]);
     }
     expect(installed.length).toBeGreaterThan(5);
-    // @univerjs/icons 是**独立发版**的图标集（当前 1.43.x），不跟主包版本线走 ⇒ 只对主包要求同版本。
-    const mainPackages = installed.filter(([name]) => name !== "@univerjs/icons");
+    // @univerjs/icons / @univerjs/icons-svg 是**独立发版**的图标集（1.50.x），不跟主包版本线走 ⇒ 只对主包要求同版本。
+    const mainPackages = installed.filter(([name]) => name !== "@univerjs/icons" && name !== "@univerjs/icons-svg");
     const versions = [...new Set(mainPackages.map(([, v]) => v))];
     expect(versions.length, `@univerjs/* 版本分叉了：${JSON.stringify(installed)}`).toBe(1);
     // @univerjs/core、ui、sheets-ui 等必须是同一份（重复副本会让 DI token 对不上）

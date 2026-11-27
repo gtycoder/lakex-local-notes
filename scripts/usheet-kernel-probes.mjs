@@ -31,6 +31,14 @@ const PNG = path.join(os.tmpdir(), "usheet-probe.png");
 const NL = String.fromCharCode(10);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 默认表格尺寸的单一来源 = core/usheetDoc.ts（别在探针里写死：261121 起默认 35×16，曾因探针写死 50 假红）。 */
+const USHEET_DEFAULTS = (() => {
+  const src = fs.readFileSync(path.join(REPO, "src/core/usheetDoc.ts"), "utf8");
+  const rows = /USHEET_DEFAULT_ROWS = (\d+)/.exec(src);
+  const cols = /USHEET_DEFAULT_COLUMNS = (\d+)/.exec(src);
+  if (!rows || !cols) throw new Error("core/usheetDoc.ts 里找不到默认行/列常量");
+  return { rows: Number(rows[1]), cols: Number(cols[1]) };
+})();
 /**
  * 探针分两类：
  *  - **致命**（默认）：结论只依赖我们自己的代码/产物，可以确定性判定；
@@ -145,6 +153,10 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   child = spawn(app, [".", "--remote-debugging-port=" + PORT, "--no-sandbox"], { cwd: REPO, env, stdio: "ignore" });
   await connect();
   await send("Runtime.enable"); await send("Page.enable");
+  // 合成剪贴板事件依赖页面有焦点；无 OS 焦点时内核可能拒收（"单图粘贴" 曾偶发假红）。
+  // 强制 Chromium 焦点仿真 + 置前，让粘贴类探针可判定（261127 升级 1.0.3→1.6.1 时加的稳定性）。
+  try { await send("Page.bringToFront"); } catch { /* 旧内核/无窗口模式忽略 */ }
+  try { await send("Emulation.setFocusEmulationEnabled", { enabled: true }); } catch { /* 不支持则沿用原行为 */ }
   const ready = await waitFor("document.readyState === 'complete' && Boolean(window.lakeNative)", 90000);
   if (!ready) throw new Error("应用未就绪（窗口没起来？看 $TMPDIR/lake-usheet-probes/logs）");
   await wait(2000);
@@ -162,7 +174,7 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   const noteId = created && created.id ? created.id : created;
   await wait(1200);
   const s1 = sheetSummary(noteId);
-  record("新建表格文档 = 50 行 × 16 列（core/usheetDoc）", s1.rows === 50 && s1.cols === 16, JSON.stringify(s1));
+  record(`新建表格文档 = ${USHEET_DEFAULTS.rows} 行 × ${USHEET_DEFAULTS.cols} 列（core/usheetDoc）`, s1.rows === USHEET_DEFAULTS.rows && s1.cols === USHEET_DEFAULTS.cols, JSON.stringify(s1));
 
   // 打开它
   if (!(await ensureRow(noteId))) throw new Error("树里找不到新文档");
@@ -180,12 +192,23 @@ const PASTE_ONCE = (b64, two) => "(async function () { var b64 = " + JSON.string
   const floatLayer = await evaluate("(function () { var el = document.querySelector('[data-lake-univer-floating]'); if (!el) return { found: false }; return { found: true, atBody: el.parentElement === document.body, owner: el.getAttribute('data-lake-owner'), display: getComputedStyle(el).display }; })()");
   record("内核 floating 容器挂 body 且带 owner（@univerjs/ui 补丁契约）", floatLayer.found && floatLayer.atBody && Boolean(floatLayer.owner), JSON.stringify(floatLayer));
 
-  // 3) 工作表标签「＋」→ footer 配置的 50×16
+  // 3) 工作表标签「＋」→ footer 配置的默认尺寸（单一来源同上）
   await clickInPage('[data-u-comp="sheet-bar-append-button"]');
-  await wait(4000);
-  const s2 = sheetSummary(noteId);
-  const added = s2.sheets.find((x) => x.indexOf("Sheet1") !== 0);
-  record("工作表「＋」= 50 行 × 16 列（preset footer 配置）", Boolean(added) && added.indexOf(":50x16") > 0, JSON.stringify(s2));
+  // 落盘可能比 UI 慢（1.6.1 实测点击后 2~4s 才写回 .usheet.json）⇒ 轮询最多 12s，别用固定 4s 判死。
+  for (let i = 0; i < 24; i++) {
+    await wait(500);
+    const summary = sheetSummary(noteId);
+    const addedSheet = summary.sheets.find((x) => x.indexOf("Sheet1") !== 0);
+    if (addedSheet) {
+      record(
+        `工作表「＋」= ${USHEET_DEFAULTS.rows} 行 × ${USHEET_DEFAULTS.cols} 列（preset footer 配置）`,
+        addedSheet.indexOf(`:${USHEET_DEFAULTS.rows}x${USHEET_DEFAULTS.cols}`) > 0,
+        JSON.stringify(summary),
+      );
+      break;
+    }
+    if (i === 23) record(`工作表「＋」= ${USHEET_DEFAULTS.rows} 行 × ${USHEET_DEFAULTS.cols} 列（preset footer 配置）`, false, JSON.stringify(summary));
+  }
 
   // 3b) 261021 P5：排序 / 筛选（Univer 独立可选包）的**入口必须出现在「数据」页签**。
   //     两个能力由 sort-ui / filter-ui 的 ribbon schema 自动注册（我们不自建菜单），

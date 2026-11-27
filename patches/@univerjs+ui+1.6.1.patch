@@ -1,14 +1,11 @@
 diff --git a/node_modules/@univerjs/ui/lib/es/index.js b/node_modules/@univerjs/ui/lib/es/index.js
-index 9d289eb..6e9029e 100644
+index fbb918c..dc31694 100644
 --- a/node_modules/@univerjs/ui/lib/es/index.js
 +++ b/node_modules/@univerjs/ui/lib/es/index.js
-@@ -6768,9 +6768,14 @@ function DesktopWorkbenchContent(props) {
+@@ -25984,9 +25984,11 @@ function DesktopWorkbenchContent(props) {
  	const direction = useObservable(localeService.direction$, localeService.getDirection());
  	const portalContainer = useMemo(() => document.createElement("div"), []);
  	useEffect(() => {
-+		// [Lake Notes patch] floating 容器留在 document.body（= 内核原行为）：挂回实例宿主会让
-+		// 设计系统 Dialog/菜单与宿主 overflow:hidden 组合触发 measure/reflow 死循环（261022 排序对话框）。
-+		// 改由 marker + owner 标记，应用侧（MultiTabEditor）按可见标签收起 ⇒ 黄叹号仍不会逃出标签宿主。
 +		portalContainer.setAttribute("data-lake-univer-floating", "");
 +		portalContainer.setAttribute("data-lake-owner", mountContainer.id || "");
  		document.body.appendChild(portalContainer);
@@ -18,13 +15,10 @@ index 9d289eb..6e9029e 100644
  		};
  	}, [mountContainer, portalContainer]);
  	useEffect(() => {
-@@ -25618,9 +25623,14 @@ function MobileWorkbench(props) {
+@@ -28030,9 +28032,11 @@ function MobileWorkbench(props) {
  		};
  	}, [themeService.currentTheme$, themeSwitcherService]);
  	useEffect(() => {
-+		// [Lake Notes patch] floating 容器留在 document.body（= 内核原行为）：挂回实例宿主会让
-+		// 设计系统 Dialog/菜单与宿主 overflow:hidden 组合触发 measure/reflow 死循环（261022 排序对话框）。
-+		// 改由 marker + owner 标记，应用侧（MultiTabEditor）按可见标签收起 ⇒ 黄叹号仍不会逃出标签宿主。
 +		portalContainer.setAttribute("data-lake-univer-floating", "");
 +		portalContainer.setAttribute("data-lake-owner", mountContainer.id || "");
  		document.body.appendChild(portalContainer);

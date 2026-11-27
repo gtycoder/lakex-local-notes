@@ -200,7 +200,7 @@ export const USHEET_FOOTER_CONFIG = {
  */
 
 /**
- * 我们对内核打的补丁（`patches/@univerjs+ui+1.0.3.patch`）——**改行为的最小改动**，不是依赖侧清理。
+ * 我们对内核打的补丁（`patches/@univerjs+ui+1.6.1.patch`；261127 升级时按 1.6.1 重新生成，语义不变）——**改行为的最小改动**，不是依赖侧清理。
  *
  * 历史（261009）：内核把 floating 层的 portal 容器**无条件挂到 `document.body`**，该容器承载
  * `CanvasPopup`（cell popup、**CellAlert 黄叹号**、下拉/日期/颜色/选区浮层）。当时为了不让黄叹号
@@ -221,7 +221,7 @@ export const USHEET_FOOTER_CONFIG = {
  */
 export const UNIVER_PATCH_HOOKS = {
   /** 补丁文件（仓库内的唯一 Univer 补丁；缺它 = 换机/CI 拿不到修复）。 */
-  patchFile: "patches/@univerjs+ui+1.0.3.patch",
+  patchFile: "patches/@univerjs+ui+1.6.1.patch",
   /** 补丁后**必须存在**：容器挂 body（= 内核原行为；挂宿主会让对话框死循环）。 */
   mountedAtBody: "document.body.appendChild(portalContainer)",
   /** 补丁后**必须存在**：容器带 owner 标记，应用侧据此按可见标签收起。 */
